@@ -4,7 +4,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
 import { toHijri, weekdayName } from '@/lib/hijri';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, Info, Loader2, PartyPopper, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -64,6 +64,7 @@ const props = defineProps<{
     meta: {
         statuses: { key: string; label: string; color: string }[];
         periods: { key: string; label: string; start: string; end: string }[];
+        payment_methods: PaymentMethodOption[];
     };
     // ما يصل من التقويم الشهري عند فتح الحجز من خلية يوم — غائب في التعديل.
     prefill?: {
@@ -132,7 +133,8 @@ const form = useForm({
     // السداد عند الحجز — صفر يعني حجزًا غير مسدَّد
     payment_amount: 0,
     payment_type: 'deposit',
-    payment_method: 'cash',
+    // أول طريقة في الترتيب هي الافتراض — يرتّبها المستخدم من شاشة طرق الدفع.
+    payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
     payment_paid_on: today,
     payment_notify: true,
 });
@@ -746,11 +748,8 @@ const eventBadge = (color: string) =>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <label class="mb-1 block text-sm font-bold text-slate-800">الطريقة</label>
-                                    <select v-model="form.payment_method" class="w-full rounded-lg border border-slate-300 px-2.5 py-2.5 text-[15px]">
-                                        <option value="cash">نقدًا</option>
-                                        <option value="transfer">تحويل</option>
-                                        <option value="card">شبكة</option>
-                                        <option value="online">إلكتروني</option>
+                                    <select v-model="form.payment_method_id" class="w-full rounded-lg border border-slate-300 px-2.5 py-2.5 text-[15px]">
+                                        <option v-for="m in meta.payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                                     </select>
                                 </div>
                                 <div>

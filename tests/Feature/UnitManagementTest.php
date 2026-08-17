@@ -197,9 +197,15 @@ class UnitManagementTest extends TestCase
 
         $employee->delete();
 
-        // الوحدة تبقى، ويُفرَّغ حقل المدير فقط
-        $this->assertNull($unit->fresh()->manager_id);
+        // الوحدة تبقى بلا مدير: الموظف المؤرشف لا تراه العلاقة.
         $this->assertNotNull($unit->fresh());
+        $this->assertNull($unit->fresh()->manager);
+
+        // والإسناد نفسه محفوظ، فاسترجاع الموظف من الأرشيف يُعيد المدير
+        // إلى وحدته بلا إعادة إسناد يدوية.
+        $employee->restore();
+
+        $this->assertSame($employee->id, $unit->fresh()->manager?->id);
     }
 
     public function test_units_screen_offers_employees_as_managers(): void

@@ -99,20 +99,27 @@ class HallBookingsLedgerColumnsTest extends TestCase
     public function test_paid_amounts_are_split_over_their_methods(): void
     {
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'deposit', 'method' => 'cash', 'amount' => 200, 'paid_on' => '2026-09-01',
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 200, 'paid_on' => '2026-09-01',
         ], $this->owner->id);
 
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'payment', 'method' => 'transfer', 'amount' => 150, 'paid_on' => '2026-09-02',
+            'type' => 'payment', 'payment_method_id' => $this->paymentMethodId('transfer'), 'amount' => 150, 'paid_on' => '2026-09-02',
         ], $this->owner->id);
+
+        // أعمدة طرق الدفع تُفتَّح بمعرّف الطريقة لا بكودها، فالعمود مرتبط
+        // بالصف في الجدول ولا ينكسر بإعادة تسمية الكود من الإعدادات.
+        $cash = $this->paymentMethodId('cash');
+        $transfer = $this->paymentMethodId('transfer');
+        $card = $this->paymentMethodId('card');
 
         $this->actingAs($this->owner)
             ->get('/admin/bookings/halls')
             ->assertInertia(fn ($page) => $page
-                ->has('methods', 4)
-                ->where('bookings.data.0.paid_by_method.cash', fn ($v) => (float) $v === 200.0)
-                ->where('bookings.data.0.paid_by_method.transfer', fn ($v) => (float) $v === 150.0)
-                ->where('bookings.data.0.paid_by_method.card', fn ($v) => (float) $v === 0.0)
+                // الطرق مشتركة في النظام كله، فأعمدة السجل هي الطرق المفعّلة كلها
+                ->has('methods', 5)
+                ->where("bookings.data.0.paid_by_method.{$cash}", fn ($v) => (float) $v === 200.0)
+                ->where("bookings.data.0.paid_by_method.{$transfer}", fn ($v) => (float) $v === 150.0)
+                ->where("bookings.data.0.paid_by_method.{$card}", fn ($v) => (float) $v === 0.0)
                 ->where('bookings.data.0.payment_status', 'مسدّدة جزئيًا'));
     }
 
@@ -123,27 +130,30 @@ class HallBookingsLedgerColumnsTest extends TestCase
     public function test_refunds_show_in_their_own_column(): void
     {
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'payment', 'method' => 'cash', 'amount' => 400, 'paid_on' => '2026-09-01',
+            'type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 400, 'paid_on' => '2026-09-01',
         ], $this->owner->id);
 
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'refund', 'method' => 'cash', 'amount' => 100, 'paid_on' => '2026-09-03',
+            'type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 100, 'paid_on' => '2026-09-03',
         ], $this->owner->id);
+
+        $cash = $this->paymentMethodId('cash');
 
         $this->actingAs($this->owner)
             ->get('/admin/bookings/halls')
             ->assertInertia(fn ($page) => $page
                 ->where('bookings.data.0.refunded_amount', fn ($v) => (float) $v === 100.0)
-                ->where('bookings.data.0.paid_by_method.cash', fn ($v) => (float) $v === 400.0));
+                ->where("bookings.data.0.paid_by_method.{$cash}", fn ($v) => (float) $v === 400.0));
     }
 
     public function test_page_and_filtered_totals_are_reported(): void
     {
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'deposit', 'method' => 'cash', 'amount' => 250, 'paid_on' => '2026-09-01',
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 250, 'paid_on' => '2026-09-01',
         ], $this->owner->id);
 
         $total = (float) $this->booking->fresh()->total_amount;
+        $cash = $this->paymentMethodId('cash');
 
         $this->actingAs($this->owner)
             ->get('/admin/bookings/halls')
@@ -151,7 +161,7 @@ class HallBookingsLedgerColumnsTest extends TestCase
                 ->where('totals.page.count', 1)
                 ->where('totals.page.total', fn ($v) => (float) $v === $total)
                 ->where('totals.page.paid', fn ($v) => (float) $v === 250.0)
-                ->where('totals.page.paid_by_method.cash', fn ($v) => (float) $v === 250.0)
+                ->where("totals.page.paid_by_method.{$cash}", fn ($v) => (float) $v === 250.0)
                 ->where('totals.page.remaining', fn ($v) => (float) $v === $total - 250.0)
                 ->where('totals.all.count', 1)
                 ->where('totals.all.total', fn ($v) => (float) $v === $total)

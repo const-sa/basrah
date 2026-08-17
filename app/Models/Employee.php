@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'employee_no',
         'name',
@@ -87,6 +90,11 @@ class Employee extends Model
     public function advances(): HasMany
     {
         return $this->hasMany(Advance::class);
+    }
+
+    public function bonuses(): HasMany
+    {
+        return $this->hasMany(Bonus::class);
     }
 
     public function payrollLines(): HasMany

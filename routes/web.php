@@ -1,53 +1,75 @@
 <?php
 
 use App\Http\Controllers\Admin\AccountingController;
+use App\Http\Controllers\Admin\ArchiveController;
+use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BookingsController;
 use App\Http\Controllers\Admin\ChaletBookingsController;
 use App\Http\Controllers\Admin\ChaletCalendarController;
-use App\Http\Controllers\Admin\HallBookingsController;
-use App\Http\Controllers\Admin\HallCalendarController;
-use App\Http\Controllers\Admin\HallMonthCalendarController;
 use App\Http\Controllers\Admin\CitiesController;
 use App\Http\Controllers\Admin\ClientsController;
 use App\Http\Controllers\Admin\ContractsController;
 use App\Http\Controllers\Admin\ContractTemplatesController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DemoAccountsController;
+use App\Http\Controllers\Admin\DepartmentsController;
 use App\Http\Controllers\Admin\EventTypesController;
 use App\Http\Controllers\Admin\FacilitiesController;
 use App\Http\Controllers\Admin\FinancialReportsController;
+use App\Http\Controllers\Admin\GeneralSettingsController;
+use App\Http\Controllers\Admin\HallBookingsController;
+use App\Http\Controllers\Admin\HallCalendarController;
 use App\Http\Controllers\Admin\HallContractTemplateController;
+use App\Http\Controllers\Admin\HallMonthCalendarController;
 use App\Http\Controllers\Admin\HrController;
 use App\Http\Controllers\Admin\ItemsController;
 use App\Http\Controllers\Admin\MeasureUnitsController;
-use App\Http\Controllers\Admin\PackagesController;
-use App\Http\Controllers\Admin\PosController;
-use App\Http\Controllers\Admin\PricingController;
-use App\Http\Controllers\Admin\SalesController;
-use App\Http\Controllers\Admin\SuppliersController;
-use App\Http\Controllers\Admin\WhatsappLogController;
-use App\Http\Controllers\Admin\DemoAccountsController;
-use App\Http\Controllers\Admin\DepartmentsController;
-use App\Http\Controllers\Admin\GeneralSettingsController;
 use App\Http\Controllers\Admin\NotificationsController;
 use App\Http\Controllers\Admin\NotificationTemplatesController;
+use App\Http\Controllers\Admin\PackagesController;
+use App\Http\Controllers\Admin\PaymentMethodsController;
+use App\Http\Controllers\Admin\PosController;
+use App\Http\Controllers\Admin\PricingController;
+use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\RolesController;
+use App\Http\Controllers\Admin\SalesController;
+use App\Http\Controllers\Admin\SuppliersController;
 use App\Http\Controllers\Admin\TicketsController;
 use App\Http\Controllers\Admin\UnitsController;
 use App\Http\Controllers\Admin\UnitWorkspaceController;
 use App\Http\Controllers\Admin\UsersController;
+use App\Http\Controllers\Admin\WhatsappLogController;
 use App\Http\Controllers\Admin\WhatsappSettingsController;
+use App\Http\Controllers\Site\OnlineBookingController;
+use App\Http\Controllers\Site\SiteController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome');
-})->name('home');
+/*
+|--------------------------------------------------------------------------
+| الواجهة العامة والحجز أونلاين (§12)
+|--------------------------------------------------------------------------
+| مسارات بلا مصادقة يصلها الزائر. مقيَّدة بمعدّل طلبات لأنها الوجه المكشوف
+| للنظام: نموذج حجزٍ مفتوح بلا حدّ يُملأ آليًا فيقفل التقويم بحجوزات وهمية.
+*/
+Route::get('/', [SiteController::class, 'home'])->name('home');
+Route::get('units/{unit}', [SiteController::class, 'unit'])->name('site.unit');
+
+Route::get('book/{unit}', [OnlineBookingController::class, 'create'])->name('site.book');
+Route::post('book/{unit}/quote', [OnlineBookingController::class, 'quote'])
+    ->middleware('throttle:30,1')->name('site.book.quote');
+Route::post('book/{unit}', [OnlineBookingController::class, 'store'])
+    ->middleware('throttle:8,1')->name('site.book.store');
+Route::get('booking/{reference}', [OnlineBookingController::class, 'show'])->name('site.booking.show');
 
 Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('perm:dashboard.view')->name('dashboard');
 
-    // التقارير (صفحة عامة قابلة للتوسعة)
-    Route::get('reports', fn () => Inertia::render('admin/Reports'))->middleware('perm:reports.view')->name('reports.index');
+    // مركز التقارير — تقارير الحجوزات والمالية والموظفين (§12)
+    Route::get('reports', [ReportsController::class, 'index'])->middleware('perm:reports.view')->name('reports.index');
+    // التصدير قبل مسار العرض كي لا تُفسَّر «export» مفتاحَ تقرير
+    Route::get('reports/{report}/export', [ReportsController::class, 'export'])->middleware('perm:reports.export')->name('reports.export');
+    Route::get('reports/{report}', [ReportsController::class, 'show'])->middleware('perm:reports.view')->name('reports.show');
 
     // فكرة المشروع (صفحة تعريفية عامة لكل مستخدم مسجّل)
     Route::get('about', fn () => Inertia::render('admin/About'))->name('about.index');
@@ -162,6 +184,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     */
     Route::middleware('system:contracts')->group(function () {
         Route::get('contracts', [ContractsController::class, 'index'])->middleware('perm:contracts.view')->name('contracts.index');
+        // «pdf» قبل {contract} لا يلزم هنا لأنه مقطع ثانٍ، لكن ترتيبه قبل
+        // show يبقي المسارات النوعية مجتمعة كما في بقية الملف.
+        Route::get('contracts/{contract}/pdf', [ContractsController::class, 'pdf'])->middleware('perm:contracts.export')->name('contracts.pdf');
         Route::get('contracts/{contract}', [ContractsController::class, 'show'])->middleware('perm:contracts.view')->name('contracts.show');
         Route::post('contracts', [ContractsController::class, 'store'])->middleware('perm:contracts.create')->name('contracts.store');
         Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->middleware('perm:contracts.edit')->name('contracts.refresh');
@@ -257,6 +282,10 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('hr/advances', [HrController::class, 'storeAdvance'])->middleware('perm:advances.create')->name('advances.store');
         Route::patch('hr/advances/{advance}/approve', [HrController::class, 'approveAdvance'])->middleware('perm:advances.approve')->name('advances.approve');
 
+        Route::post('hr/bonuses', [HrController::class, 'storeBonus'])->middleware('perm:bonuses.create')->name('bonuses.store');
+        Route::patch('hr/bonuses/{bonus}/approve', [HrController::class, 'approveBonus'])->middleware('perm:bonuses.approve')->name('bonuses.approve');
+        Route::delete('hr/bonuses/{bonus}', [HrController::class, 'destroyBonus'])->middleware('perm:bonuses.delete')->name('bonuses.destroy');
+
         Route::get('hr/payroll', [HrController::class, 'payrolls'])->middleware('perm:payroll.view')->name('payroll.index');
         Route::post('hr/payroll/generate', [HrController::class, 'generatePayroll'])->middleware('perm:payroll.create')->name('payroll.generate');
         Route::post('hr/payroll/{payroll}/approve', [HrController::class, 'approvePayroll'])->middleware('perm:payroll.approve')->name('payroll.approve');
@@ -282,6 +311,15 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::patch('employees/{user}/scope', [UsersController::class, 'toggleScope'])->middleware('perm:employees.edit')->name('employees.scope');
     Route::delete('employees/{user}', [UsersController::class, 'destroy'])->middleware('perm:employees.delete')->name('employees.destroy');
 
+    // السجل الرقابي — للقراءة والتصدير فقط
+    Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('perm:audit.view')->name('audit.index');
+    Route::get('audit-log/export', [AuditLogController::class, 'export'])->middleware('perm:audit.export')->name('audit.export');
+
+    // الأرشيف — المحذوفات: استعراض واسترجاع، والإتلاف النهائي بصلاحية مستقلة
+    Route::get('archive', [ArchiveController::class, 'index'])->middleware('perm:archive.view')->name('archive.index');
+    Route::post('archive/{type}/{id}/restore', [ArchiveController::class, 'restore'])->middleware('perm:archive.restore')->name('archive.restore');
+    Route::delete('archive/{type}/{id}', [ArchiveController::class, 'destroy'])->middleware('perm:archive.delete')->name('archive.destroy');
+
     // الأدوار والصلاحيات
     Route::get('roles', [RolesController::class, 'index'])->middleware('perm:roles.view')->name('roles.index');
     Route::post('roles', [RolesController::class, 'store'])->middleware('perm:roles.create')->name('roles.store');
@@ -297,6 +335,13 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::put('clients/{client}', [ClientsController::class, 'update'])->middleware('perm:clients.edit')->name('clients.update');
     Route::patch('clients/{client}/toggle', [ClientsController::class, 'toggle'])->middleware('perm:clients.edit')->name('clients.toggle');
     Route::delete('clients/{client}', [ClientsController::class, 'destroy'])->middleware('perm:clients.delete')->name('clients.destroy');
+
+    // طرق الدفع — تُدار من الإعدادات وتقرأها شاشات الحجوزات والكاشير والسندات
+    Route::get('settings/payment-methods', [PaymentMethodsController::class, 'index'])->middleware('perm:payment_methods.view')->name('payment_methods.index');
+    Route::post('settings/payment-methods', [PaymentMethodsController::class, 'store'])->middleware('perm:payment_methods.create')->name('payment_methods.store');
+    Route::put('settings/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'update'])->middleware('perm:payment_methods.edit')->name('payment_methods.update');
+    Route::patch('settings/payment-methods/{paymentMethod}/toggle', [PaymentMethodsController::class, 'toggle'])->middleware('perm:payment_methods.edit')->name('payment_methods.toggle');
+    Route::delete('settings/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'destroy'])->middleware('perm:payment_methods.delete')->name('payment_methods.destroy');
 
     // المدن
     Route::get('cities', [CitiesController::class, 'index'])->middleware('perm:cities.view')->name('cities.index');

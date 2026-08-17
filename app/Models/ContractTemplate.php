@@ -4,12 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * قالب عقد بحقول ديناميكية {{مفتاح}}.
  */
 class ContractTemplate extends Model
 {
+    use SoftDeletes;
+
     /**
      * الحقول المتاحة للقالب — تُعرض للمحرّر ليعرف ما يستطيع إدراجه.
      */

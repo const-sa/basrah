@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\Client;
+use App\Models\CostCenter;
 use App\Models\Item;
 use App\Models\Role;
 use App\Models\Sale;
@@ -63,7 +64,7 @@ class PosTest extends TestCase
 
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 10]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->assertSame($before - 10, (float) $part->fresh()->stock_qty);
@@ -83,7 +84,7 @@ class PosTest extends TestCase
 
         $this->sales->checkout([
             'lines' => [['item_id' => $service->id, 'quantity' => 1]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->assertSame(0, StockMovement::where('item_id', $service->id)->count());
@@ -100,7 +101,7 @@ class PosTest extends TestCase
 
         $this->sales->checkout([
             'lines' => [['item_id' => $bundle->id, 'quantity' => 2]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         // المشروع يحوي مضخة و4 كشافات لكل وحدة، وبيعت وحدتان
@@ -116,7 +117,7 @@ class PosTest extends TestCase
 
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $insulation->id, 'quantity' => 12.5]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->assertSame(1125.0, (float) $sale->subtotal); // 12.5 × 90
@@ -129,7 +130,7 @@ class PosTest extends TestCase
 
         $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 2.5]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
     }
 
@@ -140,7 +141,7 @@ class PosTest extends TestCase
         try {
             $this->sales->checkout([
                 'lines' => [['item_id' => $pump->id, 'quantity' => 100]],
-                'method' => 'cash',
+                'payment_method_id' => $this->paymentMethodId('cash'),
             ], $this->cashier->id);
             $this->fail('كان يجب رفض البيع لنفاد الرصيد.');
         } catch (ValidationException $e) {
@@ -158,7 +159,7 @@ class PosTest extends TestCase
 
         $this->sales->checkout([
             'lines' => [['item_id' => $this->item('PRJ-001')->id, 'quantity' => 25]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
     }
 
@@ -168,7 +169,7 @@ class PosTest extends TestCase
 
         $this->sales->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 10]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         // 10 × 65 = 650 + ضريبة 97.5 = 747.5 · التكلفة 10 × 35 = 350
@@ -182,7 +183,7 @@ class PosTest extends TestCase
     {
         $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]],
-            'method' => 'card',
+            'payment_method_id' => $this->paymentMethodId('card'),
         ], $this->cashier->id);
 
         $this->assertSame(0.0, Account::where('code', Ledger::CASH)->first()->balance());
@@ -193,7 +194,7 @@ class PosTest extends TestCase
     {
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 1]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->assertSame(Client::walkIn()->id, $sale->client_id);
@@ -216,7 +217,7 @@ class PosTest extends TestCase
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 1]],
             'client_id' => $client->id,
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->assertSame($client->id, $sale->client_id);
@@ -226,7 +227,7 @@ class PosTest extends TestCase
     {
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]], // 747.50
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
             'paid_amount' => 500,
         ], $this->cashier->id);
 
@@ -244,7 +245,7 @@ class PosTest extends TestCase
     {
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]], // 747.50
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
             'paid_amount' => 5000,
         ], $this->cashier->id);
 
@@ -257,7 +258,7 @@ class PosTest extends TestCase
     {
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]], // 747.50
-            'method' => 'account',
+            'payment_method_id' => $this->paymentMethodId('account'),
             'paid_amount' => 200,
         ], $this->cashier->id);
 
@@ -270,7 +271,7 @@ class PosTest extends TestCase
     {
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]],
-            'method' => 'account',
+            'payment_method_id' => $this->paymentMethodId('account'),
         ], $this->cashier->id);
 
         $this->assertSame(0.0, (float) $sale->paid_amount);
@@ -284,7 +285,7 @@ class PosTest extends TestCase
         $this->actingAs($this->cashier)
             ->post('/admin/pos/checkout', [
                 'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]],
-                'method' => 'cash',
+                'payment_method_id' => $this->paymentMethodId('cash'),
                 'paid_amount' => 300,
             ])
             ->assertRedirect();
@@ -318,7 +319,7 @@ class PosTest extends TestCase
 
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 20]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $return = $this->sales->refund($sale, [$part->id => 5], $this->cashier->id, 'صنف تالف');
@@ -335,7 +336,7 @@ class PosTest extends TestCase
 
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 5]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->expectException(ValidationException::class);
@@ -348,7 +349,7 @@ class PosTest extends TestCase
 
         $sale = $this->sales->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 10]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         $this->sales->refund($sale, [$part->id => 6], $this->cashier->id);
@@ -388,10 +389,10 @@ class PosTest extends TestCase
         $this->sales->checkout([
             'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]],
             'unit_id' => $unit->id,
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
-        $profit = \App\Models\CostCenter::forUnit($unit)->profitability();
+        $profit = CostCenter::forUnit($unit)->profitability();
 
         $this->assertSame(747.5, $profit['revenue']);
         $this->assertSame(350.0, $profit['expense']);   // تكلفة 10 × 35

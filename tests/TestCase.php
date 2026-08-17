@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\PaymentMethod;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -21,5 +22,16 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         $this->travelTo(self::TEST_NOW);
+    }
+
+    /**
+     * معرّف طريقة دفع بكودها.
+     *
+     * الطرق تُنشئها الهجرة نفسها، فهي موجودة في كل اختبار بلا بذر. والاختبارات
+     * تعرف الكود («cash») لا المعرّف، فيبقى هذا الجسر بينهما في موضع واحد.
+     */
+    protected function paymentMethodId(string $code = PaymentMethod::CASH): int
+    {
+        return (int) PaymentMethod::where('code', $code)->value('id');
     }
 }

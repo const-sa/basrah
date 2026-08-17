@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * مرفق (مسبح، مطبخ، موقف…) يُسند لأقسام الوحدات.
@@ -14,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 class Facility extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = ['name', 'icon', 'description', 'sort_order', 'is_active'];
 
     protected function casts(): array

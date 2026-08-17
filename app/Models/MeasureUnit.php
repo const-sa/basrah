@@ -4,12 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * وحدة قياس يُباع بها الصنف.
  */
 class MeasureUnit extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'code', 'name', 'symbol', 'allows_fraction', 'sort_order', 'is_active',
     ];

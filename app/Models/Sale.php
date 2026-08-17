@@ -15,13 +15,6 @@ class Sale extends Model
 {
     use SoftDeletes;
 
-    public const METHODS = [
-        'cash' => 'نقدًا',
-        'card' => 'شبكة',
-        'transfer' => 'تحويل',
-        'account' => 'على الحساب',
-    ];
-
     /**
      * حالة سداد الفاتورة — محسوبة لا مخزّنة، فلا تتناقض مع المبالغ.
      */
@@ -37,7 +30,7 @@ class Sale extends Model
     protected $fillable = [
         'number', 'user_id', 'client_id', 'unit_id', 'department_id', 'booking_id',
         'type', 'original_sale_id', 'subtotal', 'discount_amount', 'tax_amount',
-        'total_amount', 'cost_amount', 'method', 'paid_amount', 'notes',
+        'total_amount', 'cost_amount', 'payment_method_id', 'paid_amount', 'notes',
     ];
 
     protected function casts(): array
@@ -215,9 +208,22 @@ class Sale extends Model
             ->sum('quantity');
     }
 
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
+
     public function methodLabel(): string
     {
-        return self::METHODS[$this->method] ?? $this->method;
+        return $this->paymentMethod?->name ?? '—';
+    }
+
+    /**
+     * فاتورة آجلة — لا تُقبض عند الإصدار، ومرتجعها على ذمة العميل.
+     */
+    public function isCredit(): bool
+    {
+        return (bool) $this->paymentMethod?->is_credit;
     }
 
     public function scopeSales(Builder $query): Builder

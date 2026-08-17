@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * نوع المناسبة في قاعة بعينها — زواج، ملكة، تخرّج، اجتماع…
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class EventType extends Model
 {
+    use SoftDeletes;
+
     /**
      * ألوان الشارات المتاحة — محصورة حتى لا تدخل الواجهة أصنافًا لا تعرفها.
      */

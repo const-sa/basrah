@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Department;
+use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Setting;
@@ -14,6 +15,7 @@ use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Services\SalesService;
 use App\Services\ZatcaQr;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,7 +53,7 @@ class SalesController extends Controller
             'department_id' => $departmentParam === 'all' ? 'all' : (string) ($departmentId ?? ''),
             'type' => $request->string('type')->toString() ?: null,
             'payment_status' => $request->string('payment_status')->toString() ?: null,
-            'method' => $request->string('method')->toString() ?: null,
+            'payment_method_id' => $request->integer('payment_method_id') ?: null,
             'from' => $request->date('from')?->toDateString(),
             'to' => $request->date('to')?->toDateString(),
             'search' => $request->string('search')->toString() ?: null,
@@ -60,7 +62,7 @@ class SalesController extends Controller
         $query = Sale::query()
             ->when($departmentId, fn ($q, $id) => $q->where('sales.department_id', $id))
             ->when($filters['type'], fn ($q, $t) => $q->where('sales.type', $t))
-            ->when($filters['method'], fn ($q, $m) => $q->where('sales.method', $m))
+            ->when($filters['payment_method_id'], fn ($q, $id) => $q->where('sales.payment_method_id', $id))
             ->when($filters['payment_status'], fn ($q, $s) => $q->paymentStatus($s))
             ->when($filters['from'], fn ($q, $d) => $q->whereDate('sales.created_at', '>=', $d))
             ->when($filters['to'], fn ($q, $d) => $q->whereDate('sales.created_at', '<=', $d))
@@ -72,7 +74,7 @@ class SalesController extends Controller
 
         return Inertia::render('admin/sales/Index', [
             'sales' => (clone $query)
-                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name'])
+                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name'])
                 ->withSum('returns as returned_amount', 'total_amount')
                 ->latest('sales.id')
                 ->paginate(20)
@@ -81,7 +83,7 @@ class SalesController extends Controller
             'stats' => $this->stats(clone $query),
             'filters' => $filters,
             'departments' => $departments,
-            'methods' => collect(Sale::METHODS)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
+            'methods' => PaymentMethod::options(),
             'paymentStatuses' => collect(Sale::PAYMENT_STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
             'treasuries' => Treasury::where('is_active', true)->orderBy('name')
                 ->get()->map(fn (Treasury $t) => [
@@ -90,7 +92,7 @@ class SalesController extends Controller
                     'type_label' => $t->typeLabel(),
                     'balance' => $t->balance(),
                 ]),
-            'voucherMethods' => collect(Voucher::METHODS)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
+            'voucherMethods' => PaymentMethod::options(),
         ]);
     }
 
@@ -150,7 +152,7 @@ class SalesController extends Controller
                 'date' => $v->voucher_date->toDateString(),
                 'amount' => (float) $v->amount,
                 'treasury' => $v->treasury?->name,
-                'method_label' => Voucher::METHODS[$v->method] ?? $v->method,
+                'method_label' => $v->methodLabel(),
                 'status' => $v->status,
                 'status_label' => $v->statusLabel(),
                 'description' => $v->description,
@@ -211,7 +213,8 @@ class SalesController extends Controller
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01', 'max:'.$sale->remainingAmount()],
             'treasury_id' => ['required', 'exists:treasuries,id'],
-            'method' => ['required', Rule::in(array_keys(Voucher::METHODS))],
+            'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')
+                ->where('is_active', true)],
             'voucher_date' => ['required', 'date'],
             'description' => ['nullable', 'string', 'max:1000'],
         ], [], ['amount' => 'المبلغ']);
@@ -232,7 +235,7 @@ class SalesController extends Controller
             'cost_center_id' => $this->sales->costCenterFor($sale),
             'client_id' => $sale->client_id,
             'sale_id' => $sale->id,
-            'method' => $data['method'],
+            'payment_method_id' => $data['payment_method_id'],
             'reference' => $sale->number,
             'description' => ($data['description'] ?? null) ?: "سداد على الفاتورة {$sale->number}",
         ], $request->user()?->id);
@@ -291,7 +294,7 @@ class SalesController extends Controller
             'client_mobile' => $sale->client?->mobile,
             'department' => $sale->department?->name,
             'cashier' => $sale->user?->name,
-            'method' => $sale->method,
+            'payment_method_id' => $sale->payment_method_id,
             'method_label' => $sale->methodLabel(),
             // السعر المعروض في القائمة صافي الضريبة بعد الخصم، فيصحّ الجمع:
             // السعر + الضريبة = الإجمالي.
@@ -313,7 +316,7 @@ class SalesController extends Controller
      * ملخّص المجموعة المفلترة — يُحسب في قاعدة البيانات لا على الصفحة
      * المعروضة، فيبقى صحيحًا مع الترقيم.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Sale>  $query
+     * @param  Builder<Sale>  $query
      * @return array<string, float|int>
      */
     private function stats($query): array

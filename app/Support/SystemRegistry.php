@@ -27,6 +27,7 @@ class SystemRegistry
         'approve' => 'اعتماد',
         'send' => 'إرسال',
         'export' => 'تصدير',
+        'restore' => 'استرجاع',
     ];
 
     /**
@@ -92,6 +93,7 @@ class SystemRegistry
                 'accounts' => ['label' => 'شجرة الحسابات', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'journal' => ['label' => 'القيود اليومية', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'treasury' => ['label' => 'الصناديق والبنوك', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'payment_methods' => ['label' => 'طرق الدفع', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'vouchers' => ['label' => 'سندات القبض والصرف', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'expenses' => ['label' => 'المصروفات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'receivables' => ['label' => 'ذمم العملاء والموردين', 'actions' => ['view', 'create', 'edit', 'export']],
@@ -109,6 +111,7 @@ class SystemRegistry
                 'attendance' => ['label' => 'الحضور والانصراف', 'actions' => ['view', 'create', 'edit', 'approve']],
                 'leaves' => ['label' => 'الإجازات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'advances' => ['label' => 'السلف والخصومات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'bonuses' => ['label' => 'المكافآت', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'payroll' => ['label' => 'مسيّر الرواتب', 'actions' => ['view', 'create', 'edit', 'approve', 'export']],
             ],
         ],
@@ -134,6 +137,9 @@ class SystemRegistry
                 'cities' => ['label' => 'المدن', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'departments' => ['label' => 'الأقسام الإدارية', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'audit' => ['label' => 'سجل التدقيق', 'actions' => ['view', 'export']],
+                // الحذف هنا هو الإتلاف النهائي من الأرشيف وحده — ولذلك
+                // يُمنح منفصلًا عن الاسترجاع وعن حذف الشاشات الاعتيادي.
+                'archive' => ['label' => 'الأرشيف (المحذوفات)', 'actions' => ['view', 'restore', 'delete']],
                 'settings' => ['label' => 'الإعدادات العامة', 'actions' => ['view', 'edit']],
             ],
         ],

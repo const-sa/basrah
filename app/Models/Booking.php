@@ -25,17 +25,47 @@ class Booking extends Model
     public const REFERENCE_PREFIX = 'a-';
 
     /**
-     * الحالات التي تشغل الوحدة فعليًا — وحدها تُحتسب في كشف التعارض.
-     * الملغي و«لم يحضر» لا يحجزان شيئًا.
+     * حالات الحجز السبع كما نصّ عليها العرض المعتمد، بترتيب دورة الحياة.
+     *
+     * «متاح» الواردة في العرض ليست حالة حجز بل غياب الحجز: التقويم يعرضها
+     * للوحدة أو اليوم الخالي، فلا موضع لها في هذا الجدول.
      */
-    public const BLOCKING_STATUSES = ['tentative', 'confirmed', 'completed'];
-
     public const STATUSES = [
-        'tentative' => 'مبدئي',
-        'confirmed' => 'مؤكد',
-        'completed' => 'مكتمل',
+        'tentative' => 'حجز مبدئي',
+        'pending_deposit' => 'بانتظار العربون',
+        'confirmed' => 'حجز مؤكد',
+        'checked_in' => 'تم الدخول',
+        'checked_out' => 'تم الخروج',
+        'postponed' => 'مؤجل',
         'cancelled' => 'ملغي',
-        'no_show' => 'لم يحضر',
+    ];
+
+    /**
+     * الحالات التي تشغل الوحدة فعليًا — وحدها تُحتسب في كشف التعارض.
+     *
+     * «بانتظار العربون» يحجز التاريخ كالمبدئي، وإلا بيع اليوم مرتين قبل
+     * وصول العربون. والمؤجل خارجها: التأجيل يحرّر الفترة ليُعاد بيعها،
+     * والملغي كذلك.
+     */
+    public const BLOCKING_STATUSES = [
+        'tentative',
+        'pending_deposit',
+        'confirmed',
+        'checked_in',
+        'checked_out',
+    ];
+
+    /**
+     * الحالات النهائية — لا تُغيَّر بعدها حالة ولا يُرسَل تذكير.
+     */
+    public const CLOSED_STATUSES = ['checked_out', 'postponed', 'cancelled'];
+
+    /**
+     * مصادر الحجز.
+     */
+    public const SOURCES = [
+        'admin' => 'من الإدارة',
+        'online' => 'حجز أونلاين',
     ];
 
     /**
@@ -43,10 +73,12 @@ class Booking extends Model
      */
     public const STATUS_COLORS = [
         'tentative' => 'amber',
+        'pending_deposit' => 'orange',
         'confirmed' => 'emerald',
-        'completed' => 'slate',
+        'checked_in' => 'sky',
+        'checked_out' => 'slate',
+        'postponed' => 'violet',
         'cancelled' => 'red',
-        'no_show' => 'rose',
     ];
 
     protected $fillable = [
@@ -56,6 +88,7 @@ class Booking extends Model
         'event_type_id',
         'package_id',
         'created_by',
+        'source',
         'scope',
         'period',
         'booking_date',
@@ -201,6 +234,14 @@ class Booking extends Model
         return in_array($this->status, self::BLOCKING_STATUSES, true);
     }
 
+    /**
+     * هل انتهى مسار الحجز؟ (خرج أو أُجِّل أو أُلغي)
+     */
+    public function isClosed(): bool
+    {
+        return in_array($this->status, self::CLOSED_STATUSES, true);
+    }
+
     public function statusLabel(): string
     {
         return self::STATUSES[$this->status] ?? $this->status;
@@ -209,6 +250,19 @@ class Booking extends Model
     public function periodLabel(): string
     {
         return BookingPeriod::label($this->period);
+    }
+
+    public function sourceLabel(): string
+    {
+        return self::SOURCES[$this->source] ?? 'من الإدارة';
+    }
+
+    /**
+     * هل جاء هذا الحجز من الموقع العام؟
+     */
+    public function isOnline(): bool
+    {
+        return $this->source === 'online';
     }
 
     public function coversWholeUnit(): bool

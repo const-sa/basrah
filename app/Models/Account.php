@@ -6,12 +6,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * حساب في شجرة الحسابات.
  */
 class Account extends Model
 {
+    use SoftDeletes;
+
     public const TYPES = [
         'asset' => 'أصول',
         'liability' => 'التزامات',

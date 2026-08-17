@@ -46,7 +46,7 @@ class Setting extends Model
         $settings = static::query()->find(1);
 
         if (! $settings) {
-            $settings = new self();
+            $settings = new self;
             $settings->id = 1;
             $settings->save();
         }

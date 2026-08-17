@@ -5,10 +5,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { usePermissions } from '@/composables/usePermissions';
 import { useTableColumns, type ColumnPreset, type TableColumn } from '@/composables/useTableColumns';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
 import { toHijri } from '@/lib/hijri';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Bell, Check, Columns3, Eye, FileSignature, FileText, Loader2, MoreVertical, Pencil, Plus, Receipt, Search, StickyNote, Trash2, Wallet, X } from 'lucide-vue-next';
+import { Bell, CalendarClock, Check, Columns3, Eye, FileSignature, FileText, Loader2, LogIn, LogOut, MoreVertical, Pencil, Plus, Receipt, Search, StickyNote, Trash2, Wallet, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -32,6 +33,7 @@ interface Booking {
     booking_date: string;
     days_count: number; last_day_date: string;
     status: string; status_label: string; status_color: string;
+    is_online: boolean;
     total_amount: number; package_amount: number; event_fee_amount: number;
     deposit_amount: number; paid_amount: number; remaining_amount: number;
     is_deposit_settled: boolean;
@@ -41,15 +43,15 @@ interface Booking {
     // أعمدة الدفتر: من مبلغ الحجز إلى المسترجع
     subtotal_amount: number; discount_amount: number; tax_amount: number;
     addons_amount: number;
-    paid_by_method: Record<string, number>;
+    paid_by_method: Record<number, number>;
     refunded_amount: number; payment_status: string;
 }
 
-interface MethodColumn { key: string; label: string }
+interface MethodColumn { key: number; label: string }
 
 interface LedgerTotals {
     subtotal: number; discount: number; deposit: number; tax: number;
-    total: number; paid: number; paid_by_method: Record<string, number>;
+    total: number; paid: number; paid_by_method: Record<number, number>;
     remaining: number; refunded: number; count: number;
 }
 
@@ -71,8 +73,9 @@ const props = defineProps<{
     meta: {
         statuses: { key: string; label: string; color: string }[];
         periods: { key: string; label: string; start: string; end: string }[];
+        payment_methods: PaymentMethodOption[];
     };
-    stats: { total: number; tentative: number; confirmed: number; unpaid: number };
+    stats: { total: number; tentative: number; pending_deposit: number; confirmed: number; unpaid: number };
     methods: MethodColumn[];
     totals: { page: LedgerTotals; all: LedgerTotals };
 }>();
@@ -181,7 +184,7 @@ const payLoading = ref(false);
 
 const payForm = useForm({
     type: 'deposit',
-    method: 'cash',
+    payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
     amount: 0,
     paid_on: new Date().toISOString().slice(0, 10),
     reference: '',
@@ -275,8 +278,15 @@ const sendReminder = (b: Booking) => {
     }
 };
 
+// الإلغاء والتأجيل يخرجان الحجز من مساره، فيُسأل عن السبب ليبقى في سجل التدقيق.
+const REASON_PROMPTS: Record<string, string> = {
+    cancelled: 'سبب الإلغاء (اختياري):',
+    postponed: 'سبب التأجيل (اختياري):',
+};
+
 const changeStatus = (b: Booking, status: string) => {
-    const reason = status === 'cancelled' ? prompt('سبب الإلغاء (اختياري):') ?? '' : '';
+    const ask = REASON_PROMPTS[status];
+    const reason = ask ? prompt(ask) ?? '' : '';
     router.patch(`/admin/bookings/${b.id}/status`, { status, reason }, { preserveScroll: true });
 };
 
@@ -297,14 +307,7 @@ const eventBadge = (color: string) =>
         slate: 'bg-slate-200 text-slate-700',
     })[color] ?? 'bg-slate-100 text-slate-700';
 
-const colorClass = (color: string) =>
-    ({
-        amber: 'bg-amber-100 text-amber-700',
-        emerald: 'bg-emerald-100 text-emerald-700',
-        slate: 'bg-slate-200 text-slate-700',
-        red: 'bg-red-100 text-red-700',
-        rose: 'bg-rose-100 text-rose-700',
-    })[color] ?? 'bg-slate-100 text-slate-700';
+const colorClass = statusChipClass;
 </script>
 
 <template>
@@ -326,10 +329,11 @@ const colorClass = (color: string) =>
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <StatPill label="إجمالي الحجوزات" :value="stats.total" variant="primary" />
-                <StatPill label="مبدئي" :value="stats.tentative" variant="warning" />
-                <StatPill label="مؤكد" :value="stats.confirmed" variant="success" />
+                <StatPill label="حجز مبدئي" :value="stats.tentative" variant="warning" />
+                <StatPill label="بانتظار العربون" :value="stats.pending_deposit" variant="dark" />
+                <StatPill label="حجز مؤكد" :value="stats.confirmed" variant="success" />
                 <StatPill label="عليه متبقٍ" :value="stats.unpaid" variant="danger" />
             </div>
 
@@ -435,7 +439,10 @@ const colorClass = (color: string) =>
                         </thead>
                         <tbody>
                             <tr v-for="b in bookings.data" :key="b.id" class="group border-t border-slate-100 transition hover:bg-slate-50">
-                                <td class="sticky z-10 whitespace-nowrap bg-white px-3 py-3 font-extrabold text-slate-900 group-hover:bg-slate-50 ltr:left-0 rtl:right-0" dir="ltr">{{ b.reference }}</td>
+                                <td class="sticky z-10 whitespace-nowrap bg-white px-3 py-3 font-extrabold text-slate-900 group-hover:bg-slate-50 ltr:left-0 rtl:right-0" dir="ltr">
+                                    {{ b.reference }}
+                                    <span v-if="b.is_online" title="حجز وصل من الموقع" class="ms-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">أونلاين</span>
+                                </td>
                                 <td v-if="shows('client')" class="px-3 py-3 font-bold text-slate-900">{{ b.client?.name ?? '—' }}</td>
                                 <td v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 font-medium text-slate-800" dir="ltr">{{ b.client?.mobile ?? '—' }}</td>
                                 <td v-if="shows('event')" class="px-3 py-3">
@@ -524,9 +531,14 @@ const colorClass = (color: string) =>
                                             v-else-if="can('contracts.create')" variant="muted" :icon="FileSignature"
                                             title="توليد العقد" @click="generateContract(b)"
                                         />
-                                        <TableActionButton v-if="can('whatsapp.send') && b.client?.mobile && !['cancelled','completed'].includes(b.status)" variant="view" :icon="Bell" title="تذكير واتساب" @click="sendReminder(b)" />
-                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'confirmed'" variant="primary" :icon="Check" title="إنهاء الحجز" @click="changeStatus(b, 'completed')" />
-                                        <TableActionButton v-if="can('bookings.edit') && !['cancelled', 'completed'].includes(b.status)" variant="warning" :icon="X" title="إلغاء" @click="changeStatus(b, 'cancelled')" />
+                                        <TableActionButton v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)" variant="view" :icon="Bell" title="تذكير واتساب" @click="sendReminder(b)" />
+
+                                        <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في
+                                             المسار، فلا يحتار الموظف بين أزرار لا تنطبق. -->
+                                        <TableActionButton v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)" variant="primary" :icon="Check" title="تأكيد الحجز" @click="changeStatus(b, 'confirmed')" />
+                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'confirmed'" variant="primary" :icon="LogIn" title="تسجيل الدخول" @click="changeStatus(b, 'checked_in')" />
+                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'checked_in'" variant="success" :icon="LogOut" title="تسجيل الخروج" @click="changeStatus(b, 'checked_out')" />
+                                        <TableActionButton v-if="can('bookings.edit') && !isClosedStatus(b.status)" variant="warning" :icon="X" title="إلغاء" @click="changeStatus(b, 'cancelled')" />
 
                                         <!-- التعديل والحذف داخل قائمة النقاط الثلاث: إجراءان يغيّران الحجز نفسه،
                                              فإخفاؤهما خلف نقرة يقلّل الضغط الخاطئ ويُهدّئ صفّ الإجراءات. -->
@@ -539,6 +551,12 @@ const colorClass = (color: string) =>
                                             <DropdownMenuContent align="end" class="w-40">
                                                 <DropdownMenuItem v-if="can('bookings.edit')" class="cursor-pointer font-bold text-slate-700" @select="router.visit(`/admin/bookings/halls/${b.id}/edit`)">
                                                     <Pencil class="h-4 w-4 text-cyan-600" /> تعديل
+                                                </DropdownMenuItem>
+
+                                                <!-- التأجيل هنا لا في صفّ الإجراءات: أقلّ استعمالًا من الإلغاء
+                                                     ويُخلَط به، فإخفاؤه يمنع النقرة الخاطئة. -->
+                                                <DropdownMenuItem v-if="can('bookings.edit') && !isClosedStatus(b.status)" class="cursor-pointer font-bold text-violet-700 focus:bg-violet-50" @select="changeStatus(b, 'postponed')">
+                                                    <CalendarClock class="h-4 w-4" /> تأجيل
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator v-if="can('bookings.edit') && can('bookings.delete')" />
                                                 <DropdownMenuItem v-if="can('bookings.delete')" class="cursor-pointer font-bold text-red-600 focus:bg-red-50 focus:text-red-700" @select="destroy(b)">
@@ -914,11 +932,8 @@ const colorClass = (color: string) =>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">الطريقة</label>
-                                    <select v-model="payForm.method" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
-                                        <option value="cash">نقدًا</option>
-                                        <option value="transfer">تحويل</option>
-                                        <option value="card">شبكة</option>
-                                        <option value="online">إلكتروني</option>
+                                    <select v-model="payForm.payment_method_id" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
+                                        <option v-for="m in meta.payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                                     </select>
                                 </div>
                                 <div>

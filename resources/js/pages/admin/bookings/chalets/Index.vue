@@ -3,9 +3,10 @@ import { StatPill, TableActionButton } from '@/components/data-table';
 import PageShortcuts from '@/components/PageShortcuts.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Bell, Check, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-vue-next';
+import { Bell, CalendarClock, Check, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -27,6 +28,7 @@ interface Booking {
     check_out_date: string | null;
     nights: number | null;
     status: string; status_label: string; status_color: string;
+    is_online: boolean;
     total_amount: number; deposit_amount: number; paid_amount: number; remaining_amount: number;
     is_deposit_settled: boolean;
     guests_count: number | null; notes: string | null;
@@ -50,8 +52,9 @@ const props = defineProps<{
         statuses: { key: string; label: string; color: string }[];
         periods: { key: string; label: string; start: string; end: string }[];
         stay: { check_in_time: string; check_out_time: string; max_nights: number };
+        payment_methods: PaymentMethodOption[];
     };
-    stats: { total: number; tentative: number; confirmed: number; unpaid: number };
+    stats: { total: number; tentative: number; pending_deposit: number; confirmed: number; unpaid: number };
 }>();
 
 const { can } = usePermissions();
@@ -81,7 +84,7 @@ const payLoading = ref(false);
 
 const payForm = useForm({
     type: 'deposit',
-    method: 'cash',
+    payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
     amount: 0,
     paid_on: today,
     reference: '',
@@ -137,8 +140,15 @@ const sendReminder = (b: Booking) => {
     }
 };
 
+// الإلغاء والتأجيل يخرجان الحجز من مساره، فيُسأل عن السبب ليبقى في سجل التدقيق.
+const REASON_PROMPTS: Record<string, string> = {
+    cancelled: 'سبب الإلغاء (اختياري):',
+    postponed: 'سبب التأجيل (اختياري):',
+};
+
 const changeStatus = (b: Booking, status: string) => {
-    const reason = status === 'cancelled' ? prompt('سبب الإلغاء (اختياري):') ?? '' : '';
+    const ask = REASON_PROMPTS[status];
+    const reason = ask ? prompt(ask) ?? '' : '';
     router.patch(`/admin/bookings/${b.id}/status`, { status, reason }, { preserveScroll: true });
 };
 
@@ -148,14 +158,7 @@ const destroy = (b: Booking) => {
     }
 };
 
-const colorClass = (color: string) =>
-    ({
-        amber: 'bg-amber-100 text-amber-700',
-        emerald: 'bg-emerald-100 text-emerald-700',
-        slate: 'bg-slate-200 text-slate-700',
-        red: 'bg-red-100 text-red-700',
-        rose: 'bg-rose-100 text-rose-700',
-    })[color] ?? 'bg-slate-100 text-slate-700';
+const colorClass = statusChipClass;
 </script>
 
 <template>
@@ -179,10 +182,11 @@ const colorClass = (color: string) =>
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <StatPill label="إجمالي الإقامات" :value="stats.total" variant="primary" />
-                <StatPill label="مبدئي" :value="stats.tentative" variant="warning" />
-                <StatPill label="مؤكد" :value="stats.confirmed" variant="success" />
+                <StatPill label="حجز مبدئي" :value="stats.tentative" variant="warning" />
+                <StatPill label="بانتظار العربون" :value="stats.pending_deposit" variant="dark" />
+                <StatPill label="حجز مؤكد" :value="stats.confirmed" variant="success" />
                 <StatPill label="عليه متبقٍ" :value="stats.unpaid" variant="danger" />
             </div>
 
@@ -226,7 +230,10 @@ const colorClass = (color: string) =>
                         </thead>
                         <tbody>
                             <tr v-for="b in bookings.data" :key="b.id" class="border-t border-slate-100 transition hover:bg-slate-50">
-                                <td class="px-4 py-3 font-extrabold text-slate-800" dir="ltr">{{ b.reference }}</td>
+                                <td class="px-4 py-3 font-extrabold text-slate-800" dir="ltr">
+                                    {{ b.reference }}
+                                    <span v-if="b.is_online" title="حجز وصل من الموقع" class="ms-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">أونلاين</span>
+                                </td>
                                 <td class="px-4 py-3">
                                     <div class="font-bold text-slate-800">{{ b.unit.name }}</div>
                                     <div class="mt-0.5 text-[11px] font-medium text-slate-500">
@@ -268,10 +275,15 @@ const colorClass = (color: string) =>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center justify-center gap-1">
                                         <TableActionButton v-if="can('bookings.edit')" variant="primary" :icon="Wallet" title="الدفعات والعربون" @click="openPayments(b)" />
-                                        <TableActionButton v-if="can('whatsapp.send') && b.client?.mobile && !['cancelled','completed'].includes(b.status)" variant="view" :icon="Bell" title="تذكير واتساب" @click="sendReminder(b)" />
-                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'confirmed'" variant="primary" :icon="Check" title="إنهاء الإقامة" @click="changeStatus(b, 'completed')" />
+                                        <TableActionButton v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)" variant="view" :icon="Bell" title="تذكير واتساب" @click="sendReminder(b)" />
+
+                                        <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في المسار -->
+                                        <TableActionButton v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)" variant="primary" :icon="Check" title="تأكيد الحجز" @click="changeStatus(b, 'confirmed')" />
+                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'confirmed'" variant="primary" :icon="LogIn" title="تسجيل الدخول" @click="changeStatus(b, 'checked_in')" />
+                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'checked_in'" variant="success" :icon="LogOut" title="تسجيل الخروج" @click="changeStatus(b, 'checked_out')" />
                                         <TableActionButton v-if="can('bookings.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="router.visit(`/admin/bookings/chalets/${b.id}/edit`)" />
-                                        <TableActionButton v-if="can('bookings.edit') && !['cancelled', 'completed'].includes(b.status)" variant="warning" :icon="X" title="إلغاء" @click="changeStatus(b, 'cancelled')" />
+                                        <TableActionButton v-if="can('bookings.edit') && !isClosedStatus(b.status)" variant="dark" :icon="CalendarClock" title="تأجيل" @click="changeStatus(b, 'postponed')" />
+                                        <TableActionButton v-if="can('bookings.edit') && !isClosedStatus(b.status)" variant="warning" :icon="X" title="إلغاء" @click="changeStatus(b, 'cancelled')" />
                                         <TableActionButton v-if="can('bookings.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(b)" />
                                     </div>
                                 </td>
@@ -349,11 +361,8 @@ const colorClass = (color: string) =>
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">الطريقة</label>
-                                    <select v-model="payForm.method" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
-                                        <option value="cash">نقدًا</option>
-                                        <option value="transfer">تحويل</option>
-                                        <option value="card">شبكة</option>
-                                        <option value="online">إلكتروني</option>
+                                    <select v-model="payForm.payment_method_id" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
+                                        <option v-for="m in meta.payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                                     </select>
                                 </div>
                                 <div>

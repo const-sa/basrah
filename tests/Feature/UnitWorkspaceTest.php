@@ -88,14 +88,14 @@ class UnitWorkspaceTest extends TestCase
             'lines' => [['item_id' => $part->id, 'quantity' => 4]],
             'unit_id' => $this->unit->id,
             'client_id' => $client->id,
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->owner->id);
 
         // فاتورة على وحدة أخرى يجب ألا تظهر هنا
         app(SalesService::class)->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 2]],
             'unit_id' => Unit::where('code', 'CH-LULU')->value('id'),
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->owner->id);
 
         $this->actingAs($this->owner)
@@ -114,7 +114,7 @@ class UnitWorkspaceTest extends TestCase
         app(SalesService::class)->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 10]],
             'unit_id' => $this->unit->id,
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->owner->id);
 
         $this->actingAs($this->owner)

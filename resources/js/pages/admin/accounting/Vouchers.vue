@@ -2,7 +2,7 @@
 import { StatPill } from '@/components/data-table';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Ban, CheckCircle2, Plus, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -18,7 +18,7 @@ const props = defineProps<{
     vouchers: { data: Voucher[]; links: { url: string | null; label: string; active: boolean }[] };
     filters: Record<string, string | null>;
     types: { key: string; label: string }[];
-    methods: { key: string; label: string }[];
+    methods: PaymentMethodOption[];
     treasuries: { id: number; name: string; type_label: string; balance: number }[];
     accounts: { id: number; code: string; name: string; type: string }[];
     costCenters: { id: number; code: string; name: string }[];
@@ -43,7 +43,8 @@ const form = useForm({
     type: 'receipt', voucher_date: new Date().toISOString().slice(0, 10),
     amount: 0, treasury_id: null as number | null, account_id: null as number | null,
     cost_center_id: null as number | null, client_id: null as number | null, supplier_id: null as number | null,
-    method: 'cash', reference: '', description: '', post_now: true,
+    payment_method_id: props.methods[0]?.id ?? null as number | null,
+    reference: '', description: '', post_now: true,
 });
 
 /**
@@ -228,8 +229,8 @@ const typeClass = (t: string) =>
                             </div>
                             <div>
                                 <label class="mb-1 block text-sm font-bold text-slate-700">طريقة الدفع</label>
-                                <select v-model="form.method" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                                    <option v-for="m in methods" :key="m.key" :value="m.key">{{ m.label }}</option>
+                                <select v-model="form.payment_method_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                    <option v-for="m in methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                                 </select>
                             </div>
                         </div>

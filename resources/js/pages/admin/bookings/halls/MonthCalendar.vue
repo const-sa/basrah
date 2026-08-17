@@ -2,6 +2,7 @@
 import PageShortcuts from '@/components/PageShortcuts.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { statusRingChipClass } from '@/lib/bookingStatus';
 import { toHijri } from '@/lib/hijri';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -104,13 +105,7 @@ const stateRing: Record<string, string> = {
     past: 'ring-slate-200 bg-slate-50',
 };
 
-const statusChip: Record<string, string> = {
-    amber: 'bg-amber-100 text-amber-800 ring-amber-200',
-    emerald: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
-    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
-    red: 'bg-red-100 text-red-800 ring-red-200',
-    rose: 'bg-rose-100 text-rose-800 ring-rose-200',
-};
+const statusChip = statusRingChipClass;
 </script>
 
 <template>
@@ -252,7 +247,7 @@ const statusChip: Record<string, string> = {
                                                 <span class="truncate text-[13px] font-extrabold text-slate-800" dir="ltr">{{ b.reference }}</span>
                                                 <span
                                                     class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold ring-1"
-                                                    :class="statusChip[b.color] ?? statusChip.slate"
+                                                    :class="statusChip(b.color)"
                                                 >
                                                     {{ b.status_label }}
                                                 </span>

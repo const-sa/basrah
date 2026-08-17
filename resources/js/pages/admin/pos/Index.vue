@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, Plus, Receipt, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -30,7 +30,7 @@ const props = defineProps<{
     clients: { id: number; name: string; mobile: string | null }[];
     /** العميل النقدي — المختار تلقائيًا ما لم يُحدَّد غيره. */
     defaultClientId: number;
-    methods: { key: string; label: string }[];
+    methods: PaymentMethodOption[];
     recentSales: { id: number; number: string; type: string; total: number; method_label: string; time: string }[];
 }>();
 
@@ -48,7 +48,7 @@ const form = useForm({
     lines: [] as unknown[],
     client_id: props.defaultClientId as number | null,
     department_id: props.departmentId,
-    method: 'cash',
+    payment_method_id: props.methods[0]?.id ?? null as number | null,
     discount_amount: 0,
     paid_amount: 0,
     notes: '',
@@ -126,8 +126,16 @@ const total = computed(() => Math.max(0, subtotal.value + tax.value - (form.disc
 /** null = اتركه تلقائيًا تبعًا لطريقة الدفع؛ ورقمٌ = مبلغ حدّده الكاشير. */
 const paidInput = ref<number | null>(null);
 
-/** الآجل يبدأ بلا سداد، وسواه مسدَّد كاملًا — ما لم يُحدَّد غير ذلك. */
-const autoPaid = computed(() => (form.method === 'account' ? 0 : total.value));
+const selectedMethod = computed(
+    () => props.methods.find((m) => m.id === form.payment_method_id) ?? null,
+);
+
+/**
+ * الآجل يبدأ بلا سداد، وسواه مسدَّد كاملًا — ما لم يُحدَّد غير ذلك.
+ * الصفة تأتي من الطريقة نفسها لا من كودها، فيصحّ الحكم على أي طريقة
+ * آجلة يضيفها المستخدم لا على «account» وحدها.
+ */
+const autoPaid = computed(() => (selectedMethod.value?.is_credit ? 0 : total.value));
 
 const paidAmount = computed(() =>
     paidInput.value === null ? autoPaid.value : Math.min(total.value, Math.max(0, paidInput.value)),
@@ -149,8 +157,8 @@ const paymentStatus = computed(() => {
 });
 
 /** تبديل طريقة الدفع يعيد المدفوع إلى تلقائيّ القاعدة الجديدة. */
-const changeMethod = (key: string) => {
-    form.method = key;
+const changeMethod = (id: number) => {
+    form.payment_method_id = id;
     paidInput.value = null;
 };
 
@@ -241,9 +249,9 @@ const numField =
                                 <label class="mb-1 block text-sm font-extrabold text-slate-950">طريقة الدفع</label>
                                 <div class="flex gap-1">
                                     <button
-                                        v-for="m in methods" :key="m.key" type="button" @click="changeMethod(m.key)"
+                                        v-for="m in methods" :key="m.id" type="button" @click="changeMethod(m.id)"
                                         class="flex-1 rounded-lg py-2 text-xs font-extrabold transition"
-                                        :class="form.method === m.key ? 'bg-emerald-800 text-white shadow' : 'border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-200'"
+                                        :class="form.payment_method_id === m.id ? 'bg-emerald-800 text-white shadow' : 'border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-200'"
                                     >{{ m.label }}</button>
                                 </div>
                             </div>

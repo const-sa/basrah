@@ -27,6 +27,7 @@ class WhatsappNotifier
         string $purpose = 'other',
         ?Model $related = null,
         ?int $userId = null,
+        ?string $mediaUrl = null,
     ): ?WhatsappMessage {
         $number = $this->normalize($number);
 
@@ -45,7 +46,7 @@ class WhatsappNotifier
             'sent_by' => $userId,
         ]);
 
-        SendWhatsappMessage::dispatch($number, $body);
+        SendWhatsappMessage::dispatch($number, $body, $mediaUrl);
 
         // البوابة تعمل في الطابور ولا تُرجع نتيجة فورية، فتُعلَّم كمُرسلة
         // ويُصحَّح الحال عند فشل المهمة نهائيًا.
@@ -97,20 +98,25 @@ class WhatsappNotifier
     }
 
     /**
-     * إرسال العقد.
+     * إرسال العقد — مرفقًا بملفه PDF حين يُمرَّر رابطه.
+     *
+     * الرسالة لا تعد بمرفق لا تحمله: بلا رابط تُصاغ كإشعار بصدور العقد
+     * ليراجعه العميل مع الموظف، وبه تُصاغ كإرسالٍ للمستند نفسه.
      */
-    public function contract(Contract $contract, ?int $userId = null): ?WhatsappMessage
+    public function contract(Contract $contract, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
     {
         $contract->loadMissing(['client', 'booking']);
 
         $body = implode("\n", array_filter([
             'مرحبًا '.($contract->client?->name ?? '').'،',
-            'مرفق عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.',
+            $pdfUrl
+                ? 'مرفق عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.'
+                : 'صدر عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.',
             'رقم العقد: '.$contract->number,
             'نرجو الاطلاع والتأكيد.',
         ]));
 
-        return $this->send($contract->client?->mobile, $body, 'contract', $contract, $userId);
+        return $this->send($contract->client?->mobile, $body, 'contract', $contract, $userId, $pdfUrl);
     }
 
     /**

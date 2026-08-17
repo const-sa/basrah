@@ -6,13 +6,16 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\EventType;
 use App\Models\Package;
+use App\Models\PaymentMethod;
 use App\Models\Setting;
 use App\Models\Unit;
+use App\Models\User;
 use App\Support\BookingPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 use Inertia\Inertia;
@@ -26,6 +29,32 @@ use Inertia\Response;
  */
 class HallBookingsController extends BaseBookingsController
 {
+    /**
+     * أعمدة طرق الدفع في سجل الحجوزات — تُقرأ مرة واحدة للطلب كله لا مرة
+     * لكل صف، فالتقديم يجري على عشرين حجزًا في الصفحة.
+     *
+     * @var list<array{id: int, code: string, label: string, is_credit: bool}>|null
+     */
+    private ?array $methodColumns = null;
+
+    /**
+     * @return list<array{id: int, code: string, label: string, is_credit: bool}>
+     */
+    private function methodColumns(): array
+    {
+        return $this->methodColumns ??= PaymentMethod::options();
+    }
+
+    /**
+     * معرّفات الطرق بترتيب أعمدتها.
+     *
+     * @return list<int>
+     */
+    private function methodIds(): array
+    {
+        return array_column($this->methodColumns(), 'id');
+    }
+
     protected function unitType(): string
     {
         return 'hall';
@@ -40,7 +69,7 @@ class HallBookingsController extends BaseBookingsController
     {
         // الدفعات تُحمَّل مع الصف: السجل يعرض المقبوض موزّعًا على طرقه
         // والمسترجع، وحسابها لكل حجز على حدة يفتح استعلامًا لكل سطر.
-        return ['eventType:id,name,color', 'package:id,name', 'payments:id,booking_id,type,method,amount'];
+        return ['eventType:id,name,color', 'package:id,name', 'payments:id,booking_id,type,payment_method_id,amount'];
     }
 
     protected function applyExtraFilters(Builder $query, Request $request): Builder
@@ -96,9 +125,9 @@ class HallBookingsController extends BaseBookingsController
 
         $paidByMethod = [];
 
-        foreach (array_keys(BookingPayment::METHODS) as $method) {
-            $paidByMethod[$method] = round(
-                (float) $payments->where('type', '!=', 'refund')->where('method', $method)->sum('amount'),
+        foreach ($this->methodIds() as $methodId) {
+            $paidByMethod[$methodId] = round(
+                (float) $payments->where('type', '!=', 'refund')->where('payment_method_id', $methodId)->sum('amount'),
                 2,
             );
         }
@@ -155,11 +184,11 @@ class HallBookingsController extends BaseBookingsController
             'eventTypes' => $this->eventTypeOptions($user),
             'meta' => self::meta(),
             'stats' => $this->stats($query),
-            // أعمدة طرق الدفع تُبنى من ثوابت الدفعات لا من الصفوف المعروضة:
+            // أعمدة طرق الدفع تُبنى من جدول الطرق لا من الصفوف المعروضة:
             // الطريقة التي لم يُقبض بها في هذه الصفحة يبقى عمودها بصفره،
             // فلا تتبدّل الأعمدة بين صفحة وأخرى.
-            'methods' => collect(BookingPayment::METHODS)
-                ->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])
+            'methods' => collect($this->methodColumns())
+                ->map(fn (array $m) => ['key' => $m['id'], 'label' => $m['label']])
                 ->values(),
             'totals' => [
                 'page' => $this->ledgerTotals($bookings->getCollection()),
@@ -171,7 +200,7 @@ class HallBookingsController extends BaseBookingsController
     /**
      * مجاميع صفحة معروضة — تُجمع من صفوفها لا باستعلام ثانٍ.
      *
-     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
+     * @param  Collection<int, array<string, mixed>>  $rows
      * @return array<string, mixed>
      */
     private function ledgerTotals($rows): array
@@ -180,9 +209,9 @@ class HallBookingsController extends BaseBookingsController
 
         $byMethod = [];
 
-        foreach (array_keys(BookingPayment::METHODS) as $method) {
-            $byMethod[$method] = round(
-                (float) $rows->sum(fn (array $r) => (float) ($r['paid_by_method'][$method] ?? 0)),
+        foreach ($this->methodIds() as $methodId) {
+            $byMethod[$methodId] = round(
+                (float) $rows->sum(fn (array $r) => (float) ($r['paid_by_method'][$methodId] ?? 0)),
                 2,
             );
         }
@@ -223,10 +252,10 @@ class HallBookingsController extends BaseBookingsController
 
         $byMethod = [];
 
-        foreach (array_keys(BookingPayment::METHODS) as $method) {
-            $byMethod[$method] = round((float) BookingPayment::whereIn('booking_id', $ids)
+        foreach ($this->methodIds() as $methodId) {
+            $byMethod[$methodId] = round((float) BookingPayment::whereIn('booking_id', $ids)
                 ->where('type', '!=', 'refund')
-                ->where('method', $method)
+                ->where('payment_method_id', $methodId)
                 ->sum('amount'), 2);
         }
 
@@ -360,9 +389,9 @@ class HallBookingsController extends BaseBookingsController
     /**
      * أنواع المناسبات في القاعات التي يصل إليها المستخدم، بأسعارها.
      *
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     * @return Collection<int, array<string, mixed>>
      */
-    private function eventTypeOptions(?\App\Models\User $user)
+    private function eventTypeOptions(?User $user)
     {
         return EventType::active()
             ->whereIn('unit_id', Unit::visibleTo($user)->where('type', 'hall')->pluck('id'))

@@ -36,7 +36,9 @@ class BookingsController extends Controller
     ) {}
 
     /**
-     * تغيير حالة الحجز ضمن المسار المسموح: مبدئي ← مؤكد ← مكتمل.
+     * تغيير حالة الحجز في مساره:
+     * مبدئي ← بانتظار العربون ← مؤكد ← تم الدخول ← تم الخروج،
+     * ويخرج منه في أي نقطة إلى «مؤجل» أو «ملغي».
      */
     public function changeStatus(Request $request, Booking $booking): RedirectResponse
     {
@@ -47,23 +49,26 @@ class BookingsController extends Controller
 
         $this->authorizeUnit($request, $booking->unit_id);
 
-        if ($data['status'] === 'cancelled') {
-            $this->bookings->cancel($booking, $data['reason'] ?? null);
+        $reason = $data['reason'] ?? null;
 
-            return back()->with('success', 'تم إلغاء الحجز');
-        }
+        // الحالات ذات الأثر تمرّ بالخدمة لا بتحديث مباشر: هناك يُعترف
+        // بالإيراد ويُقفل العربون ويُسجَّل سبب الإلغاء. التحديث المباشر
+        // يترك الدفاتر أو سجل التدقيق ناقصًا.
+        match ($data['status']) {
+            'cancelled' => $this->bookings->cancel($booking, $reason),
+            'postponed' => $this->bookings->postpone($booking, $reason),
+            'checked_in' => $this->bookings->checkIn($booking),
+            'checked_out' => $this->bookings->checkOut($booking, $request->user()?->id),
+            default => $booking->update(['status' => $data['status']]),
+        };
 
-        // الإنهاء يمرّ بالخدمة لا بتحديث مباشر: عندها يُعترف بالإيراد
-        // ويُقفل العربون غير المكتسب. التحديث المباشر يترك الدفاتر ناقصة.
-        if ($data['status'] === 'completed') {
-            $this->bookings->complete($booking, $request->user()?->id);
-
-            return back()->with('success', 'تم إنهاء الحجز وإثبات إيراده محاسبيًا');
-        }
-
-        $booking->update(['status' => $data['status']]);
-
-        return back()->with('success', 'تم تحديث حالة الحجز');
+        return back()->with('success', match ($data['status']) {
+            'cancelled' => 'تم إلغاء الحجز',
+            'postponed' => 'تم تأجيل الحجز وتحرير الفترة',
+            'checked_in' => 'تم تسجيل دخول العميل',
+            'checked_out' => 'تم تسجيل الخروج وإثبات الإيراد محاسبيًا',
+            default => 'تم تحديث حالة الحجز',
+        });
     }
 
     /**
@@ -74,7 +79,10 @@ class BookingsController extends Controller
     {
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(BookingPayment::TYPES))],
-            'method' => ['required', Rule::in(array_keys(BookingPayment::METHODS))],
+            // الطريقة تُفحص في الجدول لا في ثابت: المعطَّلة تُرفض هنا،
+            // فلا تُسجَّل دفعة بطريقة لا تُعرض في الشاشة.
+            'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')
+                ->where('is_active', true)],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'paid_on' => ['required', 'date'],
             'reference' => ['nullable', 'string', 'max:100'],
@@ -101,12 +109,12 @@ class BookingsController extends Controller
         $this->authorizeUnit($request, $booking->unit_id);
 
         return response()->json([
-            'payments' => $booking->payments()->with('receiver:id,name')->latest('id')->get()
+            'payments' => $booking->payments()->with(['receiver:id,name', 'paymentMethod:id,name'])->latest('id')->get()
                 ->map(fn (BookingPayment $p) => [
                     'id' => $p->id,
                     'type' => $p->type,
                     'type_label' => BookingPayment::TYPES[$p->type] ?? $p->type,
-                    'method_label' => BookingPayment::METHODS[$p->method] ?? $p->method,
+                    'method_label' => $p->methodLabel(),
                     'amount' => (float) $p->amount,
                     'signed_amount' => $p->signedAmount(),
                     'paid_on' => $p->paid_on->toDateString(),
@@ -178,9 +186,7 @@ class BookingsController extends Controller
                 'amount_words' => Tafqeet::money($paid),
                 'total_amount' => (float) $booking->total_amount,
                 'remaining_amount' => $booking->remainingAmount(),
-                'method_label' => $lastPayment
-                    ? (BookingPayment::METHODS[$lastPayment->method] ?? $lastPayment->method)
-                    : 'لا يوجد',
+                'method_label' => $lastPayment?->methodLabel() ?? 'لا يوجد',
                 'payment_type_label' => $lastPayment
                     ? (BookingPayment::TYPES[$lastPayment->type] ?? $lastPayment->type)
                     : null,
@@ -354,11 +360,12 @@ class BookingsController extends Controller
     private function paymentMethodTotals(Booking $booking): array
     {
         return $booking->payments()
+            ->with('paymentMethod:id,name')
             ->where('type', '!=', 'refund')
             ->get()
-            ->groupBy('method')
-            ->map(fn ($group, $method) => [
-                'label' => BookingPayment::METHODS[$method] ?? $method,
+            ->groupBy('payment_method_id')
+            ->map(fn ($group) => [
+                'label' => $group->first()->methodLabel(),
                 'amount' => round((float) $group->sum('amount'), 2),
             ])
             ->values()

@@ -59,7 +59,7 @@ class BookingPaymentsTest extends TestCase
     {
         $this->actingAs($this->owner)
             ->post("/admin/bookings/{$this->booking->id}/payments", [
-                'type' => 'deposit', 'method' => 'cash',
+                'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'),
                 'amount' => 650, 'paid_on' => '2026-11-01', 'notify' => false,
             ])->assertSessionHasNoErrors();
 
@@ -72,7 +72,7 @@ class BookingPaymentsTest extends TestCase
     {
         $this->actingAs($this->owner)
             ->post("/admin/bookings/{$this->booking->id}/payments", [
-                'type' => 'deposit', 'method' => 'cash',
+                'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'),
                 'amount' => 500, 'paid_on' => '2026-11-01', 'notify' => true,
             ])->assertSessionHasNoErrors();
 
@@ -82,18 +82,18 @@ class BookingPaymentsTest extends TestCase
     public function test_completing_a_booking_through_the_route_recognizes_revenue(): void
     {
         $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
-            'type' => 'deposit', 'method' => 'cash', 'amount' => 650, 'paid_on' => '2026-11-01', 'notify' => false,
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650, 'paid_on' => '2026-11-01', 'notify' => false,
         ]);
 
-        // الإنهاء من الواجهة يجب أن يمرّ بالخدمة لا بتحديث مباشر،
+        // تسجيل الخروج من الواجهة يجب أن يمرّ بالخدمة لا بتحديث مباشر،
         // وإلا بقي الإيراد غير مثبت في الدفاتر.
         $this->actingAs($this->owner)
-            ->patch("/admin/bookings/{$this->booking->id}/status", ['status' => 'completed'])
+            ->patch("/admin/bookings/{$this->booking->id}/status", ['status' => 'checked_out'])
             ->assertSessionHasNoErrors();
 
         $total = (float) $this->booking->fresh()->total_amount;
 
-        $this->assertSame('completed', $this->booking->fresh()->status);
+        $this->assertSame('checked_out', $this->booking->fresh()->status);
         $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
         $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
     }
@@ -101,7 +101,7 @@ class BookingPaymentsTest extends TestCase
     public function test_payments_endpoint_returns_the_ledger_and_summary(): void
     {
         $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
-            'type' => 'deposit', 'method' => 'cash', 'amount' => 400, 'paid_on' => '2026-11-01', 'notify' => false,
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 400, 'paid_on' => '2026-11-01', 'notify' => false,
         ]);
 
         $response = $this->actingAs($this->owner)
@@ -121,12 +121,12 @@ class BookingPaymentsTest extends TestCase
     public function test_refund_beyond_the_paid_amount_is_rejected(): void
     {
         $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
-            'type' => 'deposit', 'method' => 'cash', 'amount' => 200, 'paid_on' => '2026-11-01', 'notify' => false,
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 200, 'paid_on' => '2026-11-01', 'notify' => false,
         ]);
 
         $this->actingAs($this->owner)
             ->post("/admin/bookings/{$this->booking->id}/payments", [
-                'type' => 'refund', 'method' => 'cash', 'amount' => 900, 'paid_on' => '2026-11-02', 'notify' => false,
+                'type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 900, 'paid_on' => '2026-11-02', 'notify' => false,
             ])->assertSessionHasErrors('amount');
 
         $this->assertSame(200.0, (float) $this->booking->fresh()->paid_amount);
@@ -143,7 +143,7 @@ class BookingPaymentsTest extends TestCase
 
         $this->actingAs($other)
             ->post("/admin/bookings/{$this->booking->id}/payments", [
-                'type' => 'deposit', 'method' => 'cash', 'amount' => 100, 'paid_on' => '2026-11-01',
+                'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 100, 'paid_on' => '2026-11-01',
             ])->assertForbidden();
     }
 

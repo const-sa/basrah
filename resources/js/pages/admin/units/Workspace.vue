@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { statusSolidClass } from '@/lib/bookingStatus';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { CalendarDays, ImagePlus, Loader2, Lock, Phone, Power, Receipt, Settings2, TrendingUp, UserCog, Users, X } from 'lucide-vue-next';
@@ -55,8 +56,7 @@ const kind = computed(() => (props.unit.type === 'hall' ? 'halls' : 'chalets'));
 const bookingsHref = computed(() => `/admin/bookings/${kind.value}?unit_id=${props.unit.id}`);
 const calendarHref = computed(() => `/admin/calendar/${kind.value}?unit_id=${props.unit.id}`);
 
-const barClass = (c: string) =>
-    ({ amber: 'bg-amber-500', emerald: 'bg-emerald-600', slate: 'bg-slate-500', red: 'bg-red-600', rose: 'bg-rose-600' })[c] ?? 'bg-slate-400';
+const barClass = statusSolidClass;
 
 const genderClass = (g: string) =>
     ({ men: 'bg-blue-200 text-blue-900', women: 'bg-pink-200 text-pink-900', mixed: 'bg-violet-200 text-violet-900' })[g] ?? 'bg-slate-200 text-slate-800';

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingPayment;
+use App\Models\PaymentMethod;
 use App\Models\Unit;
 use App\Services\Accounting\BookingAccounting;
 use App\Services\Concerns\BuildsBookings;
@@ -39,7 +40,7 @@ class BookingService
     /**
      * تسجيل دفعة على حجز مع قيدها المحاسبي.
      *
-     * @param  array{type?:string, method?:string, amount:float, paid_on?:string, reference?:string|null, notes?:string|null}  $data
+     * @param  array{type?:string, payment_method_id?:int|null, amount:float, paid_on?:string, reference?:string|null, notes?:string|null}  $data
      */
     public function recordPayment(Booking $booking, array $data, ?int $userId = null): BookingPayment
     {
@@ -58,11 +59,14 @@ class BookingService
             ]);
         }
 
-        return DB::transaction(function () use ($booking, $data, $amount, $type, $userId) {
+        $methodId = $data['payment_method_id']
+            ?? PaymentMethod::default()->id;
+
+        return DB::transaction(function () use ($booking, $data, $amount, $type, $userId, $methodId) {
             $payment = $booking->payments()->create([
                 'received_by' => $userId,
                 'type' => $type,
-                'method' => $data['method'] ?? 'cash',
+                'payment_method_id' => $methodId,
                 'amount' => $amount,
                 'paid_on' => $data['paid_on'] ?? now()->toDateString(),
                 'reference' => $data['reference'] ?? null,
@@ -77,16 +81,43 @@ class BookingService
     }
 
     /**
-     * إنهاء الحجز والاعتراف بإيراده.
+     * تسجيل دخول العميل — الوحدة صارت مشغولة فعلًا.
+     *
+     * لا أثر محاسبي هنا: الإيراد يُعترف به عند الخروج، والعربون يبقى التزامًا
+     * حتى تُستهلك الخدمة.
      */
-    public function complete(Booking $booking, ?int $userId = null): Booking
+    public function checkIn(Booking $booking): Booking
+    {
+        $booking->update(['status' => 'checked_in']);
+
+        return $booking->fresh();
+    }
+
+    /**
+     * تسجيل خروج العميل — نهاية الخدمة والاعتراف بإيرادها.
+     */
+    public function checkOut(Booking $booking, ?int $userId = null): Booking
     {
         return DB::transaction(function () use ($booking, $userId) {
-            $booking->update(['status' => 'completed']);
+            $booking->update(['status' => 'checked_out']);
             $this->accounting->recognizeRevenue($booking->fresh(), $userId);
 
             return $booking->fresh();
         });
+    }
+
+    /**
+     * تأجيل الحجز — يحرّر الفترة لأن المؤجل خارج BLOCKING_STATUSES، فيُعاد
+     * بيع التاريخ ويُنشأ للعميل حجز جديد بموعده الجديد.
+     */
+    public function postpone(Booking $booking, ?string $reason = null): Booking
+    {
+        $booking->update([
+            'status' => 'postponed',
+            'cancellation_reason' => $reason,
+        ]);
+
+        return $booking->fresh();
     }
 
     /**
@@ -128,6 +159,8 @@ class BookingService
                 'event_type_id' => $quote['event_type']['id'] ?? null,
                 'package_id' => $quote['package']['id'] ?? null,
                 'created_by' => $userId,
+                // الموقع العام يمرّر 'online'؛ شاشات الإدارة لا تمرّر شيئًا.
+                'source' => $data['source'] ?? 'admin',
                 'scope' => $scope,
                 'period' => $data['period'],
                 'booking_date' => $data['booking_date'],
@@ -273,5 +306,4 @@ class BookingService
             ]);
         }
     }
-
 }

@@ -28,21 +28,28 @@ class SendWhatsappMessage implements ShouldQueue
     public function __construct(
         public string $number,
         public string $message,
+        /** رابط عام لمرفق (عقد PDF مثلًا) — الرسالة نصية بدونه. */
+        public ?string $mediaUrl = null,
     ) {}
 
     public function handle(): void
     {
-        $gateway = new WaGateway();
+        $gateway = new WaGateway;
 
         if (! $gateway->isConfigured()) {
             return;
         }
 
-        $result = $gateway->send($this->number, $this->message);
+        // البوابة ترسل النص مع الوسائط في طلب واحد، فلا تُرسل رسالتان
+        // يصل ترتيبهما مقلوبًا إلى العميل.
+        $result = $this->mediaUrl
+            ? $gateway->sendMedia($this->number, $this->mediaUrl, ['caption' => $this->message])
+            : $gateway->send($this->number, $this->message);
 
         if (! ($result['ok'] ?? false)) {
             Log::warning('SendWhatsappMessage: تعذّر إرسال رسالة واتساب', [
                 'number' => $this->number,
+                'media' => $this->mediaUrl,
                 'error' => $result['error'] ?? null,
             ]);
         }

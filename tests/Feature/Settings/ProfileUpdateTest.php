@@ -76,7 +76,11 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect('/');
 
         $this->assertGuest();
-        $this->assertNull($user->fresh());
+
+        // الحساب يُؤرشف لا يُمحى: لا يُوجد للنظام بعدها، ويبقى في الأرشيف
+        // لأن ما عُلّق به من سجلات (حجوزات، سندات، قيود) يُنسب إلى فاعله.
+        $this->assertNull(User::find($user->id));
+        $this->assertSoftDeleted('users', ['id' => $user->id]);
     }
 
     public function test_correct_password_must_be_provided_to_delete_account()

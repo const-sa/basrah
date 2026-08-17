@@ -134,6 +134,49 @@ class BookingConflictTest extends TestCase
         $this->assertSame('cancelled', $booking->fresh()->status);
     }
 
+    public function test_postponed_booking_frees_the_slot(): void
+    {
+        $booking = $this->book('whole');
+        $this->service->postpone($booking, 'أجّل العميل المناسبة');
+
+        $again = $this->book('whole');
+
+        $this->assertSame('confirmed', $again->status);
+        $this->assertSame('postponed', $booking->fresh()->status);
+    }
+
+    /**
+     * «بانتظار العربون» يحجز التاريخ كالمؤكد، وإلا بيع اليوم مرتين قبل
+     * وصول العربون.
+     */
+    public function test_booking_pending_a_deposit_still_blocks_the_slot(): void
+    {
+        $this->service->create([
+            'unit_id' => $this->unit->id,
+            'scope' => 'whole',
+            'booking_date' => '2026-09-10',
+            'period' => 'full_day',
+            'status' => 'pending_deposit',
+        ]);
+
+        $this->expectException(ValidationException::class);
+        $this->book('whole');
+    }
+
+    /**
+     * تسجيل الدخول لا يحرّر الفترة — الوحدة مشغولة فعلًا في هذه اللحظة.
+     */
+    public function test_checked_in_booking_still_blocks_the_slot(): void
+    {
+        $booking = $this->book('whole');
+        $this->service->checkIn($booking);
+
+        $this->assertTrue($booking->fresh()->isBlocking());
+
+        $this->expectException(ValidationException::class);
+        $this->book('whole');
+    }
+
     public function test_morning_and_evening_on_same_day_do_not_conflict(): void
     {
         $this->book('whole', period: 'morning');

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
+import { statusBarClass, statusDotClass } from '@/lib/bookingStatus';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, List, LogIn, LogOut, Moon } from 'lucide-vue-next';
@@ -116,23 +117,8 @@ const gridStyle = computed(() => ({
     gridTemplateColumns: `repeat(${props.days.length}, minmax(2.75rem, 1fr))`,
 }));
 
-const barClass = (color: string) =>
-    ({
-        amber: 'bg-amber-400 text-amber-950',
-        emerald: 'bg-emerald-500 text-white',
-        slate: 'bg-slate-400 text-white',
-        red: 'bg-red-500 text-white',
-        rose: 'bg-rose-500 text-white',
-    })[color] ?? 'bg-slate-300 text-slate-800';
-
-const legendClass = (color: string) =>
-    ({
-        amber: 'bg-amber-400',
-        emerald: 'bg-emerald-500',
-        slate: 'bg-slate-400',
-        red: 'bg-red-500',
-        rose: 'bg-rose-500',
-    })[color] ?? 'bg-slate-300';
+const barClass = statusBarClass;
+const legendClass = statusDotClass;
 
 const hovered = ref<Stay | null>(null);
 </script>
@@ -166,6 +152,10 @@ const hovered = ref<Stay | null>(null);
                 </select>
 
                 <div class="flex flex-wrap items-center gap-2.5">
+                    <!-- «متاح» ليست حالة حجز بل الخليّة الخالية، فتُذكر في الدليل وحدها -->
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600">
+                        <span class="h-2.5 w-2.5 rounded-sm border border-slate-300 bg-white"></span> متاح
+                    </span>
                     <span v-for="s in meta.statuses" :key="s.key" class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600">
                         <span class="h-2.5 w-2.5 rounded-sm" :class="legendClass(s.color)"></span> {{ s.label }}
                     </span>

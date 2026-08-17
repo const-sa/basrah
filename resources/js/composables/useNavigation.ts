@@ -3,13 +3,47 @@ import { usePermissions } from '@/composables/usePermissions';
 import { type NavItem } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import {
-    Boxes, Building2, CalculatorIcon, CalendarDays, CalendarRange, Contact, FileBarChart2, FileSignature, FileText,
-    History, Home, LayoutDashboard, LifeBuoy, Lightbulb, MapPin, Megaphone, MessageCircle, Package as PackageIcon,
-    PartyPopper, Receipt, Ruler, Settings, ShieldCheck, ShoppingCart, SlidersHorizontal, Truck, Users, UsersRound, Wallet,
+    Archive as ArchiveIcon,
+    Boxes,
+    Building2,
+    CalculatorIcon,
+    CalendarDays,
+    CalendarRange,
+    Contact,
+    CreditCard,
+    FileBarChart2,
+    FileSignature,
+    FileText,
+    History,
+    Home,
+    LayoutDashboard,
+    LifeBuoy,
+    Lightbulb,
+    MapPin,
+    Megaphone,
+    MessageCircle,
+    Package as PackageIcon,
+    PartyPopper,
+    Receipt,
+    Ruler,
+    ScrollText,
+    Settings,
+    ShieldCheck,
+    ShoppingCart,
+    SlidersHorizontal,
+    Truck,
+    Users,
+    UsersRound,
+    Wallet,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-interface SidebarUnit { id: number; code: string; name: string; type: 'hall' | 'chalet' }
+interface SidebarUnit {
+    id: number;
+    code: string;
+    name: string;
+    type: 'hall' | 'chalet';
+}
 
 /**
  * عنصر تنقّل مع الصلاحية التي تحكم ظهوره.
@@ -21,8 +55,7 @@ export type GuardedNavItem = NavItem & { perm?: string; children?: GuardedNavIte
  * هل ينتمي المسار الحالي إلى هذا المدخل؟ يشمل صفحاته الفرعية،
  * فصفحة الإنشاء تحت «حجوزات القاعات» تُبقي القسم مضاءً.
  */
-export const urlBelongsTo = (currentUrl: string, href: string): boolean =>
-    currentUrl === href || currentUrl.startsWith(`${href}/`);
+export const urlBelongsTo = (currentUrl: string, href: string): boolean => currentUrl === href || currentUrl.startsWith(`${href}/`);
 
 /**
  * المدخل الذي يمثّل الصفحة المفتوحة من بين إخوته — أطولُ مسارٍ مطابق يفوز.
@@ -32,9 +65,7 @@ export const urlBelongsTo = (currentUrl: string, href: string): boolean =>
  * الحالية» معًا: يُضاءان في القائمة، ويسقط أحدهما من الاختصارات وهو المقصود.
  */
 export const activeHref = (currentUrl: string, hrefs: string[]): string | null =>
-    hrefs
-        .filter((href) => urlBelongsTo(currentUrl, href))
-        .sort((a, b) => b.length - a.length)[0] ?? null;
+    hrefs.filter((href) => urlBelongsTo(currentUrl, href)).sort((a, b) => b.length - a.length)[0] ?? null;
 
 /**
  * شجرة التنقّل — مصدرها واحد مهما تعدّد شكل عرضها.
@@ -47,9 +78,7 @@ export function useNavigation() {
     const { can } = usePermissions();
 
     /** الوحدات التي يراها المستخدم — يشاركها HandleInertiaRequests مع كل صفحة. */
-    const sidebarUnits = computed<SidebarUnit[]>(
-        () => (usePage().props.sidebarUnits as SidebarUnit[] | undefined) ?? [],
-    );
+    const sidebarUnits = computed<SidebarUnit[]>(() => (usePage().props.sidebarUnits as SidebarUnit[] | undefined) ?? []);
 
     const unitsOfType = (type: SidebarUnit['type']) => sidebarUnits.value.filter((u) => u.type === type);
 
@@ -167,6 +196,8 @@ export function useNavigation() {
             children: [
                 { title: t('nav.employees_list'), href: '/admin/employees', icon: Users, perm: 'employees.view' },
                 { title: t('nav.roles'), href: '/admin/roles', icon: ShieldCheck, perm: 'roles.view' },
+                { title: t('nav.audit_log'), href: '/admin/audit-log', icon: ScrollText, perm: 'audit.view' },
+                { title: t('nav.archive'), href: '/admin/archive', icon: ArchiveIcon, perm: 'archive.view' },
             ],
         },
         {
@@ -176,6 +207,7 @@ export function useNavigation() {
             children: [
                 { title: t('nav.settings_general'), href: '/admin/settings/general', icon: SlidersHorizontal, perm: 'settings.view' },
                 { title: t('nav.settings_whatsapp'), href: '/admin/settings/whatsapp', icon: MessageCircle, perm: 'settings.view' },
+                { title: t('nav.settings_payment_methods'), href: '/admin/settings/payment-methods', icon: CreditCard, perm: 'payment_methods.view' },
                 { title: t('nav.departments'), href: '/admin/departments', icon: Building2, perm: 'departments.view' },
                 { title: t('nav.cities'), href: '/admin/cities', icon: MapPin, perm: 'cities.view' },
             ],

@@ -4,14 +4,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\Client;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
+use App\Models\PaymentMethod;
 use App\Models\Supplier;
 use App\Models\Treasury;
 use App\Models\Voucher;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
-use App\Models\Client;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -186,7 +187,7 @@ class AccountingController extends Controller
      */
     public function vouchers(Request $request): Response
     {
-        $query = Voucher::with(['treasury:id,name', 'account:id,code,name', 'client:id,name', 'supplier:id,name'])
+        $query = Voucher::with(['treasury:id,name', 'account:id,code,name', 'client:id,name', 'supplier:id,name', 'paymentMethod:id,name'])
             ->when($request->string('type')->toString(), fn ($q, $t) => $q->where('type', $t))
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s));
 
@@ -203,12 +204,13 @@ class AccountingController extends Controller
                     'account' => $v->account?->name,
                     'party' => $v->client?->name ?? $v->supplier?->name,
                     'description' => $v->description,
+                    'method_label' => $v->methodLabel(),
                     'status' => $v->status,
                     'status_label' => $v->statusLabel(),
                 ]),
             'filters' => $request->only(['type', 'status']),
             'types' => collect(Voucher::TYPES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
-            'methods' => collect(Voucher::METHODS)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
+            'methods' => PaymentMethod::options(),
             'treasuries' => Treasury::where('is_active', true)->get()->map(fn (Treasury $t) => [
                 'id' => $t->id, 'name' => $t->name, 'type_label' => $t->typeLabel(), 'balance' => $t->balance(),
             ]),
@@ -230,7 +232,8 @@ class AccountingController extends Controller
             'cost_center_id' => ['nullable', 'exists:cost_centers,id'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
-            'method' => ['required', Rule::in(array_keys(Voucher::METHODS))],
+            'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')
+                ->where('is_active', true)],
             'reference' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:1000'],
             'post_now' => ['boolean'],

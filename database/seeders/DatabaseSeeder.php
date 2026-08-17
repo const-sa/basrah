@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             PackagesSeeder::class,
             EventTypesSeeder::class,
             AccountsSeeder::class,
+            PaymentMethodsSeeder::class,
             CatalogSeeder::class,
             ContractTemplateSeeder::class,
             CitiesSeeder::class,

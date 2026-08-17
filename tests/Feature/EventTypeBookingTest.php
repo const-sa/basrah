@@ -321,14 +321,14 @@ class EventTypeBookingTest extends TestCase
         $this->actingAs($this->owner)->post('/admin/bookings/halls', $this->payload([
             'payment_amount' => $quote['total_amount'],
             'payment_type' => 'payment',
-            'payment_method' => 'transfer',
+            'payment_method_id' => $this->paymentMethodId('transfer'),
         ]))->assertSessionHasNoErrors();
 
         $booking = Booking::latest('id')->firstOrFail();
 
         $this->assertTrue($booking->isFullyPaid());
         $this->assertCount(1, $booking->payments);
-        $this->assertSame('transfer', $booking->payments->first()->method);
+        $this->assertSame('transfer', $booking->payments->first()->paymentMethod->code);
     }
 
     public function test_a_deposit_at_creation_leaves_the_rest_owed(): void

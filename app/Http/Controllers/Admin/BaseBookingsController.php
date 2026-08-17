@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Client;
+use App\Models\PaymentMethod;
 use App\Models\Unit;
+use App\Models\User;
 use App\Services\BookingAvailability;
 use App\Services\BookingPricing;
 use App\Services\BookingService;
@@ -16,6 +18,7 @@ use App\Support\StayPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -104,6 +107,8 @@ abstract class BaseBookingsController extends Controller
         return [
             'total' => (clone $query)->count(),
             'tentative' => (clone $query)->where('status', 'tentative')->count(),
+            // طابور المتابعة: حجوزات تحجز التاريخ وعربونها لم يصل بعد
+            'pending_deposit' => (clone $query)->where('status', 'pending_deposit')->count(),
             'confirmed' => (clone $query)->where('status', 'confirmed')->count(),
             'unpaid' => (clone $query)->blocking()->whereColumn('paid_amount', '<', 'total_amount')->count(),
         ];
@@ -150,7 +155,8 @@ abstract class BaseBookingsController extends Controller
         $payment = $request->validate([
             'payment_amount' => ['nullable', 'numeric', 'min:0'],
             'payment_type' => ['nullable', Rule::in(array_keys(BookingPayment::TYPES))],
-            'payment_method' => ['nullable', Rule::in(array_keys(BookingPayment::METHODS))],
+            'payment_method_id' => ['nullable', Rule::exists('payment_methods', 'id')
+                ->where('is_active', true)],
             'payment_paid_on' => ['nullable', 'date'],
             'payment_notify' => ['boolean'],
         ]);
@@ -172,7 +178,7 @@ abstract class BaseBookingsController extends Controller
 
             $this->bookings->recordPayment($booking, [
                 'type' => $payment['payment_type'] ?? 'deposit',
-                'method' => $payment['payment_method'] ?? 'cash',
+                'payment_method_id' => $payment['payment_method_id'] ?? null,
                 'amount' => $amount,
                 'paid_on' => $payment['payment_paid_on'] ?? now()->toDateString(),
                 'notes' => 'دفعة مسجّلة عند إنشاء الحجز',
@@ -218,6 +224,9 @@ abstract class BaseBookingsController extends Controller
             'status' => $b->status,
             'status_label' => $b->statusLabel(),
             'status_color' => Booking::STATUS_COLORS[$b->status] ?? 'slate',
+            // الحجز القادم من الموقع لا موظف وراءه، فيُوسَم في السجل ليعرف
+            // الموظف أنه يحتاج متابعةً قبل أن يُعامَل كحجز متفق عليه.
+            'is_online' => $b->isOnline(),
             'total_amount' => (float) $b->total_amount,
             'deposit_amount' => (float) $b->deposit_amount,
             'paid_amount' => (float) $b->paid_amount,
@@ -237,9 +246,9 @@ abstract class BaseBookingsController extends Controller
     /**
      * وحدات هذا النوع التي يصل إليها المستخدم.
      *
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     * @return Collection<int, array<string, mixed>>
      */
-    protected function unitOptions(?\App\Models\User $user)
+    protected function unitOptions(?User $user)
     {
         return Unit::visibleTo($user)
             ->where('is_active', true)
@@ -261,7 +270,7 @@ abstract class BaseBookingsController extends Controller
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     * @return Collection<int, array<string, mixed>>
      */
     protected function clientOptions()
     {
@@ -283,6 +292,9 @@ abstract class BaseBookingsController extends Controller
             ])->values()->all(),
             'periods' => BookingPeriod::forView(),
             'stay' => StayPeriod::forView(),
+            // طرق الدفع تُقرأ من الجدول لا من قائمة مكتوبة في الشاشة: كانت
+            // مكرّرة نصًّا في أربعة نماذج، فالطريقة الجديدة تُضاف ولا تظهر.
+            'payment_methods' => PaymentMethod::options(),
         ];
     }
 }

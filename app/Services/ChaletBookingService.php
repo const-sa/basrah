@@ -62,6 +62,7 @@ class ChaletBookingService
                 'unit_id' => $unit->id,
                 'client_id' => $data['client_id'] ?? null,
                 'created_by' => $userId,
+                'source' => $data['source'] ?? 'admin',
                 'scope' => $scope,
                 'period' => StayPeriod::PERIOD,
                 'booking_date' => $checkIn,

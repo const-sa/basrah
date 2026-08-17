@@ -7,10 +7,12 @@ use App\Models\Booking;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Setting;
+use App\Services\ContractPdf;
 use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -20,8 +22,28 @@ class ContractsController extends Controller
 {
     public function __construct(
         private readonly ContractService $contracts,
+        private readonly ContractPdf $pdf,
         private readonly WhatsappNotifier $whatsapp,
     ) {}
+
+    /**
+     * ملف العقد PDF — يُعرض في المتصفح افتراضيًا ويُنزَّل بـ?download=1.
+     */
+    public function pdf(Request $request, Contract $contract): HttpResponse
+    {
+        try {
+            $content = $this->pdf->render($contract);
+        } catch (RuntimeException $e) {
+            abort(500, $e->getMessage());
+        }
+
+        $disposition = $request->boolean('download') ? 'attachment' : 'inline';
+
+        return response($content, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => $disposition.'; filename="'.$this->pdf->filename($contract).'"',
+        ]);
+    }
 
     public function index(Request $request): Response
     {
@@ -207,11 +229,20 @@ class ContractsController extends Controller
             return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
         }
 
-        $this->whatsapp->contract($contract, $request->user()?->id);
+        // الملف يُبنى ويُحفظ قبل الإرسال: الرسالة تقول «مرفق العقد»، ولا
+        // يصحّ أن تقولها بلا مرفق. وفشل التوليد يوقف الإرسال ولا يعلّم
+        // العقد مُرسلًا — عقدٌ حالته «أُرسل» ولم يصل أسوأ من عقد لم يُرسل.
+        try {
+            $path = $this->pdf->store($contract);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        $this->whatsapp->contract($contract, $request->user()?->id, $this->pdf->publicUrl($path));
 
         $contract->update(['status' => 'sent', 'sent_at' => now()]);
 
-        return back()->with('success', 'تم إرسال العقد على واتساب العميل');
+        return back()->with('success', 'تم إرسال العقد (PDF) على واتساب العميل');
     }
 
     public function changeStatus(Request $request, Contract $contract): RedirectResponse

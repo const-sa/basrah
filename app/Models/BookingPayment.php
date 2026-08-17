@@ -16,18 +16,11 @@ class BookingPayment extends Model
         'refund' => 'استرداد',
     ];
 
-    public const METHODS = [
-        'cash' => 'نقدًا',
-        'transfer' => 'تحويل بنكي',
-        'card' => 'شبكة',
-        'online' => 'دفع إلكتروني',
-    ];
-
     protected $fillable = [
         'booking_id',
         'received_by',
         'type',
-        'method',
+        'payment_method_id',
         'amount',
         'paid_on',
         'reference',
@@ -50,6 +43,16 @@ class BookingPayment extends Model
     public function receiver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function methodLabel(): string
+    {
+        return $this->paymentMethod?->name ?? '—';
     }
 
     /**

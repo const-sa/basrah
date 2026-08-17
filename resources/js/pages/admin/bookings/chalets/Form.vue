@@ -4,7 +4,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfToken } from '@/lib/csrf';
 import { toHijri, weekdayName } from '@/lib/hijri';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LogIn, LogOut, Moon, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
@@ -53,6 +53,7 @@ const props = defineProps<{
     meta: {
         statuses: { key: string; label: string; color: string }[];
         stay: { check_in_time: string; check_out_time: string; max_nights: number };
+        payment_methods: PaymentMethodOption[];
     };
 }>();
 
@@ -116,7 +117,8 @@ const form = useForm({
 
     payment_amount: 0,
     payment_type: 'deposit',
-    payment_method: 'cash',
+    // أول طريقة في الترتيب هي الافتراض — يرتّبها المستخدم من شاشة طرق الدفع.
+    payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
     payment_paid_on: today,
     payment_notify: true,
 });
@@ -534,11 +536,8 @@ const submit = () => {
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">الطريقة</label>
-                                    <select v-model="form.payment_method" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
-                                        <option value="cash">نقدًا</option>
-                                        <option value="transfer">تحويل</option>
-                                        <option value="card">شبكة</option>
-                                        <option value="online">إلكتروني</option>
+                                    <select v-model="form.payment_method_id" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
+                                        <option v-for="m in meta.payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                                     </select>
                                 </div>
                                 <div>

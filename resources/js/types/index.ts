@@ -50,3 +50,16 @@ export interface User {
 }
 
 export type BreadcrumbItemType = BreadcrumbItem;
+
+/**
+ * خيار طريقة دفع كما يرسله الخادم من `PaymentMethod::options`.
+ *
+ * مشتركٌ بين شاشات الحجوزات والكاشير والمبيعات والسندات: كانت كل شاشة تكتب
+ * قائمتها نصًّا، فتُضاف طريقة في الجدول ولا تظهر في نصف الشاشات.
+ */
+export interface PaymentMethodOption {
+    id: number;
+    code: string;
+    label: string;
+    is_credit: boolean;
+}

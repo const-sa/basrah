@@ -3,10 +3,11 @@
 namespace App\Services;
 
 use App\Models\Client;
+use App\Models\CostCenter;
 use App\Models\Item;
+use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\Accounting\Ledger;
-use App\Models\CostCenter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -30,7 +31,7 @@ class SalesService
      * @param  array{
      *     lines: list<array{item_id:int, quantity:float, unit_price?:float, discount_amount?:float}>,
      *     client_id?:int|null, unit_id?:int|null, booking_id?:int|null,
-     *     method?:string, discount_amount?:float, paid_amount?:float|null, notes?:string|null
+     *     payment_method_id?:int|null, discount_amount?:float, paid_amount?:float|null, notes?:string|null
      * }  $data
      *
      * @throws ValidationException عند نفاد رصيد أي صنف
@@ -41,7 +42,11 @@ class SalesService
             throw new RuntimeException('لا يمكن إتمام فاتورة بلا أصناف.');
         }
 
-        return DB::transaction(function () use ($data, $userId) {
+        $method = isset($data['payment_method_id'])
+            ? PaymentMethod::findOrFail($data['payment_method_id'])
+            : PaymentMethod::default();
+
+        return DB::transaction(function () use ($data, $userId, $method) {
             $sale = Sale::create([
                 'number' => $this->nextNumber('sale'),
                 'user_id' => $userId,
@@ -51,7 +56,7 @@ class SalesService
                 'department_id' => $data['department_id'] ?? null,
                 'booking_id' => $data['booking_id'] ?? null,
                 'type' => 'sale',
-                'method' => $data['method'] ?? 'cash',
+                'payment_method_id' => $method->id,
                 'notes' => $data['notes'] ?? null,
             ]);
 
@@ -66,7 +71,7 @@ class SalesService
                 'discount_amount' => $discount,
                 'total_amount' => $total,
                 'cost_amount' => $cost,
-                'paid_amount' => $this->resolvePaidAmount($data, $total),
+                'paid_amount' => $this->resolvePaidAmount($data, $total, $method),
             ]);
 
             $this->postSaleEntry($sale->fresh());
@@ -84,12 +89,10 @@ class SalesService
      *
      * @param  array<string, mixed>  $data
      */
-    private function resolvePaidAmount(array $data, float $total): float
+    private function resolvePaidAmount(array $data, float $total, PaymentMethod $method): float
     {
-        $method = $data['method'] ?? 'cash';
-
         if (! isset($data['paid_amount'])) {
-            return $method === 'account' ? 0.0 : $total;
+            return $method->is_credit ? 0.0 : $total;
         }
 
         return round(min($total, max(0, (float) $data['paid_amount'])), 2);
@@ -118,7 +121,7 @@ class SalesService
                 'booking_id' => $original->booking_id,
                 'type' => 'return',
                 'original_sale_id' => $original->id,
-                'method' => $original->method,
+                'payment_method_id' => $original->payment_method_id,
                 'notes' => $reason,
             ]);
 
@@ -186,7 +189,7 @@ class SalesService
      * بناء سطور الفاتورة مع فحص الرصيد وخصمه.
      *
      * @param  list<array<string, mixed>>  $lines
-     * @return array{0: float, 1: float, 2: float}  [الإجمالي قبل الضريبة, الضريبة, التكلفة]
+     * @return array{0: float, 1: float, 2: float} [الإجمالي قبل الضريبة, الضريبة, التكلفة]
      */
     private function buildLines(Sale $sale, array $lines, ?int $userId): array
     {
@@ -256,11 +259,9 @@ class SalesService
         $paid = round(min($total, max(0, (float) $sale->paid_amount)), 2);
         $due = round($total - $paid, 2);
 
-        // المقبوض يدخل بحسب أداة الدفع؛ والآجل المدفوع جزئيًا نقدُه في الصندوق.
-        $collectedAccount = match ($sale->method) {
-            'transfer', 'card' => Ledger::BANK,
-            default => Ledger::CASH,
-        };
+        // المقبوض يدخل بحسب أداة الدفع؛ والآجل المدفوع جزئيًا نقدُه في الصندوق
+        // (لذلك «على الحساب» تحمل deposits_to = cash).
+        $collectedAccount = $sale->paymentMethod()->firstOrFail()->ledgerAccount();
 
         $lines = [];
 
@@ -299,11 +300,8 @@ class SalesService
     {
         $costCenter = $this->costCenterFor($return);
 
-        $creditAccount = match ($return->method) {
-            'account' => Ledger::RECEIVABLES,
-            'transfer', 'card' => Ledger::BANK,
-            default => Ledger::CASH,
-        };
+        // الآجل يعود على ذمة العميل لا على الخزينة — المال لم يُقبض منه أصلًا.
+        $creditAccount = $return->paymentMethod()->firstOrFail()->refundAccount();
 
         $lines = [
             ['account' => Ledger::SALES_REVENUE, 'debit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],

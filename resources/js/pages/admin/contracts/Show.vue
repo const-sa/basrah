@@ -3,7 +3,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowRight, FileText, MessageCircle, Printer, RefreshCw } from 'lucide-vue-next';
+import { ArrowRight, FileDown, FileText, MessageCircle, Printer, RefreshCw } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -108,6 +108,15 @@ const print = () => window.print();
                     >
                         <Printer class="h-4 w-4" /> طباعة
                     </button>
+                    <!-- المستند يُبنى على الخادم لا في المتصفح: ما يُنزَّل هنا
+                         هو نفسه ما يصل العميل على واتساب، لا صورةً أخرى منه. -->
+                    <a
+                        v-if="can('contracts.export')"
+                        :href="`/admin/contracts/${contract.id}/pdf?download=1`"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
+                    >
+                        <FileDown class="h-4 w-4" /> تحميل PDF
+                    </a>
                     <button
                         v-if="can('contracts.send') && contract.status !== 'cancelled'"
                         type="button"

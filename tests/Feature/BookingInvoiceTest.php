@@ -136,11 +136,11 @@ class BookingInvoiceTest extends TestCase
     public function test_payments_are_grouped_by_their_method(): void
     {
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'deposit', 'method' => 'cash', 'amount' => 200, 'paid_on' => '2026-09-01',
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 200, 'paid_on' => '2026-09-01',
         ], $this->owner->id);
 
         app(BookingService::class)->recordPayment($this->booking, [
-            'type' => 'payment', 'method' => 'transfer', 'amount' => 150, 'paid_on' => '2026-09-02',
+            'type' => 'payment', 'payment_method_id' => $this->paymentMethodId('transfer'), 'amount' => 150, 'paid_on' => '2026-09-02',
         ], $this->owner->id);
 
         $this->actingAs($this->owner)

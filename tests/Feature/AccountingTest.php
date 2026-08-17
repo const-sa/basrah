@@ -8,7 +8,6 @@ use App\Models\CostCenter;
 use App\Models\JournalEntry;
 use App\Models\Treasury;
 use App\Models\Unit;
-use App\Models\Voucher;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Services\BookingService;
@@ -18,6 +17,7 @@ use Database\Seeders\RolesSeeder;
 use Database\Seeders\UnitsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -114,7 +114,7 @@ class AccountingTest extends TestCase
 
         app(BookingService::class)->recordPayment($booking, [
             'type' => 'deposit',
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
             'amount' => 650,
         ]);
 
@@ -125,13 +125,13 @@ class AccountingTest extends TestCase
         $this->assertSame(650.0, (float) $booking->fresh()->paid_amount);
     }
 
-    public function test_completing_a_booking_recognizes_revenue_and_clears_the_liability(): void
+    public function test_checking_out_a_booking_recognizes_revenue_and_clears_the_liability(): void
     {
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
 
-        $service->recordPayment($booking, ['type' => 'deposit', 'method' => 'cash', 'amount' => 650]);
-        $service->complete($booking->fresh());
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
+        $service->checkOut($booking->fresh());
 
         $total = (float) $booking->fresh()->total_amount;
 
@@ -146,8 +146,8 @@ class AccountingTest extends TestCase
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
 
-        $service->complete($booking);
-        $service->complete($booking->fresh());
+        $service->checkOut($booking);
+        $service->checkOut($booking->fresh());
 
         $entries = JournalEntry::where('source', 'booking')->where('reference_id', $booking->id)->count();
         $this->assertSame(1, $entries);
@@ -158,8 +158,8 @@ class AccountingTest extends TestCase
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
 
-        $service->recordPayment($booking, ['type' => 'deposit', 'method' => 'cash', 'amount' => 1000]);
-        $service->recordPayment($booking->fresh(), ['type' => 'refund', 'method' => 'cash', 'amount' => 400]);
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 1000]);
+        $service->recordPayment($booking->fresh(), ['type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 400]);
 
         $this->assertSame(600.0, (float) $booking->fresh()->paid_amount);
         $this->assertSame(600.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
@@ -170,10 +170,10 @@ class AccountingTest extends TestCase
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
 
-        $service->recordPayment($booking, ['type' => 'deposit', 'method' => 'cash', 'amount' => 200]);
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 200]);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
-        $service->recordPayment($booking->fresh(), ['type' => 'refund', 'method' => 'cash', 'amount' => 500]);
+        $this->expectException(ValidationException::class);
+        $service->recordPayment($booking->fresh(), ['type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 500]);
     }
 
     public function test_each_unit_has_its_own_cost_center_and_profitability(): void
@@ -191,7 +191,7 @@ class AccountingTest extends TestCase
                 'period' => 'full_day',
                 'status' => 'confirmed',
             ]);
-            $service->complete($booking);
+            $service->checkOut($booking);
         }
 
         $profitA = CostCenter::forUnit($unitA)->profitability();
@@ -214,7 +214,7 @@ class AccountingTest extends TestCase
             'amount' => 1200,
             'treasury_id' => $treasury->id,
             'account_id' => Account::where('code', Ledger::BOOKING_REVENUE)->value('id'),
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
             'description' => 'قبض نقدي',
         ]);
 

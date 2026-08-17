@@ -29,10 +29,8 @@ class BookingAccounting
         $booking = $payment->booking()->with('unit')->firstOrFail();
         $costCenter = $this->costCenter($booking);
 
-        $treasuryAccount = match ($payment->method) {
-            'transfer', 'card', 'online' => Ledger::BANK,
-            default => Ledger::CASH,
-        };
+        // الطريقة تحمل حسابها، فلا تبقى ترجمةٌ في الكود تهبط بالمجهول على الصندوق.
+        $treasuryAccount = $payment->paymentMethod()->firstOrFail()->ledgerAccount();
 
         $amount = (float) $payment->amount;
         $isRefund = $payment->type === 'refund';

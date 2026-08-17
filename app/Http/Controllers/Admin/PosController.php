@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Department;
 use App\Models\Item;
+use App\Models\PaymentMethod;
 use App\Models\Sale;
-use App\Models\Unit;
 use App\Services\SalesService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -64,9 +64,10 @@ class PosController extends Controller
             'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')
                 ->limit(300)->get(['id', 'name', 'mobile']),
             'defaultClientId' => Client::walkIn()->id,
-            'methods' => collect(Sale::METHODS)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
+            'methods' => PaymentMethod::options(),
             // آخر فواتير المستخدم نفسه.
             'recentSales' => Sale::where('user_id', $user->id)
+                ->with('paymentMethod:id,name')
                 ->latest('id')->limit(10)->get()->map(fn (Sale $s) => [
                     'id' => $s->id,
                     'number' => $s->number,
@@ -88,7 +89,8 @@ class PosController extends Controller
             'lines.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'department_id' => ['nullable', 'exists:departments,id'],
-            'method' => ['required', Rule::in(array_keys(Sale::METHODS))],
+            'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')
+                ->where('is_active', true)],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             // المقبوض عند الإصدار — يُحدّه الإجمالي في الخدمة لا هنا، فالإجمالي
             // لا يُحسب إلا بعد بناء السطور.

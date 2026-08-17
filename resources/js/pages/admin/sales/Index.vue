@@ -2,7 +2,7 @@
 import { StatPill } from '@/components/data-table';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Eye, Printer, Receipt, RotateCcw, Search, Wallet, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -12,7 +12,7 @@ interface SaleRow {
     date: string; time: string;
     client: string | null; client_mobile: string | null;
     department: string | null; cashier: string | null;
-    method: string; method_label: string;
+    payment_method_id: number; method_label: string;
     amount_before_tax: number; tax_amount: number;
     total: number; returned: number; net_total: number;
     paid: number; remaining: number;
@@ -55,10 +55,10 @@ const props = defineProps<{
     };
     filters: Record<string, string | null>;
     departments: { id: number; name: string; code: string | null }[];
-    methods: { key: string; label: string }[];
+    methods: PaymentMethodOption[];
     paymentStatuses: { key: string; label: string }[];
     treasuries: { id: number; name: string; type_label: string; balance: number }[];
-    voucherMethods: { key: string; label: string }[];
+    voucherMethods: PaymentMethodOption[];
 }>();
 
 const { can } = usePermissions();
@@ -80,7 +80,7 @@ const apply = () =>
 const reset = () => {
     filters.value = {
         department_id: filters.value.department_id,
-        type: null, payment_status: null, method: null, from: null, to: null, search: null,
+        type: null, payment_status: null, payment_method_id: null, from: null, to: null, search: null,
     };
     apply();
 };
@@ -132,7 +132,7 @@ const settleSale = ref<SaleRow | null>(null);
 const settleForm = useForm({
     amount: 0,
     treasury_id: null as number | null,
-    method: 'cash',
+    payment_method_id: props.voucherMethods[0]?.id ?? null as number | null,
     voucher_date: new Date().toISOString().slice(0, 10),
     description: '',
 });
@@ -248,9 +248,9 @@ const submitRefund = () => {
                         <option value="return">المرتجعات فقط</option>
                     </select>
 
-                    <select v-model="filters.method" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                    <select v-model="filters.payment_method_id" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
                         <option :value="null">كل طرق الدفع</option>
-                        <option v-for="m in methods" :key="m.key" :value="m.key">{{ m.label }}</option>
+                        <option v-for="m in methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                     </select>
 
                     <input v-model="filters.from" @change="apply" type="date" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
@@ -576,8 +576,8 @@ const submitRefund = () => {
                         </div>
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">طريقة القبض</label>
-                            <select v-model="settleForm.method" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                                <option v-for="m in voucherMethods" :key="m.key" :value="m.key">{{ m.label }}</option>
+                            <select v-model="settleForm.payment_method_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                <option v-for="m in voucherMethods" :key="m.id" :value="m.id">{{ m.label }}</option>
                             </select>
                         </div>
                     </div>

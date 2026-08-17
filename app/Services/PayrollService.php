@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Models\Advance;
 use App\Models\Attendance;
+use App\Models\Bonus;
 use App\Models\CostCenter;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Services\Accounting\Ledger;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -92,7 +94,11 @@ class PayrollService
             2,
         );
 
-        $gross = round($basic + $allowances + $overtimeAmount, 2);
+        // المكافآت المعتمدة الممنوحة داخل الشهر — تُقرأ في كل توليد فلا
+        // تضيع بإعادة التوليد، وتُقفل عند الاعتماد فلا تُصرف مرتين.
+        $bonus = round((float) $this->payableBonuses($employee, $start, $end)->sum('amount'), 2);
+
+        $gross = round($basic + $allowances + $overtimeAmount + $bonus, 2);
         $net = round(max(0, $gross - $absenceDeduction - $advanceDeduction), 2);
 
         return [
@@ -101,7 +107,7 @@ class PayrollService
             'basic_salary' => $basic,
             'allowances' => $allowances,
             'overtime_amount' => $overtimeAmount,
-            'bonus' => 0,
+            'bonus' => $bonus,
             'absence_deduction' => $absenceDeduction,
             'advance_deduction' => $advanceDeduction,
             'other_deduction' => 0,
@@ -111,6 +117,19 @@ class PayrollService
             'absent_days' => $absentDays,
             'overtime_hours' => $overtimeHours,
         ];
+    }
+
+    /**
+     * مكافآت الموظف المستحقة في شهر المسيّر.
+     *
+     * @return Collection<int, Bonus>
+     */
+    private function payableBonuses(Employee $employee, CarbonImmutable $start, CarbonImmutable $end)
+    {
+        return $employee->bonuses()
+            ->payable()
+            ->grantedIn($start->toDateString(), $end->toDateString())
+            ->get();
     }
 
     /**
@@ -129,6 +148,8 @@ class PayrollService
             $payroll->loadMissing('lines.employee');
 
             $entry = $this->postEntry($payroll, $userId);
+
+            $this->settleBonuses($payroll);
 
             foreach ($payroll->lines as $line) {
                 $remaining = (float) $line->advance_deduction;
@@ -162,6 +183,22 @@ class PayrollService
 
             return $payroll->fresh();
         });
+    }
+
+    /**
+     * إقفال مكافآت الشهر على هذا المسيّر.
+     *
+     * الإقفال عند الاعتماد لا عند التوليد، لأن التوليد قابل للتكرار
+     * والصرف لا يجوز أن يتكرر — كما في السلف تمامًا.
+     */
+    private function settleBonuses(Payroll $payroll): void
+    {
+        $start = CarbonImmutable::create($payroll->year, $payroll->month, 1)->startOfMonth();
+
+        Bonus::payable()
+            ->whereIn('employee_id', $payroll->lines->pluck('employee_id'))
+            ->grantedIn($start->toDateString(), $start->endOfMonth()->toDateString())
+            ->update(['status' => 'paid', 'payroll_id' => $payroll->id]);
     }
 
     /**

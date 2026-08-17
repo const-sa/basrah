@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Advance;
 use App\Models\Attendance;
+use App\Models\Bonus;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeGroup;
@@ -12,6 +13,7 @@ use App\Models\Leave;
 use App\Models\Payroll;
 use App\Models\Unit;
 use App\Services\PayrollService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -227,6 +229,19 @@ class HrController extends Controller
                     'status' => $a->status,
                     'status_label' => $a->statusLabel(),
                 ]),
+            'bonuses' => Bonus::with(['employee:id,name', 'payroll:id,number'])
+                ->latest('id')->limit(50)->get()
+                ->map(fn (Bonus $b) => [
+                    'id' => $b->id,
+                    'employee_name' => $b->employee?->name,
+                    'employee_id' => $b->employee_id,
+                    'amount' => (float) $b->amount,
+                    'reason' => $b->reason,
+                    'granted_on' => $b->granted_on->toDateString(),
+                    'status' => $b->status,
+                    'status_label' => $b->statusLabel(),
+                    'payroll_number' => $b->payroll?->number,
+                ]),
             'filters' => $request->only(['status']),
             'employees' => Employee::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'leaveTypes' => collect(Leave::TYPES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
@@ -243,8 +258,8 @@ class HrController extends Controller
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $days = \Carbon\CarbonImmutable::parse($data['starts_on'])
-            ->diffInDays(\Carbon\CarbonImmutable::parse($data['ends_on'])) + 1;
+        $days = CarbonImmutable::parse($data['starts_on'])
+            ->diffInDays(CarbonImmutable::parse($data['ends_on'])) + 1;
 
         Leave::create([...$data, 'days' => $days, 'status' => 'pending']);
 
@@ -290,6 +305,48 @@ class HrController extends Controller
         return back()->with('success', 'تم اعتماد السلفة — ستُستقطع من الرواتب القادمة');
     }
 
+    // ── المكافآت ─────────────────────────────────────────────
+
+    public function storeBonus(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'employee_id' => ['required', 'exists:employees,id'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'granted_on' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        Bonus::create([...$data, 'status' => 'pending']);
+
+        return back()->with('success', 'تم تسجيل المكافأة');
+    }
+
+    public function approveBonus(Request $request, Bonus $bonus): RedirectResponse
+    {
+        // المصروفة حُمّلت على مسيّر معتمد، فاعتمادها ثانيةً يعني صرفها مرتين.
+        if ($bonus->status !== 'pending') {
+            return back()->with('warning', 'لا تُعتمد إلا مكافأة قيد الاعتماد.');
+        }
+
+        $bonus->update(['status' => 'approved', 'approved_by' => $request->user()?->id]);
+
+        return back()->with('success', 'تم اعتماد المكافأة — ستُضاف إلى مسيّر شهرها');
+    }
+
+    public function destroyBonus(Bonus $bonus): RedirectResponse
+    {
+        // المكافأة المصروفة جزءٌ من مسيّر معتمد وقيدٍ مرحَّل، فحذفها يخالف
+        // ما دُفع فعلًا. تُلغى قبل الصرف لا بعده.
+        if ($bonus->status === 'paid') {
+            return back()->with('warning', 'لا تُحذف مكافأة صُرفت ضمن مسيّر معتمد.');
+        }
+
+        $bonus->delete();
+
+        return back()->with('success', 'تم حذف المكافأة');
+    }
+
     // ── الرواتب ──────────────────────────────────────────────
 
     public function payrolls(Request $request): Response
@@ -314,6 +371,7 @@ class HrController extends Controller
                     'basic_salary' => (float) $l->basic_salary,
                     'allowances' => (float) $l->allowances,
                     'overtime_amount' => (float) $l->overtime_amount,
+                    'bonus' => (float) $l->bonus,
                     'absence_deduction' => (float) $l->absence_deduction,
                     'advance_deduction' => (float) $l->advance_deduction,
                     'worked_days' => $l->worked_days,

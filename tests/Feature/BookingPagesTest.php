@@ -97,7 +97,7 @@ class BookingPagesTest extends TestCase
                 ->has('bookings.data')
                 // الشاشة تعرض قاعاتها وحدها: الشاليه لا يُحجز من هنا فلا يُعرض
                 ->has('units', $halls)
-                ->has('meta.statuses', 5)
+                ->has('meta.statuses', 7)
                 ->has('meta.periods', 3),
             );
     }

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * قسم = نشاط تجاري مستقل (المسابح، القاعات والشاليهات، المحل…).
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 class Department extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'code',
         'name',

@@ -94,7 +94,7 @@ class DepartmentInventoryTest extends TestCase
         app(SalesService::class)->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 10]],
             'department_id' => $pools->id,
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->owner->id);
 
         $profit = CostCenter::forDepartment($pools)->profitability();
@@ -137,7 +137,7 @@ class DepartmentInventoryTest extends TestCase
 
         $sale = app(SalesService::class)->checkout([
             'lines' => [['item_id' => $chlorine->id, 'quantity' => 2.5]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->owner->id);
 
         $this->assertSame(80.0, (float) $sale->subtotal); // 2.5 × 32
@@ -150,7 +150,7 @@ class DepartmentInventoryTest extends TestCase
 
         app(SalesService::class)->checkout([
             'lines' => [['item_id' => Item::where('code', 'PMP-001')->value('id'), 'quantity' => 1.5]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->owner->id);
     }
 

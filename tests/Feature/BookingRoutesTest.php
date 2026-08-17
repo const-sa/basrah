@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\BookingService;
 use Database\Seeders\BookingSetupSeeder;
 use Database\Seeders\RolesSeeder;
 use Database\Seeders\UnitsSeeder;
@@ -60,7 +61,7 @@ class BookingRoutesTest extends TestCase
         $supervisor = $this->userWithRole('unit-supervisor');
         $unit = Unit::firstOrFail();
 
-        $booking = app(\App\Services\BookingService::class)->create([
+        $booking = app(BookingService::class)->create([
             'unit_id' => $unit->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-05',
@@ -112,7 +113,7 @@ class BookingRoutesTest extends TestCase
         $other = Unit::where('id', '!=', $mine->id)->firstOrFail();
         $supervisor->units()->sync([$mine->id]);
 
-        $service = app(\App\Services\BookingService::class);
+        $service = app(BookingService::class);
         foreach ([$mine, $other] as $unit) {
             $service->create([
                 'unit_id' => $unit->id,
@@ -134,7 +135,7 @@ class BookingRoutesTest extends TestCase
         $owner = $this->userWithRole('super-admin');
         $unit = Unit::firstOrFail();
 
-        app(\App\Services\BookingService::class)->create([
+        app(BookingService::class)->create([
             'unit_id' => $unit->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-09',
@@ -160,7 +161,7 @@ class BookingRoutesTest extends TestCase
         $owner = $this->userWithRole('super-admin');
         $unit = Unit::firstOrFail();
 
-        $booking = app(\App\Services\BookingService::class)->create([
+        $booking = app(BookingService::class)->create([
             'unit_id' => $unit->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-10',
@@ -170,7 +171,7 @@ class BookingRoutesTest extends TestCase
 
         $booking->payments()->create([
             'type' => 'deposit',
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
             'amount' => 500,
             'paid_on' => '2026-10-01',
         ]);
@@ -189,7 +190,7 @@ class BookingRoutesTest extends TestCase
         $owner = $this->userWithRole('super-admin');
         $unit = Unit::firstOrFail();
 
-        app(\App\Services\BookingService::class)->create([
+        app(BookingService::class)->create([
             'unit_id' => $unit->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-11',

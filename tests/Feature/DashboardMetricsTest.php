@@ -98,7 +98,7 @@ class DashboardMetricsTest extends TestCase
 
         app(SalesService::class)->checkout([
             'lines' => [['item_id' => $part->id, 'quantity' => 10]],
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $cashier->id);
 
         $this->actingAs($cashier)

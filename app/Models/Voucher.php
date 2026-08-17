@@ -19,12 +19,6 @@ class Voucher extends Model
         'expense' => 'مصروف',
     ];
 
-    public const METHODS = [
-        'cash' => 'نقدًا',
-        'transfer' => 'تحويل',
-        'card' => 'شبكة',
-    ];
-
     public const STATUSES = [
         'draft' => 'مسوّدة',
         'posted' => 'مرحَّل',
@@ -33,7 +27,7 @@ class Voucher extends Model
 
     protected $fillable = [
         'number', 'type', 'voucher_date', 'amount', 'treasury_id', 'account_id',
-        'cost_center_id', 'client_id', 'supplier_id', 'sale_id', 'method', 'reference',
+        'cost_center_id', 'client_id', 'supplier_id', 'sale_id', 'payment_method_id', 'reference',
         'description', 'status', 'journal_entry_id', 'created_by',
     ];
 
@@ -79,6 +73,16 @@ class Voucher extends Model
     public function sale(): BelongsTo
     {
         return $this->belongsTo(Sale::class);
+    }
+
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function methodLabel(): string
+    {
+        return $this->paymentMethod?->name ?? '—';
     }
 
     /** هل يزيد هذا السند المسدَّد من فاتورة؟ */

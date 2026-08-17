@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Account;
 use App\Models\Department;
 use App\Models\Item;
 use App\Models\Role;
@@ -10,6 +11,7 @@ use App\Models\Setting;
 use App\Models\Treasury;
 use App\Models\User;
 use App\Models\Voucher;
+use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Services\SalesService;
 use App\Services\ZatcaQr;
@@ -58,7 +60,7 @@ class SalesRegisterTest extends TestCase
         return $this->sales->checkout([
             'lines' => [['item_id' => Item::where('code', 'SPR-001')->firstOrFail()->id, 'quantity' => $quantity]],
             'department_id' => $departmentId ?? $this->pools->id,
-            'method' => 'account',
+            'payment_method_id' => $this->paymentMethodId('account'),
         ], $this->cashier->id);
     }
 
@@ -71,9 +73,9 @@ class SalesRegisterTest extends TestCase
             'voucher_date' => now()->toDateString(),
             'amount' => $amount,
             'treasury_id' => Treasury::firstOrFail()->id,
-            'account_id' => \App\Models\Account::where('code', \App\Services\Accounting\Ledger::RECEIVABLES)->value('id'),
+            'account_id' => Account::where('code', Ledger::RECEIVABLES)->value('id'),
             'sale_id' => $sale->id,
-            'method' => 'cash',
+            'payment_method_id' => $this->paymentMethodId('cash'),
         ], $this->cashier->id);
 
         return $vouchers->post($voucher, $this->cashier->id);
@@ -106,7 +108,7 @@ class SalesRegisterTest extends TestCase
             ->post("/admin/sales/{$sale->id}/settle", [
                 'amount' => 300,
                 'treasury_id' => Treasury::firstOrFail()->id,
-                'method' => 'cash',
+                'payment_method_id' => $this->paymentMethodId('cash'),
                 'voucher_date' => now()->toDateString(),
             ])
             ->assertRedirect();
@@ -140,7 +142,7 @@ class SalesRegisterTest extends TestCase
             ->post("/admin/sales/{$sale->id}/settle", [
                 'amount' => 1000,
                 'treasury_id' => Treasury::firstOrFail()->id,
-                'method' => 'cash',
+                'payment_method_id' => $this->paymentMethodId('cash'),
                 'voucher_date' => now()->toDateString(),
             ])
             ->assertSessionHasErrors('amount');
