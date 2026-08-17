@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('code', '403')
+@section('accent', '#f59e0b')
+@section('title', 'غير مصرّح بالدخول')
+@section('message', 'ليس لديك صلاحية للوصول إلى هذه الوجهة. تواصل مع مدير النظام إن كنت تظن أن هذا خطأ.')

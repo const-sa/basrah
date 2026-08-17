@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -n '/\"autoload\"/,/}/p' composer.json && echo \"---helper exists?---\" && ls -la app/helper.php 2>&1 || echo \"NO helper.php\")",
+      "PowerShell(try { $r = Invoke-WebRequest 'http://127.0.0.1:8000' -UseBasicParsing -TimeoutSec 30; \"Status: $\\($r.StatusCode\\)\" } catch { \"ERR: $\\($_.Exception.Message\\)\"; if \\($_.Exception.Response\\) { $sr = New-Object IO.StreamReader\\($_.Exception.Response.GetResponseStream\\(\\)\\); \\($sr.ReadToEnd\\(\\)\\).Substring\\(0,800\\) } })",
+      "PowerShell(try { $r = Invoke-WebRequest 'http://127.0.0.1:8000' -UseBasicParsing -TimeoutSec 30; \"Status: $\\($r.StatusCode\\) | Len: $\\($r.Content.Length\\)\" } catch { \"ERR: $\\($_.Exception.Message\\)\"; if \\($_.Exception.Response\\) { $sr = New-Object IO.StreamReader\\($_.Exception.Response.GetResponseStream\\(\\)\\); \\($sr.ReadToEnd\\(\\)\\).Substring\\(0,1000\\) } })",
+      "PowerShell(try { \"OK \\($\\(\\(Invoke-WebRequest 'http://127.0.0.1:5173/resources/js/pages/admin/settings/TripPrices.vue' -UseBasicParsing -TimeoutSec 40\\).StatusCode\\)\\)\" } catch { \"ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(try { \"OK \\($\\(\\(Invoke-WebRequest 'http://127.0.0.1:5173/resources/js/pages/admin/Trips/Index.vue' -UseBasicParsing -TimeoutSec 40\\).StatusCode\\)\\)\" } catch { \"ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell($php = \"C:\\\\laragon\\\\bin\\\\php\\\\php-8.3.30-Win32-vs16-x64\\\\php.exe\"; & $php artisan db:seed --class=DriversSeeder; if \\($?\\) { & $php artisan db:seed --class=ClientsSeeder })",
+      "PowerShell($php = \"C:\\\\laragon\\\\bin\\\\php\\\\php-8.3.30-Win32-vs16-x64\\\\php.exe\"; & $php artisan tinker --execute=\"echo 'Drivers: '.App\\\\Models\\\\Driver::count\\(\\).PHP_EOL; echo 'Clients: '.App\\\\Models\\\\Client::count\\(\\).PHP_EOL;\")",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\laragon\\\\bin\\\\nodejs\\\\node-v22;C:\\\\laragon\\\\bin\\\\php\\\\php-8.3.30-Win32-vs16-x64;\" + $env:PATH; npm run build 2>&1 | Select-Object -Last 25)",
+      "PowerShell($env:PATH = \"C:\\\\laragon\\\\bin\\\\nodejs\\\\node-v22;\" + $env:PATH; npm run build 2>&1 | Select-Object -Last 3)",
+      "PowerShell($cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue; if \\($cmd\\) { $cmd.Source } else { \"npm.cmd not found\" }; $node = Get-Command node -ErrorAction SilentlyContinue; if \\($node\\) { $node.Source } else { \"node not found\" })",
+      "PowerShell($env:Path = \"C:\\\\laragon\\\\bin\\\\nodejs\\\\node-v22;\" + $env:Path; npm run build 2>&1 | Select-Object -Last 20)"
+    ],
+    "additionalDirectories": [
+      "d:\\www\\saw3d-trans"
+    ]
+  }
+}

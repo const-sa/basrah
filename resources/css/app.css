@@ -1,0 +1,349 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * مقاس الجذر — مفتاح حجم الواجهة كلها.
+ *
+ * مقاسات Tailwind كلها بالـ rem (‏text-sm = 0.875rem)، فرفع مقاس الجذر
+ * يكبّر الخطوط والفراغات معًا بنسبة واحدة، ولا يترك صفحة خلفه. البديل —
+ * تعديل كل شاشة على حدة — يترك ما يُنسى صغيرًا ويُفقد التناسب.
+ *
+ * الخطّ العربي (Cairo) يقرأ أصغر من نظيره اللاتيني عند المقاس نفسه، و17px
+ * تردّ إليه ما ينقصه دون أن تُخرج الجداول عن عرضها.
+ *
+ * غيّر هذا الرقم وحده لتكبير الواجهة أو تصغيرها.
+ */
+html {
+    font-size: 17px;
+}
+
+body,
+html {
+    --font-sans: 'Cairo', 'Segoe UI', 'Tahoma', 'Arial', system-ui, sans-serif;
+    font-family: 'Cairo', 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
+}
+
+@layer base {
+    :root {
+        /* Brand tokens — emerald green primary on light bg */
+        --c-primary: #059669;
+        --c-primary-2: #10b981;
+        --c-accent: #34d399;
+        --c-bg: #cdd5dc;
+        --c-card: #e7ecf3;
+        --c-border: #cbd2db;
+        --c-border-soft: #dde3ea;
+        --c-text: #1f2937;
+        --c-text-2: #374151;
+        --c-muted: #6b7280;
+        --c-muted-2: #9ca3af;
+        --c-green: #22c55e;
+        --c-orange: #f59e0b;
+        --c-red: #ef4444;
+        --r-card: 12px;
+        --r-btn: 8px;
+        --navbar-h: 58px;
+        --sidebar-w: 220px;
+
+        /* shadcn HSL tokens — c-wts palette */
+        --background: 216 29% 97%;
+        --foreground: 222 47% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 11%;
+        --primary: 160 84% 32%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 214 20% 88%;
+        --secondary-foreground: 222 47% 11%;
+        --muted: 214 20% 88%;
+        --muted-foreground: 220 9% 40%;
+        --accent: 214 24% 90%;
+        --accent-foreground: 222 47% 11%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 214 18% 80%;
+        --input: 214 18% 80%;
+        --ring: 160 84% 32%;
+        --chart-1: 160 84% 32%;
+        --chart-2: 152 76% 80%;
+        --chart-3: 173 58% 39%;
+        --chart-4: 43 74% 66%;
+        --chart-5: 27 87% 67%;
+        --radius: 0.75rem;
+        /* Light sidebar — matching c-wts (white bg, indigo active) */
+        --sidebar-background: 210 10% 23%;
+        --sidebar-foreground: 216 12% 79%;
+        --sidebar-primary: 160 84% 32%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 160 84% 32%;
+        --sidebar-accent-foreground: 0 0% 100%;
+        --sidebar-border: 210 10% 30%;
+        --sidebar-ring: 160 84% 32%;
+    }
+
+    /* Dark mode disabled — keep all tokens identical to :root (force light) */
+    .dark {
+        --background: 216 29% 97%;
+        --foreground: 222 47% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 11%;
+        --primary: 160 84% 32%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 214 20% 88%;
+        --secondary-foreground: 222 47% 11%;
+        --muted: 214 20% 88%;
+        --muted-foreground: 220 9% 40%;
+        --accent: 214 24% 90%;
+        --accent-foreground: 222 47% 11%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 214 18% 80%;
+        --input: 214 18% 80%;
+        --ring: 160 84% 32%;
+        --sidebar-background: 210 10% 23%;
+        --sidebar-foreground: 216 12% 79%;
+        --sidebar-primary: 160 84% 32%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 160 84% 32%;
+        --sidebar-accent-foreground: 0 0% 100%;
+        --sidebar-border: 210 10% 30%;
+        --sidebar-ring: 160 84% 32%;
+    }
+}
+
+/* Replace any leftover Tailwind indigo utilities with emerald */
+@layer utilities {
+    .focus\:border-indigo-500:focus { border-color: #10b981 !important; }
+    .focus\:ring-indigo-100:focus { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important; }
+    .ring-indigo-300 { --tw-ring-color: #6ee7b7 !important; }
+    .hover\:text-indigo-600:hover { color: #059669 !important; }
+    .hover\:border-indigo-200:hover { border-color: #a7f3d0 !important; }
+    .hover\:bg-indigo-50:hover { background-color: #ecfdf5 !important; }
+    .text-indigo-600 { color: #059669 !important; }
+    .text-indigo-700 { color: #047857 !important; }
+    .border-indigo-500 { border-color: #10b981 !important; }
+    .bg-indigo-50 { background-color: #ecfdf5 !important; }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+        font-family: 'Cairo', 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
+    }
+}
+
+@layer components {
+    .brand-gradient {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #fff;
+    }
+
+    /* رأس كل الجداول في المشروع → أسود (يتجاوز تدرّج brand-gradient على thead فقط) */
+    thead.brand-gradient,
+    thead.brand-gradient th {
+        background: #0f172a !important;
+        color: #ffffff !important;
+    }
+
+    .brand-gradient:hover {
+        filter: brightness(1.05);
+    }
+
+    .brand-gradient-soft {
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #f0fdf4 100%);
+    }
+
+    .brand-text-gradient {
+        background: linear-gradient(135deg, #10b981, #059669);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        font-weight: 800;
+    }
+
+    .auth-card {
+        @apply rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_20px_50px_rgba(16,185,129,0.12),0_4px_12px_rgba(0,0,0,0.04)];
+    }
+
+    .shake-bell {
+        animation: shake-bell 1.2s cubic-bezier(.36,.07,.19,.97) infinite;
+        transform-origin: 50% 0;
+    }
+
+    @keyframes shake-bell {
+        0%, 100% { transform: rotate(0deg); }
+        10%, 30%, 50%, 70%, 90% { transform: rotate(-10deg); }
+        20%, 40%, 60%, 80% { transform: rotate(10deg); }
+    }
+}
+
+/* =========================================================================
+   ثيم AdminLTE: خلفية المحتوى رمادية فاتحة (#f4f6f9)، البطاقات بيضاء،
+   قائمة جانبية داكنة، وحقول بيضاء بنص داكن.
+   ========================================================================= */
+@layer utilities {
+    /* الحقول → بيضاء بنص داكن وحدّ واضح (ستايل AdminLTE form-control) */
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+    select,
+    textarea,
+    .field-control {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        border-width: 1px !important;
+        border-style: solid !important;
+        border-color: #ced4da !important;
+    }
+    /* عند التركيز: حدّ أخضر واضح + هالة خفيفة */
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):focus,
+    select:focus,
+    textarea:focus,
+    .field-control:focus-within {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+        outline: none !important;
+    }
+    .field-control, .field-control * { color: #0f172a !important; }
+    ::placeholder { color: #94a3b8 !important; opacity: 1; }
+
+    /* نصوص خلايا الجداول → أسود في كل الصفحات (الشارات والأزرار الملوّنة
+       تحتفظ بألوانها لأنها تضبط لونها مباشرةً على العنصر). */
+    tbody td { color: #0f172a !important; }
+    tbody td a:not(.badge) { color: #0f172a !important; }
+}
+
+/* =========================================================================
+   مكوّنات AdminLTE معاد بناؤها بـ Tailwind
+   ========================================================================= */
+@layer components {
+    /* بطاقة AdminLTE: بيضاء، حدّ خفيف، ظل ناعم، ورأس بخطّ سفلي */
+    .lte-card {
+        @apply rounded-md border border-[#dee2e6] bg-white;
+        box-shadow: 0 0 1px rgba(0, 0, 0, 0.125), 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .lte-card-header {
+        @apply flex items-center justify-between gap-3 border-b border-[#dee2e6] px-4 py-3;
+    }
+    .lte-card-title {
+        @apply text-base font-bold text-slate-800;
+    }
+    .lte-card-body {
+        @apply p-4;
+    }
+    .lte-card-footer {
+        @apply flex flex-wrap items-center justify-between gap-3 border-t border-[#dee2e6] px-4 py-3;
+    }
+
+    /* small-box: مربّع إحصائي ملوّن بأيقونة كبيرة شفافة في الزاوية */
+    .lte-small-box {
+        @apply relative overflow-hidden rounded-md text-white;
+        box-shadow: 0 0 1px rgba(0, 0, 0, 0.125), 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .lte-small-box > .inner {
+        @apply p-4;
+    }
+    .lte-small-box .lte-value {
+        @apply text-3xl font-extrabold leading-none;
+    }
+    .lte-small-box .lte-label {
+        @apply mt-1 block text-sm font-bold opacity-95;
+    }
+    .lte-small-box .lte-icon {
+        @apply pointer-events-none absolute top-2 opacity-25;
+    }
+    /* الأيقونة في الجهة البعيدة حسب الاتجاه */
+    [dir='rtl'] .lte-small-box .lte-icon { left: 0.75rem; }
+    [dir='ltr'] .lte-small-box .lte-icon { right: 0.75rem; }
+    .lte-small-box .lte-footer {
+        @apply block bg-black/10 px-4 py-1.5 text-center text-xs font-bold text-white/90 transition hover:bg-black/20;
+    }
+
+    /* ألوان AdminLTE القياسية للـ small-box */
+    .lte-bg-primary { background-color: #0d6efd; }
+    .lte-bg-info    { background-color: #17a2b8; }
+    .lte-bg-success { background-color: #28a745; }
+    .lte-bg-warning { background-color: #ffc107; color: #1f2937; }
+    .lte-bg-warning .lte-footer { @apply text-slate-800/80; }
+    .lte-bg-danger  { background-color: #dc3545; }
+    .lte-bg-secondary { background-color: #6c757d; }
+
+    /* info-box: بطاقة بيضاء بأيقونة ملوّنة جانبية */
+    .lte-info-box {
+        @apply flex items-center gap-3 rounded-md bg-white p-3;
+        box-shadow: 0 0 1px rgba(0, 0, 0, 0.125), 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .lte-info-box .lte-info-icon {
+        @apply flex h-14 w-14 shrink-0 items-center justify-center rounded-md text-white;
+    }
+}
+
+/* ─── الطباعة ────────────────────────────────────────────────────
+   الشاشة إطارٌ للتنقّل، والورقة مستندٌ يُسلَّم ويُوقَّع. فما كان للتنقّل
+   — الشريط الجانبي وترويسته وأزرار الصفحة — لا مكان له على الورقة،
+   ويبقى ما يشهد به المستند وحده. القواعد هنا عامّة لأن الطباعة تخصّ
+   العقد والسند والفاتورة معًا، لا صفحةً بعينها. */
+@media print {
+    @page {
+        size: A4;
+        margin: 12mm 10mm;
+    }
+
+    /* المتصفح يُسقط الخلفيات افتراضًا، فتخرج الحدود والصناديق بلا معالم */
+    *,
+    *::before,
+    *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    html,
+    body {
+        background: #fff !important;
+    }
+
+    /* بقايا الشريط الجانبي إن عاد يومًا، ولوحته في الشاشات الضيقة.
+       أما شريط القائمة العلوي فيُخفي نفسه بـ print:hidden في مكوّنه. */
+    div.group.peer[data-side],
+    [data-sidebar='sidebar'][data-mobile='true'] {
+        display: none !important;
+    }
+
+    /* الإطار يفرد نفسه على الورقة بلا هوامش الشاشة ولا حوافّ مدوّرة */
+    [data-sidebar='inset'],
+    main {
+        margin: 0 !important;
+        min-height: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* ما لا يُقطع بين ورقتين: صندوق أو بطاقة أو كتلة تواقيع */
+    .print-keep {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* بداية ورقة جديدة عند الحاجة */
+    .print-break-before {
+        break-before: page;
+        page-break-before: always;
+    }
+
+    /* العنوان لا يُترك وحيدًا في ذيل الورقة */
+    h1, h2, h3, h4 {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    /* الروابط لا تُذيَّل بعناوينها في مستند مطبوع */
+    a[href]::after {
+        content: none !important;
+    }
+}

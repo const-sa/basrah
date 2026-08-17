@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('code', '429')
+@section('accent', '#8b5cf6')
+@section('title', 'طلبات كثيرة جداً')
+@section('message', 'تمهّل قليلاً! عدد كبير من الطلبات في وقت قصير. انتظر لحظات ثم أعد المحاولة.')

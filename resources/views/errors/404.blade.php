@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('code', '404')
+@section('accent', '#0ea5e9')
+@section('title', 'الصفحة غير موجودة')
+@section('message', 'يبدو أنك ضللت الطريق في الفضاء! الصفحة التي تبحث عنها غير موجودة أو تم نقلها.')

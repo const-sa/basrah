@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('code', '401')
+@section('accent', '#f59e0b')
+@section('title', 'يجب تسجيل الدخول')
+@section('message', 'لا يمكنك المتابعة قبل تسجيل الدخول. سجّل دخولك للمواصلة.')

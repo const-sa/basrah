@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('code', '500')
+@section('accent', '#ef4444')
+@section('title', 'خطأ في الخادم')
+@section('message', 'حدث خلل غير متوقع في الخادم. فريقنا يعمل على إصلاحه — حاول مرة أخرى بعد قليل.')

@@ -1,0 +1,277 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Booking;
+use App\Models\BookingPayment;
+use App\Models\Unit;
+use App\Services\Accounting\BookingAccounting;
+use App\Services\Concerns\BuildsBookings;
+use App\Support\BookingPeriod;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
+
+/**
+ * إنشاء وتعديل حجوزات القاعات، إضافةً إلى ما يشترك فيه النوعان من دفعات
+ * وإنهاء وإلغاء.
+ *
+ * حجز القاعة يقع داخل يوم واحد بفترة معلومة (صباحي/مسائي/يوم كامل)، ويحتمل
+ * باقة ونوع مناسبة. أما إقامة الشاليه فتخصّها ChaletBookingService لأنها
+ * تُقاس بالليالي وتُسعَّر ليلةً ليلة.
+ *
+ * الدفعات والإنهاء والإلغاء بقيت هنا لأنها لا تفرّق بين النوعين: الدفعة قيدٌ
+ * محاسبي على حجز، ولا شأن لها بكيفية تحديد وقته.
+ *
+ * الفحص والحفظ يجريان داخل معاملة واحدة مع قفل الوحدة، حتى لا ينجح
+ * حجزان متزامنان على نفس الفترة (سباق يحدث فعليًا مع عدة موظفي حجز).
+ */
+class BookingService
+{
+    use BuildsBookings;
+
+    public function __construct(
+        private readonly BookingAvailability $availability,
+        private readonly BookingPricing $pricing,
+        private readonly BookingAccounting $accounting,
+    ) {}
+
+    /**
+     * تسجيل دفعة على حجز مع قيدها المحاسبي.
+     *
+     * @param  array{type?:string, method?:string, amount:float, paid_on?:string, reference?:string|null, notes?:string|null}  $data
+     */
+    public function recordPayment(Booking $booking, array $data, ?int $userId = null): BookingPayment
+    {
+        $amount = round((float) $data['amount'], 2);
+
+        if ($amount <= 0) {
+            throw new RuntimeException('مبلغ الدفعة يجب أن يكون أكبر من صفر.');
+        }
+
+        $type = $data['type'] ?? 'payment';
+
+        // الاسترداد لا يتجاوز المسدَّد فعلًا، وإلا صار رصيد العميل سالبًا بلا سبب.
+        if ($type === 'refund' && $amount > (float) $booking->paid_amount) {
+            throw ValidationException::withMessages([
+                'amount' => 'مبلغ الاسترداد يتجاوز المسدَّد على هذا الحجز.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($booking, $data, $amount, $type, $userId) {
+            $payment = $booking->payments()->create([
+                'received_by' => $userId,
+                'type' => $type,
+                'method' => $data['method'] ?? 'cash',
+                'amount' => $amount,
+                'paid_on' => $data['paid_on'] ?? now()->toDateString(),
+                'reference' => $data['reference'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            $booking->recalculatePaidAmount();
+            $this->accounting->recordPayment($payment, $userId);
+
+            return $payment;
+        });
+    }
+
+    /**
+     * إنهاء الحجز والاعتراف بإيراده.
+     */
+    public function complete(Booking $booking, ?int $userId = null): Booking
+    {
+        return DB::transaction(function () use ($booking, $userId) {
+            $booking->update(['status' => 'completed']);
+            $this->accounting->recognizeRevenue($booking->fresh(), $userId);
+
+            return $booking->fresh();
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     *
+     * @throws ValidationException عند وجود تعارض
+     */
+    public function create(array $data, ?int $userId = null): Booking
+    {
+        return DB::transaction(function () use ($data, $userId) {
+            $unit = Unit::lockForUpdate()->findOrFail($data['unit_id']);
+
+            $scope = $data['scope'];
+            $sectionIds = $scope === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
+            $days = BookingPeriod::days($data['days_count'] ?? null);
+
+            $this->guardAvailability($unit, $scope, [...$data, 'days_count' => $days], $sectionIds);
+
+            $quote = $this->pricing->quote(
+                $unit,
+                $scope,
+                $data['booking_date'],
+                $data['period'],
+                $sectionIds,
+                $data['addons'] ?? [],
+                (float) ($data['discount_amount'] ?? 0),
+                isset($data['package_id']) ? (int) $data['package_id'] : null,
+                isset($data['event_type_id']) ? (int) $data['event_type_id'] : null,
+                $days,
+            );
+
+            [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days);
+
+            $booking = Booking::create([
+                'reference' => $this->nextReference(),
+                'unit_id' => $unit->id,
+                'client_id' => $data['client_id'] ?? null,
+                // الباقة تُخزَّن كما سعّرتها الخدمة: إن كانت لقاعة أخرى فقد أسقطتها
+                'event_type_id' => $quote['event_type']['id'] ?? null,
+                'package_id' => $quote['package']['id'] ?? null,
+                'created_by' => $userId,
+                'scope' => $scope,
+                'period' => $data['period'],
+                'booking_date' => $data['booking_date'],
+                'days_count' => $days,
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                // الحجز يُسجَّل مؤكدًا: الموظف لا يفتح الشاشة إلا وقد اتفق مع
+                // العميل، فجعله مبدئيًا كان يفرض خطوة تأكيدٍ ثانية على كل حجز.
+                // و«مبدئي» يبقى في قائمة الحالات لمن يحتاجه فعلًا.
+                'status' => $data['status'] ?? 'confirmed',
+                'base_amount' => $quote['base_amount'],
+                'package_amount' => $quote['package_amount'],
+                'event_fee_amount' => $quote['event_fee_amount'],
+                'addons_amount' => $quote['addons_amount'],
+                'discount_amount' => $quote['discount_amount'],
+                'total_amount' => $quote['total_amount'],
+                'deposit_amount' => $quote['deposit_amount'],
+                'paid_amount' => 0,
+                'guests_count' => $data['guests_count'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            $this->syncSections($booking, $scope, $quote['lines']);
+            $this->syncAddons($booking, $quote['lines']);
+
+            return $booking->load(['unit', 'client', 'sections', 'addons']);
+        });
+    }
+
+    /**
+     * تعديل حجز قائم مع إعادة فحص التعارض (متجاهلًا الحجز نفسه).
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws ValidationException
+     */
+    public function update(Booking $booking, array $data): Booking
+    {
+        return DB::transaction(function () use ($booking, $data) {
+            $unit = Unit::lockForUpdate()->findOrFail($data['unit_id'] ?? $booking->unit_id);
+
+            $scope = $data['scope'] ?? $booking->scope;
+            $sectionIds = $scope === 'sections'
+                ? array_map('intval', $data['section_ids'] ?? $booking->sections->pluck('id')->all())
+                : [];
+
+            $payload = [
+                'booking_date' => $data['booking_date'] ?? $booking->booking_date->toDateString(),
+                'period' => $data['period'] ?? $booking->period,
+                'days_count' => BookingPeriod::days($data['days_count'] ?? $booking->days_count),
+                'client_id' => $data['client_id'] ?? $booking->client_id,
+                'event_type_id' => array_key_exists('event_type_id', $data) ? $data['event_type_id'] : $booking->event_type_id,
+                'package_id' => array_key_exists('package_id', $data) ? $data['package_id'] : $booking->package_id,
+            ];
+
+            $this->guardAvailability($unit, $scope, $payload, $sectionIds, $booking->id);
+
+            $quote = $this->pricing->quote(
+                $unit,
+                $scope,
+                $payload['booking_date'],
+                $payload['period'],
+                $sectionIds,
+                $data['addons'] ?? [],
+                (float) ($data['discount_amount'] ?? $booking->discount_amount),
+                $payload['package_id'] ? (int) $payload['package_id'] : null,
+                $payload['event_type_id'] ? (int) $payload['event_type_id'] : null,
+                $payload['days_count'],
+            );
+
+            [$startsAt, $endsAt] = BookingPeriod::range(
+                $payload['booking_date'],
+                $payload['period'],
+                $payload['days_count'],
+            );
+
+            $booking->update([
+                'unit_id' => $unit->id,
+                'client_id' => $payload['client_id'],
+                'event_type_id' => $quote['event_type']['id'] ?? null,
+                'package_id' => $quote['package']['id'] ?? null,
+                'scope' => $scope,
+                'period' => $payload['period'],
+                'booking_date' => $payload['booking_date'],
+                'days_count' => $payload['days_count'],
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                'base_amount' => $quote['base_amount'],
+                'package_amount' => $quote['package_amount'],
+                'event_fee_amount' => $quote['event_fee_amount'],
+                'addons_amount' => $quote['addons_amount'],
+                'discount_amount' => $quote['discount_amount'],
+                'total_amount' => $quote['total_amount'],
+                'deposit_amount' => $quote['deposit_amount'],
+                'guests_count' => $data['guests_count'] ?? $booking->guests_count,
+                'notes' => $data['notes'] ?? $booking->notes,
+            ]);
+
+            $this->syncSections($booking, $scope, $quote['lines']);
+            $this->syncAddons($booking, $quote['lines']);
+
+            return $booking->fresh(['unit', 'client', 'sections', 'addons']);
+        });
+    }
+
+    /**
+     * إلغاء حجز — لا يُحذف حتى يبقى في سجل التدقيق، وتتحرر الفترة تلقائيًا
+     * لأن الحالة الملغاة خارج BLOCKING_STATUSES.
+     */
+    public function cancel(Booking $booking, ?string $reason = null): Booking
+    {
+        $booking->update([
+            'status' => 'cancelled',
+            'cancelled_at' => now(),
+            'cancellation_reason' => $reason,
+        ]);
+
+        return $booking;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  list<int>  $sectionIds
+     *
+     * @throws ValidationException
+     */
+    private function guardAvailability(Unit $unit, string $scope, array $data, array $sectionIds, ?int $ignoreId = null): void
+    {
+        $result = $this->availability->check(
+            $unit,
+            $scope,
+            $data['booking_date'],
+            $data['period'],
+            $sectionIds,
+            isset($data['client_id']) ? (int) $data['client_id'] : null,
+            $ignoreId,
+            BookingPeriod::days($data['days_count'] ?? null),
+        );
+
+        if (! $result['ok']) {
+            throw ValidationException::withMessages([
+                'availability' => $result['reason'],
+            ]);
+        }
+    }
+
+}

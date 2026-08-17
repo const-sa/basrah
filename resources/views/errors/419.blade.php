@@ -1,0 +1,5 @@
+@extends('errors.layout')
+@section('code', '419')
+@section('accent', '#8b5cf6')
+@section('title', 'انتهت صلاحية الجلسة')
+@section('message', 'طال بك الوقت قليلاً! انتهت صلاحية الجلسة لأسباب أمنية. حدّث الصفحة وأعد المحاولة.')
