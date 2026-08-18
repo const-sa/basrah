@@ -11,6 +11,7 @@ import {
     CalendarRange,
     Contact,
     CreditCard,
+    DatabaseBackup,
     FileBarChart2,
     FileSignature,
     FileText,
@@ -199,6 +200,7 @@ export function useNavigation() {
                 { title: t('nav.roles'), href: '/admin/roles', icon: ShieldCheck, perm: 'roles.view' },
                 { title: t('nav.audit_log'), href: '/admin/audit-log', icon: ScrollText, perm: 'audit.view' },
                 { title: t('nav.archive'), href: '/admin/archive', icon: ArchiveIcon, perm: 'archive.view' },
+                { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
             ],
         },
         {

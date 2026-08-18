@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountingController;
 use App\Http\Controllers\Admin\ArchiveController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\BackupsController;
 use App\Http\Controllers\Admin\BookingsController;
 use App\Http\Controllers\Admin\ChaletBookingsController;
 use App\Http\Controllers\Admin\ChaletCalendarController;
@@ -333,6 +334,12 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // السجل الرقابي — للقراءة والتصدير فقط
     Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('perm:audit.view')->name('audit.index');
     Route::get('audit-log/export', [AuditLogController::class, 'export'])->middleware('perm:audit.export')->name('audit.export');
+
+    // النسخ الاحتياطي (§18) — التنزيل بصلاحية العرض لأنه القاعدة كاملة
+    Route::get('backups', [BackupsController::class, 'index'])->middleware('perm:backups.view')->name('backups.index');
+    Route::get('backups/{backup}/download', [BackupsController::class, 'download'])->middleware('perm:backups.view')->name('backups.download');
+    Route::post('backups', [BackupsController::class, 'store'])->middleware('perm:backups.create')->name('backups.store');
+    Route::delete('backups/{backup}', [BackupsController::class, 'destroy'])->middleware('perm:backups.delete')->name('backups.destroy');
 
     // الأرشيف — المحذوفات: استعراض واسترجاع، والإتلاف النهائي بصلاحية مستقلة
     Route::get('archive', [ArchiveController::class, 'index'])->middleware('perm:archive.view')->name('archive.index');
