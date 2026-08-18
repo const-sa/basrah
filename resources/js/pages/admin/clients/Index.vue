@@ -97,9 +97,7 @@ watch(
 
 // رابط تصدير Excel محمّلاً بالفلاتر الحالية.
 const exportUrl = computed(() => {
-    const params = new URLSearchParams(
-        Object.entries(f).filter(([, v]) => v !== '' && v != null) as [string, string][],
-    );
+    const params = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== '' && v != null) as [string, string][]);
     const qs = params.toString();
     return `/admin/clients/export${qs ? `?${qs}` : ''}`;
 });
@@ -183,7 +181,12 @@ const destroy = (c: ClientRow) => {
                         <!-- بحث -->
                         <div class="flex items-stretch overflow-hidden rounded-md border border-slate-300">
                             <span class="flex items-center bg-slate-50 px-2.5 text-slate-400"><Search class="h-4 w-4" /></span>
-                            <input v-model="f.name" type="search" placeholder="بحث عن عميل" class="w-44 border-0 px-3 py-2 text-sm focus:outline-none focus:ring-0" />
+                            <input
+                                v-model="f.name"
+                                type="search"
+                                placeholder="بحث عن عميل"
+                                class="w-44 border-0 px-3 py-2 text-sm focus:outline-none focus:ring-0"
+                            />
                         </div>
                         <!-- فلتر الحالة -->
                         <select v-model="f.status" @change="reload" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
@@ -194,11 +197,18 @@ const destroy = (c: ClientRow) => {
                             <option value="non_taxable">بدون ضريبة</option>
                         </select>
                         <!-- إضافة -->
-                        <button type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700">
+                        <button
+                            type="button"
+                            @click="openCreate"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+                        >
                             <Plus class="h-4 w-4" /> عميل جديد
                         </button>
                         <!-- تصدير -->
-                        <a :href="exportUrl" class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700">
+                        <a
+                            :href="exportUrl"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+                        >
                             <FileSpreadsheet class="h-4 w-4" /> تصدير
                         </a>
                     </div>
@@ -223,8 +233,15 @@ const destroy = (c: ClientRow) => {
                                 <!-- العميل: الاسم -->
                                 <td class="px-4 py-2.5">
                                     <div class="flex items-center gap-1.5">
-                                        <span class="font-bold text-slate-800">{{ c.name }}</span>
-                                        <span v-if="c.is_walk_in" class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-800">افتراضي</span>
+                                        <!-- الاسم بابُ الملف: سجل العميل كله خلف نقرة واحدة -->
+                                        <Link :href="`/admin/clients/${c.id}`" class="font-bold text-slate-800 hover:text-blue-600 hover:underline">
+                                            {{ c.name }}
+                                        </Link>
+                                        <span
+                                            v-if="c.is_walk_in"
+                                            class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-800"
+                                            >افتراضي</span
+                                        >
                                     </div>
                                     <div v-if="c.national_id" class="text-xs text-slate-500" dir="ltr">{{ c.national_id }}</div>
                                 </td>
@@ -240,10 +257,35 @@ const destroy = (c: ClientRow) => {
                                 <!-- الإجراءات: مجموعة أزرار محدّدة (outline) بنمط AdminLTE -->
                                 <td class="px-4 py-2.5">
                                     <div class="flex justify-end">
-                                        <div class="inline-flex divide-x divide-slate-300 overflow-hidden rounded-md border border-slate-300 rtl:divide-x-reverse">
-                                            <button type="button" @click="openEdit(c)" title="تعديل" class="px-2.5 py-2 text-slate-600 transition hover:bg-slate-100"><Pencil class="h-4 w-4" /></button>
-                                            <button v-if="!c.is_walk_in" type="button" @click="toggle(c)" title="تفعيل/إيقاف" class="px-2.5 py-2 text-emerald-600 transition hover:bg-emerald-50"><Power class="h-4 w-4" /></button>
-                                            <button v-if="!c.is_walk_in" type="button" @click="destroy(c)" title="حذف" class="px-2.5 py-2 text-red-600 transition hover:bg-red-50"><Trash2 class="h-4 w-4" /></button>
+                                        <div
+                                            class="inline-flex divide-x divide-slate-300 overflow-hidden rounded-md border border-slate-300 rtl:divide-x-reverse"
+                                        >
+                                            <button
+                                                type="button"
+                                                @click="openEdit(c)"
+                                                title="تعديل"
+                                                class="px-2.5 py-2 text-slate-600 transition hover:bg-slate-100"
+                                            >
+                                                <Pencil class="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                v-if="!c.is_walk_in"
+                                                type="button"
+                                                @click="toggle(c)"
+                                                title="تفعيل/إيقاف"
+                                                class="px-2.5 py-2 text-emerald-600 transition hover:bg-emerald-50"
+                                            >
+                                                <Power class="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                v-if="!c.is_walk_in"
+                                                type="button"
+                                                @click="destroy(c)"
+                                                title="حذف"
+                                                class="px-2.5 py-2 text-red-600 transition hover:bg-red-50"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                            </button>
                                         </div>
                                     </div>
                                 </td>
@@ -260,11 +302,21 @@ const destroy = (c: ClientRow) => {
                     <div class="text-sm font-medium text-slate-500">
                         عرض {{ clients.from ?? 0 }} إلى {{ clients.to ?? 0 }} من {{ clients.total }} عميل
                     </div>
-                    <div v-if="clients.links.length > 3" class="inline-flex divide-x divide-slate-300 overflow-hidden rounded-md border border-slate-300 rtl:divide-x-reverse">
+                    <div
+                        v-if="clients.links.length > 3"
+                        class="inline-flex divide-x divide-slate-300 overflow-hidden rounded-md border border-slate-300 rtl:divide-x-reverse"
+                    >
                         <template v-for="(link, i) in clients.links" :key="i">
-                            <Link v-if="link.url" :href="link.url" preserve-scroll
-                                :class="['px-3 py-1.5 text-sm transition', link.active ? 'bg-blue-600 font-bold text-white' : 'bg-white text-slate-600 hover:bg-slate-50']"
-                                v-html="link.label" />
+                            <Link
+                                v-if="link.url"
+                                :href="link.url"
+                                preserve-scroll
+                                :class="[
+                                    'px-3 py-1.5 text-sm transition',
+                                    link.active ? 'bg-blue-600 font-bold text-white' : 'bg-white text-slate-600 hover:bg-slate-50',
+                                ]"
+                                v-html="link.label"
+                            />
                             <span v-else class="bg-white px-3 py-1.5 text-sm text-slate-300" v-html="link.label" />
                         </template>
                     </div>
@@ -277,23 +329,37 @@ const destroy = (c: ClientRow) => {
             <div class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
                 <div class="mb-4 flex items-center justify-between">
                     <h2 class="text-lg font-extrabold text-slate-900">{{ editingId ? 'تعديل عميل' : 'عميل جديد' }}</h2>
-                    <button type="button" @click="showModal = false" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X class="h-5 w-5" /></button>
+                    <button type="button" @click="showModal = false" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                        <X class="h-5 w-5" />
+                    </button>
                 </div>
                 <form @submit.prevent="submit" class="space-y-3">
                     <div>
                         <label class="mb-1 block text-sm font-bold text-slate-700">اسم العميل</label>
-                        <input v-model="form.name" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <input
+                            v-model="form.name"
+                            type="text"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
                         <p v-if="form.errors.name" class="mt-1 text-xs text-red-500">{{ form.errors.name }}</p>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">الجوال</label>
-                            <input v-model="form.mobile" type="text" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                            <input
+                                v-model="form.mobile"
+                                type="text"
+                                dir="ltr"
+                                class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            />
                             <p v-if="form.errors.mobile" class="mt-1 text-xs text-red-500">{{ form.errors.mobile }}</p>
                         </div>
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">المدينة</label>
-                            <select v-model="form.city" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                            <select
+                                v-model="form.city"
+                                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            >
                                 <option value="">— اختر المدينة —</option>
                                 <option v-for="city in cityOptions" :key="city" :value="city">{{ city }}</option>
                             </select>
@@ -302,23 +368,46 @@ const destroy = (c: ClientRow) => {
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-bold text-slate-700">البريد الإلكتروني</label>
-                        <input v-model="form.email" type="email" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <input
+                            v-model="form.email"
+                            type="email"
+                            dir="ltr"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
                         <p v-if="form.errors.email" class="mt-1 text-xs text-red-500">{{ form.errors.email }}</p>
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-bold text-slate-700">
                             رقم الهوية <span class="font-medium text-slate-400">(اختياري)</span>
                         </label>
-                        <input v-model="form.national_id" type="text" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <input
+                            v-model="form.national_id"
+                            type="text"
+                            dir="ltr"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
                         <p v-if="form.errors.national_id" class="mt-1 text-xs text-red-500">{{ form.errors.national_id }}</p>
                     </div>
 
                     <!-- سويتش العميل الضريبي -->
                     <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                         <span class="text-sm font-bold text-slate-700">عميل ضريبي</span>
-                        <button type="button" role="switch" :aria-checked="form.is_taxable" @click="form.is_taxable = !form.is_taxable"
-                            :class="['relative inline-flex h-6 w-11 items-center rounded-full transition', form.is_taxable ? 'brand-gradient' : 'bg-slate-300']">
-                            <span :class="['inline-block h-4 w-4 transform rounded-full bg-white transition', form.is_taxable ? '-translate-x-1' : '-translate-x-6']"></span>
+                        <button
+                            type="button"
+                            role="switch"
+                            :aria-checked="form.is_taxable"
+                            @click="form.is_taxable = !form.is_taxable"
+                            :class="[
+                                'relative inline-flex h-6 w-11 items-center rounded-full transition',
+                                form.is_taxable ? 'brand-gradient' : 'bg-slate-300',
+                            ]"
+                        >
+                            <span
+                                :class="[
+                                    'inline-block h-4 w-4 transform rounded-full bg-white transition',
+                                    form.is_taxable ? '-translate-x-1' : '-translate-x-6',
+                                ]"
+                            ></span>
                         </button>
                     </div>
 
@@ -326,23 +415,48 @@ const destroy = (c: ClientRow) => {
                     <template v-if="form.is_taxable">
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">الرقم الضريبي</label>
-                            <input v-model="form.tax_number" type="text" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                            <input
+                                v-model="form.tax_number"
+                                type="text"
+                                dir="ltr"
+                                class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            />
                             <p v-if="form.errors.tax_number" class="mt-1 text-xs text-red-500">{{ form.errors.tax_number }}</p>
                         </div>
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">العنوان الضريبي</label>
-                            <textarea v-model="form.tax_address" rows="2" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"></textarea>
+                            <textarea
+                                v-model="form.tax_address"
+                                rows="2"
+                                class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            ></textarea>
                             <p v-if="form.errors.tax_address" class="mt-1 text-xs text-red-500">{{ form.errors.tax_address }}</p>
                         </div>
                     </template>
 
                     <label class="flex items-center gap-2 text-sm font-bold text-slate-700">
-                        <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-200" />
+                        <input
+                            v-model="form.is_active"
+                            type="checkbox"
+                            class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-200"
+                        />
                         عميل نشط
                     </label>
                     <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" @click="showModal = false" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">إلغاء</button>
-                        <button type="submit" :disabled="form.processing" class="rounded-xl brand-gradient px-5 py-2 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60">حفظ</button>
+                        <button
+                            type="button"
+                            @click="showModal = false"
+                            class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                        >
+                            إلغاء
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="form.processing"
+                            class="brand-gradient rounded-xl px-5 py-2 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60"
+                        >
+                            حفظ
+                        </button>
                     </div>
                 </form>
             </div>

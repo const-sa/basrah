@@ -9,39 +9,67 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Bell, CalendarClock, Check, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-interface SectionOption { id: number; name: string; gender: string }
+interface SectionOption {
+    id: number;
+    name: string;
+    gender: string;
+}
 interface UnitOption {
-    id: number; name: string; code: string; type: string;
+    id: number;
+    name: string;
+    code: string;
+    type: string;
     bookable_mode: 'whole' | 'sections' | 'both';
     privacy_mode: 'open' | 'exclusive';
     sections: SectionOption[];
 }
 
 interface Booking {
-    id: number; reference: string;
+    id: number;
+    reference: string;
     unit: { id: number; name: string; code: string };
     client: { id: number; name: string; mobile: string | null } | null;
     scope: 'whole' | 'sections';
-    sections: string[]; section_ids: number[];
-    period: string; period_label: string; schedule_label: string;
+    sections: string[];
+    section_ids: number[];
+    period: string;
+    period_label: string;
+    schedule_label: string;
     booking_date: string;
     check_out_date: string | null;
     nights: number | null;
-    status: string; status_label: string; status_color: string;
+    status: string;
+    status_label: string;
+    status_color: string;
     is_online: boolean;
-    total_amount: number; deposit_amount: number; paid_amount: number; remaining_amount: number;
+    total_amount: number;
+    deposit_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
     is_deposit_settled: boolean;
-    guests_count: number | null; notes: string | null;
+    guests_count: number | null;
+    notes: string | null;
 }
 
 interface Payment {
-    id: number; type: string; type_label: string; method_label: string;
-    amount: number; signed_amount: number; paid_on: string;
-    reference: string | null; notes: string | null; received_by: string | null;
+    id: number;
+    type: string;
+    type_label: string;
+    method_label: string;
+    amount: number;
+    signed_amount: number;
+    paid_on: string;
+    reference: string | null;
+    notes: string | null;
+    received_by: string | null;
 }
 interface PaymentSummary {
-    total_amount: number; deposit_amount: number; paid_amount: number;
-    remaining_amount: number; is_deposit_settled: boolean; is_fully_paid: boolean;
+    total_amount: number;
+    deposit_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
+    is_deposit_settled: boolean;
+    is_fully_paid: boolean;
 }
 
 const props = defineProps<{
@@ -84,7 +112,7 @@ const payLoading = ref(false);
 
 const payForm = useForm({
     type: 'deposit',
-    payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
+    payment_method_id: props.meta.payment_methods[0]?.id ?? (null as number | null),
     amount: 0,
     paid_on: today,
     reference: '',
@@ -115,9 +143,7 @@ const openPayments = (b: Booking) => {
     payForm.reset();
     payForm.clearErrors();
     payForm.type = b.is_deposit_settled ? 'payment' : 'deposit';
-    payForm.amount = b.is_deposit_settled
-        ? b.remaining_amount
-        : Math.min(b.deposit_amount - b.paid_amount, b.remaining_amount);
+    payForm.amount = b.is_deposit_settled ? b.remaining_amount : Math.min(b.deposit_amount - b.paid_amount, b.remaining_amount);
     loadPayments(b);
 };
 
@@ -140,6 +166,13 @@ const sendReminder = (b: Booking) => {
     }
 };
 
+/** تذكير بالمبلغ المتبقي — غير تذكير الموعد، ولا يُعرض لحجزٍ مسدَّد. */
+const sendBalanceReminder = (b: Booking) => {
+    if (confirm(`إرسال تذكير بالمبلغ المتبقي على واتساب ${b.client?.mobile ?? ''}؟`)) {
+        router.post(`/admin/bookings/${b.id}/remind-balance`, {}, { preserveScroll: true });
+    }
+};
+
 // الإلغاء والتأجيل يخرجان الحجز من مساره، فيُسأل عن السبب ليبقى في سجل التدقيق.
 const REASON_PROMPTS: Record<string, string> = {
     cancelled: 'سبب الإلغاء (اختياري):',
@@ -148,8 +181,13 @@ const REASON_PROMPTS: Record<string, string> = {
 
 const changeStatus = (b: Booking, status: string) => {
     const ask = REASON_PROMPTS[status];
-    const reason = ask ? prompt(ask) ?? '' : '';
-    router.patch(`/admin/bookings/${b.id}/status`, { status, reason }, { preserveScroll: true });
+    const reason = ask ? (prompt(ask) ?? '') : '';
+
+    // إشعار الإلغاء يُسأل عنه ولا يُرسل تلقائيًا: الإلغاء قد يكون تصحيحًا
+    // لخطأ إدخال، ورسالةٌ تخرج حينها تُقلق عميلًا لم يُلغَ حجزه.
+    const notify = status === 'cancelled' && b.client?.mobile ? confirm(`إبلاغ العميل بالإلغاء على واتساب ${b.client.mobile}؟`) : false;
+
+    router.patch(`/admin/bookings/${b.id}/status`, { status, reason, notify }, { preserveScroll: true });
 };
 
 const destroy = (b: Booking) => {
@@ -176,7 +214,11 @@ const colorClass = statusChipClass;
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- اختصارات شاشات الشاليهات — تُشتق من القائمة فلا تحتاج صيانة -->
                     <PageShortcuts />
-                    <Link v-if="can('bookings.create')" href="/admin/bookings/chalets/create" class="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-700">
+                    <Link
+                        v-if="can('bookings.create')"
+                        href="/admin/bookings/chalets/create"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-700"
+                    >
                         <Plus class="h-4 w-4" /> إقامة جديدة
                     </Link>
                 </div>
@@ -196,7 +238,12 @@ const colorClass = statusChipClass;
                     <div class="lg:col-span-2">
                         <div class="relative">
                             <Search class="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ltr:left-3 rtl:right-3" />
-                            <input v-model="filters.search" @keyup.enter="applyFilters" placeholder="رقم الحجز أو العميل" class="w-full rounded-xl border border-slate-200 py-2.5 text-sm ltr:pl-9 ltr:pr-3 rtl:pl-3 rtl:pr-9" />
+                            <input
+                                v-model="filters.search"
+                                @keyup.enter="applyFilters"
+                                placeholder="رقم الحجز أو العميل"
+                                class="w-full rounded-xl border border-slate-200 py-2.5 text-sm ltr:pl-9 ltr:pr-3 rtl:pl-3 rtl:pr-9"
+                            />
                         </div>
                     </div>
                     <select v-model="filters.status" @change="applyFilters" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
@@ -207,10 +254,24 @@ const colorClass = statusChipClass;
                         <option :value="null">كل الشاليهات</option>
                         <option v-for="u in units" :key="u.id" :value="u.id">{{ u.name }}</option>
                     </select>
-                    <input v-model="filters.from" @change="applyFilters" type="date" title="دخول من" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-                    <input v-model="filters.to" @change="applyFilters" type="date" title="دخول حتى" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    <input
+                        v-model="filters.from"
+                        @change="applyFilters"
+                        type="date"
+                        title="دخول من"
+                        class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
+                    <input
+                        v-model="filters.to"
+                        @change="applyFilters"
+                        type="date"
+                        title="دخول حتى"
+                        class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
                 </div>
-                <button type="button" @click="resetFilters" class="mt-2 text-[11px] font-bold text-slate-500 hover:text-slate-700">إعادة ضبط الفلاتر</button>
+                <button type="button" @click="resetFilters" class="mt-2 text-[11px] font-bold text-slate-500 hover:text-slate-700">
+                    إعادة ضبط الفلاتر
+                </button>
             </div>
 
             <!-- الجدول -->
@@ -232,13 +293,22 @@ const colorClass = statusChipClass;
                             <tr v-for="b in bookings.data" :key="b.id" class="border-t border-slate-100 transition hover:bg-slate-50">
                                 <td class="px-4 py-3 font-extrabold text-slate-800" dir="ltr">
                                     {{ b.reference }}
-                                    <span v-if="b.is_online" title="حجز وصل من الموقع" class="ms-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">أونلاين</span>
+                                    <span
+                                        v-if="b.is_online"
+                                        title="حجز وصل من الموقع"
+                                        class="ms-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700"
+                                        >أونلاين</span
+                                    >
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="font-bold text-slate-800">{{ b.unit.name }}</div>
                                     <div class="mt-0.5 text-[11px] font-medium text-slate-500">
-                                        <span v-if="b.scope === 'whole'" class="rounded bg-violet-100 px-1.5 py-0.5 font-bold text-violet-700">الشاليه كاملًا</span>
-                                        <span v-else class="rounded bg-sky-100 px-1.5 py-0.5 font-bold text-sky-700">{{ b.sections.join('، ') }}</span>
+                                        <span v-if="b.scope === 'whole'" class="rounded bg-violet-100 px-1.5 py-0.5 font-bold text-violet-700"
+                                            >الشاليه كاملًا</span
+                                        >
+                                        <span v-else class="rounded bg-sky-100 px-1.5 py-0.5 font-bold text-sky-700">{{
+                                            b.sections.join('، ')
+                                        }}</span>
                                     </div>
                                 </td>
                                 <td class="px-4 py-3">
@@ -256,12 +326,16 @@ const colorClass = statusChipClass;
                                         <LogOut class="h-3.5 w-3.5 shrink-0 text-rose-500" />
                                         <span dir="ltr">{{ b.check_out_date ?? '—' }}</span>
                                     </div>
-                                    <div class="mt-1 inline-flex items-center gap-1 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-extrabold text-teal-700">
+                                    <div
+                                        class="mt-1 inline-flex items-center gap-1 rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-extrabold text-teal-700"
+                                    >
                                         <Moon class="h-3 w-3" /> {{ b.schedule_label }}
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="colorClass(b.status_color)">{{ b.status_label }}</span>
+                                    <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="colorClass(b.status_color)">{{
+                                        b.status_label
+                                    }}</span>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="font-extrabold text-slate-800">{{ money(b.total_amount) }}</div>
@@ -274,17 +348,78 @@ const colorClass = statusChipClass;
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center justify-center gap-1">
-                                        <TableActionButton v-if="can('bookings.edit')" variant="primary" :icon="Wallet" title="الدفعات والعربون" @click="openPayments(b)" />
-                                        <TableActionButton v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)" variant="view" :icon="Bell" title="تذكير واتساب" @click="sendReminder(b)" />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit')"
+                                            variant="primary"
+                                            :icon="Wallet"
+                                            title="الدفعات والعربون"
+                                            @click="openPayments(b)"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)"
+                                            variant="view"
+                                            :icon="Bell"
+                                            title="تذكير واتساب"
+                                            @click="sendReminder(b)"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('whatsapp.send') && b.client?.mobile && b.remaining_amount > 0 && !isClosedStatus(b.status)"
+                                            variant="view"
+                                            :icon="Wallet"
+                                            title="تذكير بالمتبقي"
+                                            @click="sendBalanceReminder(b)"
+                                        />
 
                                         <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في المسار -->
-                                        <TableActionButton v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)" variant="primary" :icon="Check" title="تأكيد الحجز" @click="changeStatus(b, 'confirmed')" />
-                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'confirmed'" variant="primary" :icon="LogIn" title="تسجيل الدخول" @click="changeStatus(b, 'checked_in')" />
-                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'checked_in'" variant="success" :icon="LogOut" title="تسجيل الخروج" @click="changeStatus(b, 'checked_out')" />
-                                        <TableActionButton v-if="can('bookings.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="router.visit(`/admin/bookings/chalets/${b.id}/edit`)" />
-                                        <TableActionButton v-if="can('bookings.edit') && !isClosedStatus(b.status)" variant="dark" :icon="CalendarClock" title="تأجيل" @click="changeStatus(b, 'postponed')" />
-                                        <TableActionButton v-if="can('bookings.edit') && !isClosedStatus(b.status)" variant="warning" :icon="X" title="إلغاء" @click="changeStatus(b, 'cancelled')" />
-                                        <TableActionButton v-if="can('bookings.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(b)" />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
+                                            variant="primary"
+                                            :icon="Check"
+                                            title="تأكيد الحجز"
+                                            @click="changeStatus(b, 'confirmed')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && b.status === 'confirmed'"
+                                            variant="primary"
+                                            :icon="LogIn"
+                                            title="تسجيل الدخول"
+                                            @click="changeStatus(b, 'checked_in')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && b.status === 'checked_in'"
+                                            variant="success"
+                                            :icon="LogOut"
+                                            title="تسجيل الخروج"
+                                            @click="changeStatus(b, 'checked_out')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit')"
+                                            variant="edit"
+                                            :icon="Pencil"
+                                            title="تعديل"
+                                            @click="router.visit(`/admin/bookings/chalets/${b.id}/edit`)"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                            variant="dark"
+                                            :icon="CalendarClock"
+                                            title="تأجيل"
+                                            @click="changeStatus(b, 'postponed')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                            variant="warning"
+                                            :icon="X"
+                                            title="إلغاء"
+                                            @click="changeStatus(b, 'cancelled')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.delete')"
+                                            variant="danger"
+                                            :icon="Trash2"
+                                            title="حذف"
+                                            @click="destroy(b)"
+                                        />
                                     </div>
                                 </td>
                             </tr>
@@ -300,7 +435,14 @@ const colorClass = statusChipClass;
                         v-for="l in bookings.links"
                         :key="l.label"
                         :href="l.url ?? '#'"
-                        :class="['rounded-lg px-3 py-1.5 text-xs font-bold', l.active ? 'bg-teal-600 text-white' : l.url ? 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50' : 'cursor-default text-slate-300']"
+                        :class="[
+                            'rounded-lg px-3 py-1.5 text-xs font-bold',
+                            l.active
+                                ? 'bg-teal-600 text-white'
+                                : l.url
+                                  ? 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+                                  : 'cursor-default text-slate-300',
+                        ]"
                         v-html="l.label"
                     />
                 </div>
@@ -312,7 +454,9 @@ const colorClass = statusChipClass;
             <div class="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                     <div>
-                        <h2 class="text-lg font-extrabold text-slate-900">الدفعات — <span dir="ltr">{{ payBooking.reference }}</span></h2>
+                        <h2 class="text-lg font-extrabold text-slate-900">
+                            الدفعات — <span dir="ltr">{{ payBooking.reference }}</span>
+                        </h2>
                         <p class="text-xs font-medium text-slate-500">
                             {{ payBooking.unit.name }} · {{ payBooking.client?.name ?? 'بلا نزيل' }} · {{ payBooking.schedule_label }}
                         </p>
@@ -327,8 +471,12 @@ const colorClass = statusChipClass;
                             <div class="text-base font-extrabold text-slate-800">{{ money(paySummary.total_amount) }}</div>
                         </div>
                         <div class="rounded-xl p-3 text-center" :class="paySummary.is_deposit_settled ? 'bg-emerald-50' : 'bg-amber-50'">
-                            <div class="text-[11px] font-bold" :class="paySummary.is_deposit_settled ? 'text-emerald-600' : 'text-amber-600'">العربون المطلوب</div>
-                            <div class="text-base font-extrabold" :class="paySummary.is_deposit_settled ? 'text-emerald-700' : 'text-amber-700'">{{ money(paySummary.deposit_amount) }}</div>
+                            <div class="text-[11px] font-bold" :class="paySummary.is_deposit_settled ? 'text-emerald-600' : 'text-amber-600'">
+                                العربون المطلوب
+                            </div>
+                            <div class="text-base font-extrabold" :class="paySummary.is_deposit_settled ? 'text-emerald-700' : 'text-amber-700'">
+                                {{ money(paySummary.deposit_amount) }}
+                            </div>
                         </div>
                         <div class="rounded-xl bg-sky-50 p-3 text-center">
                             <div class="text-[11px] font-bold text-sky-600">المسدَّد</div>
@@ -336,25 +484,52 @@ const colorClass = statusChipClass;
                         </div>
                         <div class="rounded-xl p-3 text-center" :class="paySummary.is_fully_paid ? 'bg-emerald-50' : 'bg-red-50'">
                             <div class="text-[11px] font-bold" :class="paySummary.is_fully_paid ? 'text-emerald-600' : 'text-red-600'">المتبقي</div>
-                            <div class="text-base font-extrabold" :class="paySummary.is_fully_paid ? 'text-emerald-700' : 'text-red-700'">{{ money(paySummary.remaining_amount) }}</div>
+                            <div class="text-base font-extrabold" :class="paySummary.is_fully_paid ? 'text-emerald-700' : 'text-red-700'">
+                                {{ money(paySummary.remaining_amount) }}
+                            </div>
                         </div>
                     </div>
 
                     <div class="grid gap-4 lg:grid-cols-[300px_1fr]">
-                        <form v-if="can('bookings.edit')" @submit.prevent="submitPayment" class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <form
+                            v-if="can('bookings.edit')"
+                            @submit.prevent="submitPayment"
+                            class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                        >
                             <h3 class="text-sm font-extrabold text-slate-800">تسجيل دفعة</h3>
 
                             <div class="grid grid-cols-3 gap-1">
-                                <button v-for="t in [['deposit','عربون'],['payment','دفعة'],['refund','استرداد']]" :key="t[0]"
-                                    type="button" @click="payForm.type = t[0]"
+                                <button
+                                    v-for="t in [
+                                        ['deposit', 'عربون'],
+                                        ['payment', 'دفعة'],
+                                        ['refund', 'استرداد'],
+                                    ]"
+                                    :key="t[0]"
+                                    type="button"
+                                    @click="payForm.type = t[0]"
                                     class="rounded-lg py-1.5 text-[11px] font-bold transition"
-                                    :class="payForm.type === t[0] ? (t[0] === 'refund' ? 'bg-red-500 text-white' : 'bg-emerald-600 text-white') : 'bg-white text-slate-600 ring-1 ring-slate-200'"
-                                >{{ t[1] }}</button>
+                                    :class="
+                                        payForm.type === t[0]
+                                            ? t[0] === 'refund'
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-emerald-600 text-white'
+                                            : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                                    "
+                                >
+                                    {{ t[1] }}
+                                </button>
                             </div>
 
                             <div>
                                 <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
-                                <input v-model.number="payForm.amount" type="number" min="0.01" step="0.01" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" />
+                                <input
+                                    v-model.number="payForm.amount"
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                                />
                                 <p v-if="payForm.errors.amount" class="mt-1 text-[11px] text-red-500">{{ payForm.errors.amount }}</p>
                             </div>
 
@@ -367,7 +542,11 @@ const colorClass = statusChipClass;
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">التاريخ</label>
-                                    <input v-model="payForm.paid_on" type="date" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs" />
+                                    <input
+                                        v-model="payForm.paid_on"
+                                        type="date"
+                                        class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs"
+                                    />
                                 </div>
                             </div>
 
@@ -376,12 +555,19 @@ const colorClass = statusChipClass;
                                 <input v-model="payForm.reference" dir="ltr" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
                             </div>
 
-                            <label v-if="payBooking.client?.mobile && payForm.type !== 'refund'" class="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700">
+                            <label
+                                v-if="payBooking.client?.mobile && payForm.type !== 'refund'"
+                                class="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700"
+                            >
                                 <input type="checkbox" v-model="payForm.notify" class="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600" />
                                 إشعار النزيل على واتساب
                             </label>
 
-                            <button type="submit" :disabled="payForm.processing || payForm.amount <= 0" class="w-full rounded-md bg-teal-600 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-50">
+                            <button
+                                type="submit"
+                                :disabled="payForm.processing || payForm.amount <= 0"
+                                class="w-full rounded-md bg-teal-600 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-50"
+                            >
                                 تسجيل الدفعة
                             </button>
 
@@ -409,13 +595,26 @@ const colorClass = statusChipClass;
                                 <tbody>
                                     <tr v-for="p in payments" :key="p.id" class="border-t border-slate-100">
                                         <td class="px-2 py-2">
-                                            <span class="rounded px-1.5 py-0.5 text-[10px] font-bold" :class="p.type === 'refund' ? 'bg-red-100 text-red-700' : p.type === 'deposit' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'">
+                                            <span
+                                                class="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                                                :class="
+                                                    p.type === 'refund'
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : p.type === 'deposit'
+                                                          ? 'bg-amber-100 text-amber-700'
+                                                          : 'bg-emerald-100 text-emerald-700'
+                                                "
+                                            >
                                                 {{ p.type_label }}
                                             </span>
                                         </td>
                                         <td class="px-2 py-2 text-slate-600" dir="ltr">{{ p.paid_on }}</td>
                                         <td class="px-2 py-2 text-slate-600">{{ p.method_label }}</td>
-                                        <td class="px-2 py-2 text-left font-extrabold" :class="p.signed_amount < 0 ? 'text-red-600' : 'text-slate-800'" dir="ltr">
+                                        <td
+                                            class="px-2 py-2 text-left font-extrabold"
+                                            :class="p.signed_amount < 0 ? 'text-red-600' : 'text-slate-800'"
+                                            dir="ltr"
+                                        >
                                             {{ p.signed_amount < 0 ? '−' : '' }}{{ money(p.amount) }}
                                         </td>
                                     </tr>
@@ -428,6 +627,5 @@ const colorClass = statusChipClass;
                 </div>
             </div>
         </div>
-
     </AppLayout>
 </template>

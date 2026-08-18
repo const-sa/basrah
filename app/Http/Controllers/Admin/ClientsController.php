@@ -4,13 +4,20 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\SendWhatsappMessage;
+use App\Models\Booking;
+use App\Models\BookingPayment;
+use App\Models\City;
 use App\Models\Client;
+use App\Models\Contract;
+use App\Models\Sale;
 use App\Models\Setting;
+use App\Models\Voucher;
 use App\Services\WaGateway;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -54,7 +61,7 @@ class ClientsController extends Controller
             'filters' => $filters,
             'stats' => $stats,
             // قائمة المدن المفعّلة لتعبئة قائمة الاختيار في نموذج العميل.
-            'cities' => \App\Models\City::where('is_active', true)->orderBy('name')->pluck('name'),
+            'cities' => City::where('is_active', true)->orderBy('name')->pluck('name'),
         ]);
     }
 
@@ -113,6 +120,185 @@ class ClientsController extends Controller
     }
 
     /**
+     * ملف العميل المتكامل (§5 من العرض المعتمد).
+     *
+     * الشاشة تجيب عن السؤال الذي يُطرح والعميل على الهاتف: من هذا؟ كم حجز
+     * لنا معه؟ كم دفع وكم عليه؟ وأين عقده وفاتورته؟ — فتُجمع حجوزاته
+     * ودفعاته وفواتيره وعقوده وسنداته في صفحة واحدة، وترتيبها بالأحدث
+     * لأن آخر تعامل هو المسؤول عنه غالبًا.
+     */
+    public function show(Client $client): Response
+    {
+        $bookings = $client->bookings()
+            ->with(['unit:id,name', 'eventType:id,name'])
+            ->orderByDesc('booking_date')
+            ->get();
+
+        $sales = $client->sales()
+            ->with('unit:id,name')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+
+        return Inertia::render('admin/clients/Show', [
+            'client' => [
+                'id' => $client->id,
+                'name' => $client->name,
+                'mobile' => $client->mobile,
+                'email' => $client->email,
+                'city' => $client->city,
+                'national_id' => $client->national_id,
+                'is_taxable' => $client->is_taxable,
+                'tax_number' => $client->tax_number,
+                'tax_address' => $client->tax_address,
+                'is_active' => $client->is_active,
+                'is_walk_in' => $client->is_walk_in,
+                'notes' => $client->notes,
+                'created_at' => $client->created_at?->format('Y-m-d'),
+            ],
+            'stats' => $this->profileStats($bookings, $sales),
+            'bookings' => $bookings->map(fn (Booking $b) => [
+                'id' => $b->id,
+                'reference' => $b->reference,
+                'booking_date' => $b->booking_date?->format('Y-m-d'),
+                'unit' => $b->unit?->name,
+                'unit_type' => $b->unit?->type,
+                'event_type' => $b->eventType?->name,
+                'period' => $b->periodLabel(),
+                'status' => $b->status,
+                'status_label' => $b->statusLabel(),
+                'color' => Booking::STATUS_COLORS[$b->status] ?? 'slate',
+                'total' => round((float) $b->total_amount, 2),
+                'paid' => round((float) $b->paid_amount, 2),
+                'remaining' => round((float) $b->total_amount - (float) $b->paid_amount, 2),
+            ])->values(),
+            'payments' => $client->payments()
+                ->with(['paymentMethod:id,name', 'booking:id,reference'])
+                ->orderByDesc('paid_on')
+                ->orderByDesc('booking_payments.id')
+                ->limit(100)
+                ->get()
+                ->map(fn (BookingPayment $p) => [
+                    'id' => $p->id,
+                    'booking_id' => $p->booking_id,
+                    'reference' => $p->booking?->reference,
+                    'paid_on' => $p->paid_on?->format('Y-m-d'),
+                    'type' => $p->type,
+                    'type_label' => BookingPayment::TYPES[$p->type] ?? $p->type,
+                    'method' => $p->paymentMethod?->name,
+                    // الاسترداد خروجٌ من الصندوق، فيُعرض بإشارته لا كدفعة.
+                    'amount' => round((float) $p->amount * ($p->type === 'refund' ? -1 : 1), 2),
+                ])->values(),
+            'sales' => $sales->map(fn (Sale $s) => [
+                'id' => $s->id,
+                'number' => $s->number,
+                'created_at' => $s->created_at?->format('Y-m-d'),
+                'unit' => $s->unit?->name,
+                'type' => $s->type,
+                'total' => round((float) $s->total_amount, 2),
+                'paid' => round((float) $s->paid_amount, 2),
+                'remaining' => round((float) $s->remainingAmount(), 2),
+            ])->values(),
+            'contracts' => $client->contracts()
+                ->with('booking:id,reference')
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn (Contract $c) => [
+                    'id' => $c->id,
+                    'number' => $c->number,
+                    'reference' => $c->booking?->reference,
+                    'status' => $c->status,
+                    'status_label' => $c->statusLabel(),
+                    'sent_at' => $c->sent_at?->format('Y-m-d'),
+                    'created_at' => $c->created_at?->format('Y-m-d'),
+                ])->values(),
+            'vouchers' => $client->vouchers()
+                ->where('status', 'posted')
+                ->orderByDesc('voucher_date')
+                ->limit(50)
+                ->get()
+                ->map(fn (Voucher $v) => [
+                    'id' => $v->id,
+                    'number' => $v->number,
+                    'voucher_date' => $v->voucher_date?->toDateString(),
+                    'type_label' => $v->typeLabel(),
+                    'amount' => round((float) $v->amount, 2),
+                    'description' => $v->description,
+                ])->values(),
+            'services' => $this->servicesUsed($bookings),
+        ]);
+    }
+
+    /**
+     * مؤشرات الملف: كم تعامل، وبكم، وكم بقي عليه، ومتى آخر مرة.
+     *
+     * @param  Collection<int, Booking>  $bookings
+     * @param  Collection<int, Sale>  $sales
+     * @return array<string, mixed>
+     */
+    private function profileStats(Collection $bookings, Collection $sales): array
+    {
+        // الملغى لا يُحتسب تعاملًا ولا يُطالَب به.
+        $live = $bookings->where('status', '!=', 'cancelled');
+
+        $bookingsValue = round((float) $live->sum('total_amount'), 2);
+        $bookingsPaid = round((float) $live->sum('paid_amount'), 2);
+        $salesValue = round((float) $sales->where('type', 'sale')->sum('total_amount'), 2);
+
+        return [
+            'bookings_count' => $live->count(),
+            'cancelled_count' => $bookings->where('status', 'cancelled')->count(),
+            'bookings_value' => $bookingsValue,
+            'paid' => $bookingsPaid,
+            'remaining' => round($bookingsValue - $bookingsPaid, 2),
+            'sales_count' => $sales->where('type', 'sale')->count(),
+            'sales_value' => $salesValue,
+            'lifetime_value' => round($bookingsValue + $salesValue, 2),
+            'last_visit' => $live->max('booking_date')?->format('Y-m-d'),
+            'upcoming' => $live->filter(
+                fn (Booking $b) => $b->booking_date && $b->booking_date->gte(now()->startOfDay()),
+            )->count(),
+        ];
+    }
+
+    /**
+     * الخدمات السابقة: ما اختاره العميل من باقات وخدمات إضافية عبر حجوزاته.
+     *
+     * الغاية بيعية لا إحصائية — من عرف أن العميل يأخذ الضيافة كل مرة عرضها
+     * عليه قبل أن يسأل.
+     *
+     * @param  Collection<int, Booking>  $bookings
+     * @return list<array<string, mixed>>
+     */
+    private function servicesUsed($bookings): array
+    {
+        $ids = $bookings->pluck('id');
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        $addons = Booking::whereIn('id', $ids)
+            ->with('addons:id,name')
+            ->get()
+            ->flatMap(fn (Booking $b) => $b->addons)
+            ->groupBy('name')
+            ->map(fn ($group, string $name) => ['name' => $name, 'times' => $group->count(), 'kind' => 'خدمة'])
+            ->values();
+
+        $packages = $bookings
+            ->filter(fn (Booking $b) => $b->package_id)
+            ->load('package:id,name')
+            ->groupBy(fn (Booking $b) => $b->package?->name ?? '—')
+            ->map(fn ($group, string $name) => ['name' => $name, 'times' => $group->count(), 'kind' => 'باقة'])
+            ->values();
+
+        // collect() تُخرج النتيجة من مجموعة إيلوكوينت إلى مجموعة عادية: الصفوف
+        // هنا مصفوفاتٌ لا نماذج، ودمجها في مجموعة نماذج يطلب منها مفتاحًا.
+        return collect($packages)->merge($addons)->sortByDesc('times')->values()->all();
+    }
+
+    /**
      * @return array<string, string>
      */
     private function parseFilters(Request $request): array
@@ -148,7 +334,7 @@ class ClientsController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $client = $this->persist($request, new Client());
+        $client = $this->persist($request, new Client);
 
         $this->sendWelcome($client);
 
@@ -169,7 +355,7 @@ class ClientsController extends Controller
             'mobile' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $client = (new Client())->fill([
+        $client = (new Client)->fill([
             'name' => $data['name'],
             'mobile' => $data['mobile'] ?? null,
             'is_active' => true,
@@ -231,6 +417,7 @@ class ClientsController extends Controller
             'tax_number' => ['nullable', 'required_if:is_taxable,true', 'string', 'max:100'],
             'tax_address' => ['nullable', 'string', 'max:500'],
             'is_active' => ['boolean'],
+            'notes' => ['nullable', 'string', 'max:2000'],
         ], [
             'tax_number.required_if' => 'الرقم الضريبي مطلوب للعميل الضريبي',
         ]);
@@ -247,6 +434,9 @@ class ClientsController extends Controller
             'tax_number' => $taxable ? ($data['tax_number'] ?? null) : null,
             'tax_address' => $taxable ? ($data['tax_address'] ?? null) : null,
             'is_active' => $data['is_active'] ?? true,
+            // الملاحظات تُحرَّر من الملف وحده، فلا يمسحها نموذج القائمة
+            // الذي لا يرسل الحقل أصلًا.
+            'notes' => array_key_exists('notes', $data) ? $data['notes'] : $client->notes,
         ])->save();
 
         return $client;

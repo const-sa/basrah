@@ -175,6 +175,7 @@ export function useNavigation() {
                 { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view' },
                 { title: t('nav.journal'), href: '/admin/accounting/journal', icon: FileText, perm: 'journal.view' },
                 { title: t('nav.vouchers'), href: '/admin/accounting/vouchers', icon: Receipt, perm: 'vouchers.view' },
+                { title: t('nav.expenses'), href: '/admin/accounting/expenses', icon: Receipt, perm: 'expenses.view' },
                 { title: t('nav.fin_reports'), href: '/admin/accounting/reports', icon: FileBarChart2, perm: 'fin_reports.view' },
             ],
         },

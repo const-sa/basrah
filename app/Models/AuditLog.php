@@ -54,6 +54,8 @@ class AuditLog extends Model
         UnitSection::class => 'قسم وحدة',
         UnitPrice::class => 'تسعيرة',
         Voucher::class => 'سند',
+        Expense::class => 'مصروف',
+        ExpenseCategory::class => 'نوع مصروف',
         JournalEntry::class => 'قيد محاسبي',
         Account::class => 'حساب',
         Sale::class => 'فاتورة بيع',

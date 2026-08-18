@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DemoAccountsController;
 use App\Http\Controllers\Admin\DepartmentsController;
 use App\Http\Controllers\Admin\EventTypesController;
+use App\Http\Controllers\Admin\ExpensesController;
 use App\Http\Controllers\Admin\FacilitiesController;
 use App\Http\Controllers\Admin\FinancialReportsController;
 use App\Http\Controllers\Admin\GeneralSettingsController;
@@ -167,6 +168,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('bookings/{booking}/payments', [BookingsController::class, 'payments'])->middleware('perm:bookings.view')->name('bookings.payments');
         Route::post('bookings/{booking}/payments', [BookingsController::class, 'storePayment'])->middleware('perm:bookings.edit')->name('bookings.payments.store');
         Route::post('bookings/{booking}/remind', [BookingsController::class, 'remind'])->middleware('perm:whatsapp.send')->name('bookings.remind');
+        // تذكير المتبقي وإرسال الفاتورة (§14)
+        Route::post('bookings/{booking}/remind-balance', [BookingsController::class, 'remindBalance'])->middleware('perm:whatsapp.send')->name('bookings.remind.balance');
+        Route::post('bookings/{booking}/invoice/send', [BookingsController::class, 'sendInvoice'])->middleware('perm:whatsapp.send')->name('bookings.invoice.send');
         Route::patch('bookings/{booking}/notes', [BookingsController::class, 'updateNotes'])->middleware('perm:bookings.edit')->name('bookings.notes');
         Route::get('bookings/{booking}/bond', [BookingsController::class, 'bond'])->middleware('perm:bookings.view')->name('bookings.bond');
         Route::get('bookings/{booking}/invoice', [BookingsController::class, 'invoice'])->middleware('perm:bookings.view')->name('bookings.invoice');
@@ -258,6 +262,21 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('accounting/vouchers/{voucher}/post', [AccountingController::class, 'postVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.post');
         Route::post('accounting/vouchers/{voucher}/cancel', [AccountingController::class, 'cancelVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.cancel');
 
+        // المصروفات والتكاليف (§9) — سندات صرف بوجهٍ تشغيلي
+        Route::get('accounting/expenses', [ExpensesController::class, 'index'])->middleware('perm:expenses.view')->name('expenses.index');
+        Route::get('accounting/expenses/export', [ExpensesController::class, 'export'])->middleware('perm:expenses.view')->name('expenses.export');
+        Route::post('accounting/expenses', [ExpensesController::class, 'store'])->middleware('perm:expenses.create')->name('expenses.store');
+        Route::put('accounting/expenses/{expense}', [ExpensesController::class, 'update'])->middleware('perm:expenses.edit')->name('expenses.update');
+        Route::post('accounting/expenses/{expense}/post', [ExpensesController::class, 'post'])->middleware('perm:expenses.approve')->name('expenses.post');
+        Route::post('accounting/expenses/{expense}/cancel', [ExpensesController::class, 'cancel'])->middleware('perm:expenses.approve')->name('expenses.cancel');
+        Route::delete('accounting/expenses/{expense}', [ExpensesController::class, 'destroy'])->middleware('perm:expenses.delete')->name('expenses.destroy');
+
+        // أنواع المصروف — تُدار من الشاشة نفسها لا من شجرة الحسابات
+        Route::post('accounting/expense-categories', [ExpensesController::class, 'storeCategory'])->middleware('perm:expenses.create')->name('expense_categories.store');
+        Route::put('accounting/expense-categories/{category}', [ExpensesController::class, 'updateCategory'])->middleware('perm:expenses.edit')->name('expense_categories.update');
+        Route::patch('accounting/expense-categories/{category}/toggle', [ExpensesController::class, 'toggleCategory'])->middleware('perm:expenses.edit')->name('expense_categories.toggle');
+        Route::delete('accounting/expense-categories/{category}', [ExpensesController::class, 'destroyCategory'])->middleware('perm:expenses.delete')->name('expense_categories.destroy');
+
         Route::get('accounting/reports', [FinancialReportsController::class, 'index'])->middleware('perm:fin_reports.view')->name('fin_reports.index');
     });
 
@@ -332,6 +351,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::post('clients', [ClientsController::class, 'store'])->middleware('perm:clients.create')->name('clients.store');
     // إضافة سريعة من شاشات الحجز — قبل مسارات {client} كي لا تُفسَّر "quick" معرّفًا
     Route::post('clients/quick', [ClientsController::class, 'quickStore'])->middleware('perm:clients.create')->name('clients.quick');
+    // ملف العميل — بعد المسارات الثابتة كي لا تُفسَّر «export» معرّفًا
+    Route::get('clients/{client}', [ClientsController::class, 'show'])->middleware('perm:clients.view')->name('clients.show');
     Route::put('clients/{client}', [ClientsController::class, 'update'])->middleware('perm:clients.edit')->name('clients.update');
     Route::patch('clients/{client}/toggle', [ClientsController::class, 'toggle'])->middleware('perm:clients.edit')->name('clients.toggle');
     Route::delete('clients/{client}', [ClientsController::class, 'destroy'])->middleware('perm:clients.delete')->name('clients.destroy');

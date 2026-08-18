@@ -5,6 +5,7 @@ namespace App\Support\Reports;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\CostCenter;
+use App\Models\Expense;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Sale;
@@ -37,8 +38,164 @@ class FinanceReports
             self::expensesByCategory(),
             self::revenueByUnit(),
             self::revenueByEmployee(),
+            self::revenueByPaymentMethod(),
+            self::revenueByDepartment(),
             self::unitProfit(),
         ];
+    }
+
+    /**
+     * الإيرادات حسب طريقة الدفع (§11).
+     *
+     * تُقرأ من المقبوض لا من قيمة الحجز: طريقة الدفع صفةُ المال الذي دخل،
+     * والحجز غير المسدَّد لا طريقة دفع له بعد. والمصدران بابان — دفعات
+     * الحجوزات وفواتير الكاشير — يجتمعان على الطريقة نفسها.
+     */
+    private static function revenueByPaymentMethod(): ReportDefinition
+    {
+        return new ReportDefinition(
+            key: 'revenue-by-payment-method',
+            label: 'الإيرادات حسب طريقة الدفع',
+            description: 'ما حُصِّل بكل طريقة دفع: نقدًا، تحويلًا، شبكة، وغيرها.',
+            group: 'المالية',
+            filters: ['range'],
+            columns: [
+                ['key' => 'method', 'label' => 'طريقة الدفع'],
+                ['key' => 'bookings', 'label' => 'دفعات حجوزات', 'type' => 'number'],
+                ['key' => 'bookings_amount', 'label' => 'مبلغ الحجوزات', 'type' => 'currency'],
+                ['key' => 'sales', 'label' => 'فواتير', 'type' => 'number'],
+                ['key' => 'sales_amount', 'label' => 'مبلغ الفواتير', 'type' => 'currency'],
+                ['key' => 'total', 'label' => 'الإجمالي', 'type' => 'currency'],
+                ['key' => 'share', 'label' => 'النسبة %', 'type' => 'number'],
+            ],
+            builder: function (array $filters) {
+                $payments = BookingPayment::query()
+                    ->when($filters['from'] ?? null, fn ($q, $d) => $q->whereDate('paid_on', '>=', $d))
+                    ->when($filters['to'] ?? null, fn ($q, $d) => $q->whereDate('paid_on', '<=', $d))
+                    ->with('paymentMethod:id,name')
+                    ->get(['payment_method_id', 'type', 'amount'])
+                    ->groupBy(fn (BookingPayment $p) => $p->paymentMethod?->name ?? 'غير محددة');
+
+                $sales = Sale::query()
+                    ->sales()
+                    ->when($filters['from'] ?? null, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
+                    ->when($filters['to'] ?? null, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
+                    ->with('paymentMethod:id,name')
+                    ->get(['payment_method_id', 'paid_amount'])
+                    ->groupBy(fn (Sale $s) => $s->paymentMethod?->name ?? 'غير محددة');
+
+                $rows = $payments->keys()->merge($sales->keys())->unique()
+                    ->map(function (string $method) use ($payments, $sales) {
+                        $group = $payments->get($method, collect());
+
+                        // الاسترداد يخرج بنفس الطريقة التي دخل بها، فيُطرح منها.
+                        $bookingsAmount = round(
+                            (float) $group->whereIn('type', ['deposit', 'payment'])->sum('amount')
+                            - (float) $group->where('type', 'refund')->sum('amount'),
+                            2,
+                        );
+                        $salesAmount = round((float) $sales->get($method, collect())->sum('paid_amount'), 2);
+
+                        return [
+                            'method' => $method,
+                            'bookings' => $group->count(),
+                            'bookings_amount' => $bookingsAmount,
+                            'sales' => $sales->get($method, collect())->count(),
+                            'sales_amount' => $salesAmount,
+                            'total' => round($bookingsAmount + $salesAmount, 2),
+                        ];
+                    })
+                    ->sortByDesc('total')
+                    ->values();
+
+                $total = round((float) $rows->sum('total'), 2);
+
+                return [
+                    'rows' => $rows->map(fn (array $r) => [
+                        ...$r,
+                        'share' => $total > 0 ? round($r['total'] / $total * 100, 1) : 0.0,
+                    ])->all(),
+                    'summary' => [
+                        ['label' => 'إجمالي المحصَّل', 'value' => $total, 'type' => 'currency'],
+                        ['label' => 'من الحجوزات', 'value' => round((float) $rows->sum('bookings_amount'), 2), 'type' => 'currency'],
+                        ['label' => 'من الفواتير', 'value' => round((float) $rows->sum('sales_amount'), 2), 'type' => 'currency'],
+                        ['label' => 'عدد الطرق المستعملة', 'value' => $rows->count(), 'type' => 'number'],
+                    ],
+                ];
+            },
+        );
+    }
+
+    /**
+     * الإيرادات حسب القسم (§11).
+     *
+     * القسم نشاطٌ تجاري مستقل (المسابح، القاعات، المحل)، وفواتير الكاشير
+     * تحمله. والحجوزات لا قسم لها فتُعرض في سطرٍ باسمها — إخفاؤها يجعل
+     * مجموع «الإيرادات حسب القسم» أقلّ من إيراد المؤسسة بلا سبب ظاهر.
+     */
+    private static function revenueByDepartment(): ReportDefinition
+    {
+        return new ReportDefinition(
+            key: 'revenue-by-department',
+            label: 'الإيرادات حسب القسم',
+            description: 'حصّة كل قسم من الإيراد: المسابح والمحل والقاعات والشاليهات.',
+            group: 'المالية',
+            filters: ['range'],
+            columns: [
+                ['key' => 'department', 'label' => 'القسم'],
+                ['key' => 'count', 'label' => 'عدد المستندات', 'type' => 'number'],
+                ['key' => 'amount', 'label' => 'الإيراد', 'type' => 'currency'],
+                ['key' => 'collected', 'label' => 'المحصَّل منه', 'type' => 'currency'],
+                ['key' => 'share', 'label' => 'النسبة %', 'type' => 'number'],
+            ],
+            builder: function (array $filters) {
+                $sales = Sale::query()
+                    ->sales()
+                    ->when($filters['from'] ?? null, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
+                    ->when($filters['to'] ?? null, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
+                    ->with('department:id,name')
+                    ->get(['department_id', 'total_amount', 'paid_amount'])
+                    ->groupBy(fn (Sale $s) => $s->department?->name ?? 'مبيعات بلا قسم');
+
+                $rows = $sales->map(fn (Collection $group, string $department) => [
+                    'department' => $department,
+                    'count' => $group->count(),
+                    'amount' => round((float) $group->sum('total_amount'), 2),
+                    'collected' => round((float) $group->sum('paid_amount'), 2),
+                ]);
+
+                $bookings = Booking::query()
+                    ->when($filters['from'] ?? null, fn ($q, $d) => $q->whereDate('booking_date', '>=', $d))
+                    ->when($filters['to'] ?? null, fn ($q, $d) => $q->whereDate('booking_date', '<=', $d))
+                    ->where('status', '!=', 'cancelled')
+                    ->get(['total_amount', 'paid_amount']);
+
+                if ($bookings->isNotEmpty()) {
+                    $rows = $rows->push([
+                        'department' => 'الحجوزات (قاعات وشاليهات)',
+                        'count' => $bookings->count(),
+                        'amount' => round((float) $bookings->sum('total_amount'), 2),
+                        'collected' => round((float) $bookings->sum('paid_amount'), 2),
+                    ]);
+                }
+
+                $total = round((float) $rows->sum('amount'), 2);
+
+                $rows = $rows
+                    ->map(fn (array $r) => [...$r, 'share' => $total > 0 ? round($r['amount'] / $total * 100, 1) : 0.0])
+                    ->sortByDesc('amount')
+                    ->values();
+
+                return [
+                    'rows' => $rows->all(),
+                    'summary' => [
+                        ['label' => 'إجمالي الإيراد', 'value' => $total, 'type' => 'currency'],
+                        ['label' => 'المحصَّل منه', 'value' => round((float) $rows->sum('collected'), 2), 'type' => 'currency'],
+                        ['label' => 'عدد الأقسام', 'value' => $rows->count(), 'type' => 'number'],
+                    ],
+                ];
+            },
+        );
     }
 
     /**
@@ -285,34 +442,53 @@ class FinanceReports
         return new ReportDefinition(
             key: 'expenses-by-category',
             label: 'المصروفات حسب التصنيف',
-            description: 'سندات الصرف والمصروف مجمَّعة بحسابها ومركز تكلفتها.',
+            description: 'المصروفات المرحَّلة مجمَّعة بنوعها، وسندات الصرف بحسابها.',
             group: 'المالية',
             filters: ['range'],
             columns: [
                 ['key' => 'category', 'label' => 'التصنيف'],
-                ['key' => 'count', 'label' => 'عدد السندات', 'type' => 'number'],
+                ['key' => 'count', 'label' => 'عدد المستندات', 'type' => 'number'],
                 ['key' => 'amount', 'label' => 'المبلغ', 'type' => 'currency'],
                 ['key' => 'share', 'label' => 'النسبة %', 'type' => 'number'],
             ],
             builder: function (array $filters) {
+                // المصروف بابان: مستند مصروف (§9) بنوعه، وسند صرف للموردين
+                // بحسابه. والتقرير يجمعهما لأن السؤال «فيمَ صُرف» لا «من أي
+                // شاشة سُجّل».
+                $expenses = Expense::query()
+                    ->posted()
+                    ->between($filters['from'] ?? null, $filters['to'] ?? null)
+                    ->with('category:id,name')
+                    ->get(['expense_category_id', 'amount'])
+                    ->groupBy(fn (Expense $e) => $e->category?->name ?? 'بلا نوع');
+
                 $vouchers = Voucher::query()
-                    ->whereIn('type', ['payment', 'expense'])
+                    ->where('type', 'payment')
                     ->where('status', 'posted')
                     ->when($filters['from'] ?? null, fn ($q, $d) => $q->whereDate('voucher_date', '>=', $d))
                     ->when($filters['to'] ?? null, fn ($q, $d) => $q->whereDate('voucher_date', '<=', $d))
                     ->with('account:id,name')
-                    ->get();
+                    ->get(['account_id', 'amount'])
+                    ->groupBy(fn (Voucher $v) => $v->account?->name ?? 'بلا تصنيف');
 
-                $total = round((float) $vouchers->sum('amount'), 2);
+                $total = round((float) ($expenses->flatten()->sum('amount') + $vouchers->flatten()->sum('amount')), 2);
+                $documents = $expenses->flatten()->count() + $vouchers->flatten()->count();
 
-                $rows = $vouchers
-                    ->groupBy(fn (Voucher $v) => $v->account?->name ?? 'بلا تصنيف')
-                    ->map(fn (Collection $group, string $category) => [
-                        'category' => $category,
-                        'count' => $group->count(),
-                        'amount' => round((float) $group->sum('amount'), 2),
-                        'share' => $total > 0 ? round((float) $group->sum('amount') / $total * 100, 1) : 0.0,
-                    ])
+                $rows = $expenses->keys()->merge($vouchers->keys())->unique()
+                    ->map(function (string $category) use ($expenses, $vouchers, $total) {
+                        $amount = round(
+                            (float) $expenses->get($category, collect())->sum('amount')
+                            + (float) $vouchers->get($category, collect())->sum('amount'),
+                            2,
+                        );
+
+                        return [
+                            'category' => $category,
+                            'count' => $expenses->get($category, collect())->count() + $vouchers->get($category, collect())->count(),
+                            'amount' => $amount,
+                            'share' => $total > 0 ? round($amount / $total * 100, 1) : 0.0,
+                        ];
+                    })
                     ->sortByDesc('amount')
                     ->values();
 
@@ -320,7 +496,7 @@ class FinanceReports
                     'rows' => $rows->all(),
                     'summary' => [
                         ['label' => 'إجمالي المصروف', 'value' => $total, 'type' => 'currency'],
-                        ['label' => 'عدد السندات', 'value' => $vouchers->count(), 'type' => 'number'],
+                        ['label' => 'عدد المستندات', 'value' => $documents, 'type' => 'number'],
                         ['label' => 'عدد التصنيفات', 'value' => $rows->count(), 'type' => 'number'],
                     ],
                 ];

@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\BookingPayment;
+use App\Models\Client;
 use App\Models\CostCenter;
 use App\Models\Employee;
 use App\Models\Item;
+use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use App\Models\Sale;
 use App\Models\Unit;
 use Carbon\CarbonImmutable;
@@ -42,6 +46,14 @@ class DashboardController extends Controller
                 ? $this->posStats($user, $today, $monthStart) : null,
             'profitability' => $user->hasPermission('fin_reports.view')
                 ? $this->profitability($monthStart, $today) : [],
+            'finance' => $user->hasPermission('fin_reports.view')
+                ? $this->monthFinance($monthStart, $today) : null,
+            'clients' => $user->hasPermission('clients.view') ? [
+                'total' => Client::where('is_walk_in', false)->count(),
+                'new_this_month' => Client::where('is_walk_in', false)
+                    ->whereDate('created_at', '>=', $monthStart->toDateString())
+                    ->count(),
+            ] : null,
             'hr' => $user->hasPermission('staff.view') ? $this->hrStats() : null,
             'alerts' => $this->alerts($user),
         ]);
@@ -57,6 +69,15 @@ class DashboardController extends Controller
         $monthly = $base()->blocking()
             ->whereBetween('booking_date', [$monthStart->toDateString(), $monthStart->endOfMonth()->toDateString()]);
 
+        // الوحدات المشغولة اليوم تُحسب بالوحدات لا بالحجوزات: قاعةٌ فيها
+        // حجزان صباحي ومسائي مشغولةٌ مرةً واحدة في نظر من يسأل «ما المتاح؟».
+        $occupied = $base()->blocking()
+            ->whereDate('booking_date', $today->toDateString())
+            ->distinct()
+            ->count('unit_id');
+
+        $units = Unit::visibleTo($user)->where('is_active', true)->count();
+
         return [
             'today' => $base()->blocking()->whereDate('booking_date', $today->toDateString())->count(),
             'upcoming' => $base()->blocking()->whereDate('booking_date', '>', $today->toDateString())->count(),
@@ -69,6 +90,66 @@ class DashboardController extends Controller
             ),
             // نسبة إشغال الشهر = ليالٍ محجوزة ÷ (عدد الوحدات × أيام الشهر)
             'occupancy' => $this->occupancy($user, $monthStart),
+
+            // §13: المشغول والمتاح الآن، وإيراد اليوم، وملغى الشهر.
+            'units_total' => $units,
+            'units_occupied' => $occupied,
+            'units_available' => max(0, $units - $occupied),
+            'today_value' => round(
+                (float) $base()->blocking()->whereDate('booking_date', $today->toDateString())->sum('total_amount'),
+                2,
+            ),
+            'collected_today' => $this->collectedToday($user, $today),
+            'cancelled_month' => $base()
+                ->where('status', 'cancelled')
+                ->whereBetween('booking_date', [$monthStart->toDateString(), $monthStart->endOfMonth()->toDateString()])
+                ->count(),
+        ];
+    }
+
+    /**
+     * ما دخل الصندوق اليوم من دفعات الحجوزات — والاسترداد يُطرح لأنه خروج.
+     */
+    private function collectedToday($user, CarbonImmutable $today): float
+    {
+        $payments = BookingPayment::query()
+            ->whereHas('booking', fn ($q) => $q->visibleTo($user))
+            ->whereDate('paid_on', $today->toDateString())
+            ->get(['type', 'amount']);
+
+        return round(
+            (float) $payments->whereIn('type', ['deposit', 'payment'])->sum('amount')
+            - (float) $payments->where('type', 'refund')->sum('amount'),
+            2,
+        );
+    }
+
+    /**
+     * إيراد الشهر ومصروفه وصافي ربحه (§13) — من الدفاتر لا من الشاشات.
+     *
+     * @return array<string, float>
+     */
+    private function monthFinance(CarbonImmutable $monthStart, CarbonImmutable $today): array
+    {
+        $totals = JournalLine::query()
+            ->join('accounts', 'accounts.id', '=', 'journal_lines.account_id')
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
+            ->whereIn('journal_entries.status', JournalEntry::EFFECTIVE_STATUSES)
+            ->whereIn('accounts.type', ['revenue', 'expense'])
+            ->whereBetween('journal_entries.entry_date', [$monthStart->toDateString(), $today->toDateString()])
+            ->groupBy('accounts.type')
+            ->selectRaw('accounts.type, SUM(journal_lines.debit) AS debit, SUM(journal_lines.credit) AS credit')
+            ->get();
+
+        $revenue = (float) ($totals->firstWhere('type', 'revenue')?->credit ?? 0)
+            - (float) ($totals->firstWhere('type', 'revenue')?->debit ?? 0);
+        $expense = (float) ($totals->firstWhere('type', 'expense')?->debit ?? 0)
+            - (float) ($totals->firstWhere('type', 'expense')?->credit ?? 0);
+
+        return [
+            'revenue' => round($revenue, 2),
+            'expense' => round($expense, 2),
+            'profit' => round($revenue - $expense, 2),
         ];
     }
 

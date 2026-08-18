@@ -13,6 +13,8 @@ use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeGroup;
 use App\Models\EventType;
+use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\Facility;
 use App\Models\Item;
 use App\Models\MeasureUnit;
@@ -68,6 +70,8 @@ class Archive
         'measure-units' => ['model' => MeasureUnit::class, 'label' => 'وحدة قياس', 'group' => 'المبيعات والمخزون'],
 
         'vouchers' => ['model' => Voucher::class, 'label' => 'سند', 'group' => 'المحاسبة'],
+        'expenses' => ['model' => Expense::class, 'label' => 'مصروف', 'group' => 'المحاسبة'],
+        'expense-categories' => ['model' => ExpenseCategory::class, 'label' => 'نوع مصروف', 'group' => 'المحاسبة'],
         'accounts' => ['model' => Account::class, 'label' => 'حساب', 'group' => 'المحاسبة'],
         'payment-methods' => ['model' => PaymentMethod::class, 'label' => 'طريقة دفع', 'group' => 'المحاسبة'],
 

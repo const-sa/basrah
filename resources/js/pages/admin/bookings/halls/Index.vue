@@ -9,60 +9,128 @@ import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
 import { toHijri } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Bell, CalendarClock, Check, Columns3, Eye, FileSignature, FileText, Loader2, LogIn, LogOut, MoreVertical, Pencil, Plus, Receipt, Search, StickyNote, Trash2, Wallet, X } from 'lucide-vue-next';
+import {
+    Bell,
+    CalendarClock,
+    Check,
+    Columns3,
+    Eye,
+    FileSignature,
+    FileText,
+    Loader2,
+    LogIn,
+    LogOut,
+    MoreVertical,
+    Pencil,
+    Plus,
+    Receipt,
+    Search,
+    StickyNote,
+    Trash2,
+    Wallet,
+    X,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
-interface SectionOption { id: number; name: string; gender: string }
+interface SectionOption {
+    id: number;
+    name: string;
+    gender: string;
+}
 interface UnitOption {
-    id: number; name: string; code: string; type: string;
+    id: number;
+    name: string;
+    code: string;
+    type: string;
     bookable_mode: 'whole' | 'sections' | 'both';
     privacy_mode: 'open' | 'exclusive';
     sections: SectionOption[];
 }
-interface EventTypeOption { id: number; unit_id: number; name: string; color: string; price: number }
+interface EventTypeOption {
+    id: number;
+    unit_id: number;
+    name: string;
+    color: string;
+    price: number;
+}
 
 interface Booking {
-    id: number; reference: string;
+    id: number;
+    reference: string;
     unit: { id: number; name: string; code: string };
     client: { id: number; name: string; mobile: string | null } | null;
     event_type: { id: number; name: string; color: string } | null;
     package: { id: number; name: string } | null;
     scope: 'whole' | 'sections';
-    sections: string[]; section_ids: number[];
-    period: string; period_label: string;
+    sections: string[];
+    section_ids: number[];
+    period: string;
+    period_label: string;
     booking_date: string;
-    days_count: number; last_day_date: string;
-    status: string; status_label: string; status_color: string;
+    days_count: number;
+    last_day_date: string;
+    status: string;
+    status_label: string;
+    status_color: string;
     is_online: boolean;
-    total_amount: number; package_amount: number; event_fee_amount: number;
-    deposit_amount: number; paid_amount: number; remaining_amount: number;
+    total_amount: number;
+    package_amount: number;
+    event_fee_amount: number;
+    deposit_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
     is_deposit_settled: boolean;
-    guests_count: number | null; notes: string | null;
+    guests_count: number | null;
+    notes: string | null;
     contract: { id: number; number: string } | null;
     has_payments: boolean;
     // أعمدة الدفتر: من مبلغ الحجز إلى المسترجع
-    subtotal_amount: number; discount_amount: number; tax_amount: number;
+    subtotal_amount: number;
+    discount_amount: number;
+    tax_amount: number;
     addons_amount: number;
     paid_by_method: Record<number, number>;
-    refunded_amount: number; payment_status: string;
+    refunded_amount: number;
+    payment_status: string;
 }
 
-interface MethodColumn { key: number; label: string }
+interface MethodColumn {
+    key: number;
+    label: string;
+}
 
 interface LedgerTotals {
-    subtotal: number; discount: number; deposit: number; tax: number;
-    total: number; paid: number; paid_by_method: Record<number, number>;
-    remaining: number; refunded: number; count: number;
+    subtotal: number;
+    discount: number;
+    deposit: number;
+    tax: number;
+    total: number;
+    paid: number;
+    paid_by_method: Record<number, number>;
+    remaining: number;
+    refunded: number;
+    count: number;
 }
 
 interface Payment {
-    id: number; type: string; type_label: string; method_label: string;
-    amount: number; signed_amount: number; paid_on: string;
-    reference: string | null; notes: string | null; received_by: string | null;
+    id: number;
+    type: string;
+    type_label: string;
+    method_label: string;
+    amount: number;
+    signed_amount: number;
+    paid_on: string;
+    reference: string | null;
+    notes: string | null;
+    received_by: string | null;
 }
 interface PaymentSummary {
-    total_amount: number; deposit_amount: number; paid_amount: number;
-    remaining_amount: number; is_deposit_settled: boolean; is_fully_paid: boolean;
+    total_amount: number;
+    deposit_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
+    is_deposit_settled: boolean;
+    is_fully_paid: boolean;
 }
 
 const props = defineProps<{
@@ -141,11 +209,7 @@ const PRESETS: ColumnPreset[] = [
     { key: 'full', label: 'كامل', columns: COLUMNS.map((c) => c.key) },
 ];
 
-const { shows, toggle: toggleColumn, applyPreset, activePreset, countOf } = useTableColumns(
-    'bookings.halls.columns',
-    COLUMNS,
-    PRESETS,
-);
+const { shows, toggle: toggleColumn, applyPreset, activePreset, countOf } = useTableColumns('bookings.halls.columns', COLUMNS, PRESETS);
 
 /** عمود «تفصيل طرق الدفع» يفتح عمودًا لكل طريقة، فيُحسب بعددها. */
 const methodColumnCount = computed(() => (shows('methods') ? props.methods.length : 0));
@@ -155,15 +219,13 @@ const tailColSpan = computed(() => countOf(TAIL_KEYS));
 const controlColSpan = computed(() => countOf(CONTROL_KEYS));
 
 // صف «لا نتائج» يمتدّ على المعروض وحده.
-const columnCount = computed(
-    () => countOf([...IDENTITY_KEYS, ...MONEY_KEYS, ...TAIL_KEYS, ...CONTROL_KEYS]) + methodColumnCount.value,
-);
+const columnCount = computed(() => countOf([...IDENTITY_KEYS, ...MONEY_KEYS, ...TAIL_KEYS, ...CONTROL_KEYS]) + methodColumnCount.value);
 
 const columnsOpen = ref(false);
 
 const payStatusClass = (status: string) =>
     ({
-        'مسدّدة': 'bg-emerald-100 text-emerald-800',
+        مسدّدة: 'bg-emerald-100 text-emerald-800',
         'مسدّدة جزئيًا': 'bg-amber-100 text-amber-800',
         'غير مسدّدة': 'bg-red-100 text-red-800',
     })[status] ?? 'bg-slate-200 text-slate-800';
@@ -184,7 +246,7 @@ const payLoading = ref(false);
 
 const payForm = useForm({
     type: 'deposit',
-    payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
+    payment_method_id: props.meta.payment_methods[0]?.id ?? (null as number | null),
     amount: 0,
     paid_on: new Date().toISOString().slice(0, 10),
     reference: '',
@@ -216,9 +278,7 @@ const openPayments = (b: Booking) => {
     payForm.clearErrors();
     // الاقتراح الافتراضي: ما تبقّى من العربون، وإلا فالمتبقي كاملًا
     payForm.type = b.is_deposit_settled ? 'payment' : 'deposit';
-    payForm.amount = b.is_deposit_settled
-        ? b.remaining_amount
-        : Math.min(b.deposit_amount - b.paid_amount, b.remaining_amount);
+    payForm.amount = b.is_deposit_settled ? b.remaining_amount : Math.min(b.deposit_amount - b.paid_amount, b.remaining_amount);
     loadPayments(b);
 };
 
@@ -278,6 +338,13 @@ const sendReminder = (b: Booking) => {
     }
 };
 
+/** تذكير بالمبلغ المتبقي — غير تذكير الموعد، ولا يُعرض لحجزٍ مسدَّد. */
+const sendBalanceReminder = (b: Booking) => {
+    if (confirm(`إرسال تذكير بالمبلغ المتبقي على واتساب ${b.client?.mobile ?? ''}؟`)) {
+        router.post(`/admin/bookings/${b.id}/remind-balance`, {}, { preserveScroll: true });
+    }
+};
+
 // الإلغاء والتأجيل يخرجان الحجز من مساره، فيُسأل عن السبب ليبقى في سجل التدقيق.
 const REASON_PROMPTS: Record<string, string> = {
     cancelled: 'سبب الإلغاء (اختياري):',
@@ -286,8 +353,13 @@ const REASON_PROMPTS: Record<string, string> = {
 
 const changeStatus = (b: Booking, status: string) => {
     const ask = REASON_PROMPTS[status];
-    const reason = ask ? prompt(ask) ?? '' : '';
-    router.patch(`/admin/bookings/${b.id}/status`, { status, reason }, { preserveScroll: true });
+    const reason = ask ? (prompt(ask) ?? '') : '';
+
+    // إشعار الإلغاء يُسأل عنه ولا يُرسل تلقائيًا: الإلغاء قد يكون تصحيحًا
+    // لخطأ إدخال، ورسالةٌ تخرج حينها تُقلق عميلًا لم يُلغَ حجزه.
+    const notify = status === 'cancelled' && b.client?.mobile ? confirm(`إبلاغ العميل بالإلغاء على واتساب ${b.client.mobile}؟`) : false;
+
+    router.patch(`/admin/bookings/${b.id}/status`, { status, reason, notify }, { preserveScroll: true });
 };
 
 const destroy = (b: Booking) => {
@@ -323,7 +395,11 @@ const colorClass = statusChipClass;
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- اختصارات شاشات القاعات — تُشتق من القائمة فلا تحتاج صيانة -->
                     <PageShortcuts />
-                    <Link v-if="can('bookings.create')" href="/admin/bookings/halls/create" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700">
+                    <Link
+                        v-if="can('bookings.create')"
+                        href="/admin/bookings/halls/create"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                    >
                         <Plus class="h-4 w-4" /> حجز قاعة جديد
                     </Link>
                 </div>
@@ -343,7 +419,12 @@ const colorClass = statusChipClass;
                     <div class="lg:col-span-2">
                         <div class="relative">
                             <Search class="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ltr:left-3 rtl:right-3" />
-                            <input v-model="filters.search" @keyup.enter="applyFilters" placeholder="رقم الحجز أو العميل" class="w-full rounded-xl border border-slate-200 py-2.5 text-sm ltr:pl-9 ltr:pr-3 rtl:pl-3 rtl:pr-9" />
+                            <input
+                                v-model="filters.search"
+                                @keyup.enter="applyFilters"
+                                placeholder="رقم الحجز أو العميل"
+                                class="w-full rounded-xl border border-slate-200 py-2.5 text-sm ltr:pl-9 ltr:pr-3 rtl:pl-3 rtl:pr-9"
+                            />
                         </div>
                     </div>
                     <select v-model="filters.status" @change="applyFilters" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
@@ -361,7 +442,9 @@ const colorClass = statusChipClass;
                     <input v-model="filters.from" @change="applyFilters" type="date" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                     <input v-model="filters.to" @change="applyFilters" type="date" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                 </div>
-                <button type="button" @click="resetFilters" class="mt-2 text-[11px] font-bold text-slate-500 hover:text-slate-700">إعادة ضبط الفلاتر</button>
+                <button type="button" @click="resetFilters" class="mt-2 text-[11px] font-bold text-slate-500 hover:text-slate-700">
+                    إعادة ضبط الفلاتر
+                </button>
             </div>
 
             <!-- الجدول -->
@@ -372,10 +455,19 @@ const colorClass = statusChipClass;
                     <div class="flex flex-wrap items-center gap-1.5">
                         <span class="text-xs font-extrabold text-slate-800">طريقة العرض</span>
                         <button
-                            v-for="p in PRESETS" :key="p.key" type="button" @click="applyPreset(p)"
+                            v-for="p in PRESETS"
+                            :key="p.key"
+                            type="button"
+                            @click="applyPreset(p)"
                             class="rounded-lg px-2.5 py-1 text-xs font-bold transition"
-                            :class="activePreset === p.key ? 'bg-slate-800 text-white shadow-sm' : 'bg-white text-slate-800 ring-1 ring-slate-300 hover:bg-slate-100'"
-                        >{{ p.label }}</button>
+                            :class="
+                                activePreset === p.key
+                                    ? 'bg-slate-800 text-white shadow-sm'
+                                    : 'bg-white text-slate-800 ring-1 ring-slate-300 hover:bg-slate-100'
+                            "
+                        >
+                            {{ p.label }}
+                        </button>
                     </div>
 
                     <DropdownMenu v-model:open="columnsOpen">
@@ -390,12 +482,15 @@ const colorClass = statusChipClass;
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="max-h-96 w-56 overflow-y-auto">
                             <label
-                                v-for="c in COLUMNS" :key="c.key"
+                                v-for="c in COLUMNS"
+                                :key="c.key"
                                 class="flex items-center gap-2 px-2 py-1.5 text-sm font-bold"
                                 :class="c.fixed ? 'cursor-not-allowed text-slate-500' : 'cursor-pointer text-slate-800 hover:bg-slate-100'"
                             >
                                 <input
-                                    type="checkbox" :checked="shows(c.key)" :disabled="c.fixed"
+                                    type="checkbox"
+                                    :checked="shows(c.key)"
+                                    :disabled="c.fixed"
                                     @change="toggleColumn(c.key)"
                                     class="h-4 w-4 rounded border-slate-300 text-emerald-600"
                                 />
@@ -412,39 +507,96 @@ const colorClass = statusChipClass;
                             <tr>
                                 <!-- رقم الحجز مثبَّت عند حافة الجدول: هو مرساة الصف،
                                      وبضياعه أثناء التمرير الأفقي تصير الأرقام بلا صاحب. -->
-                                <th class="sticky z-20 whitespace-nowrap bg-slate-100 px-3 py-3 text-right text-xs font-extrabold text-slate-800 ltr:left-0 rtl:right-0">رقم الحجز</th>
-                                <th v-if="shows('client')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">العميل</th>
-                                <th v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">جوال العميل</th>
-                                <th v-if="shows('event')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">نوع المناسبة</th>
-                                <th v-if="shows('start')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">بداية الحجز</th>
-                                <th v-if="shows('end')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">نهاية الحجز</th>
-                                <th v-if="shows('unit')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">القاعة</th>
-                                <th v-if="shows('sections')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">الأقسام</th>
-                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">مبلغ الحجز</th>
-                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">الخصم</th>
-                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">المقدم</th>
-                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">الضريبة</th>
-                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">الإجمالي</th>
-                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">المدفوع</th>
-                                <th v-for="m in (shows('methods') ? methods : [])" :key="m.key" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th
+                                    class="sticky z-20 whitespace-nowrap bg-slate-100 px-3 py-3 text-right text-xs font-extrabold text-slate-800 ltr:left-0 rtl:right-0"
+                                >
+                                    رقم الحجز
+                                </th>
+                                <th v-if="shows('client')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    العميل
+                                </th>
+                                <th v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    جوال العميل
+                                </th>
+                                <th v-if="shows('event')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    نوع المناسبة
+                                </th>
+                                <th v-if="shows('start')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    بداية الحجز
+                                </th>
+                                <th v-if="shows('end')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    نهاية الحجز
+                                </th>
+                                <th v-if="shows('unit')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    القاعة
+                                </th>
+                                <th v-if="shows('sections')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                    الأقسام
+                                </th>
+                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    مبلغ الحجز
+                                </th>
+                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    الخصم
+                                </th>
+                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    المقدم
+                                </th>
+                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    الضريبة
+                                </th>
+                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    الإجمالي
+                                </th>
+                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    المدفوع
+                                </th>
+                                <th
+                                    v-for="m in shows('methods') ? methods : []"
+                                    :key="m.key"
+                                    class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800"
+                                >
                                     {{ m.label }}
                                 </th>
-                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">المتبقي</th>
-                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">المسترجع</th>
-                                <th v-if="shows('status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">حالة الحجز</th>
-                                <th v-if="shows('pay_status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">حالة الدفع</th>
-                                <th v-if="shows('notes')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800 print:hidden">الملاحظات</th>
+                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    المتبقي
+                                </th>
+                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    المسترجع
+                                </th>
+                                <th v-if="shows('status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    حالة الحجز
+                                </th>
+                                <th v-if="shows('pay_status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                    حالة الدفع
+                                </th>
+                                <th
+                                    v-if="shows('notes')"
+                                    class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800 print:hidden"
+                                >
+                                    الملاحظات
+                                </th>
                                 <th class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800 print:hidden">التحكم</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="b in bookings.data" :key="b.id" class="group border-t border-slate-100 transition hover:bg-slate-50">
-                                <td class="sticky z-10 whitespace-nowrap bg-white px-3 py-3 font-extrabold text-slate-900 group-hover:bg-slate-50 ltr:left-0 rtl:right-0" dir="ltr">
+                                <td
+                                    class="sticky z-10 whitespace-nowrap bg-white px-3 py-3 font-extrabold text-slate-900 group-hover:bg-slate-50 ltr:left-0 rtl:right-0"
+                                    dir="ltr"
+                                >
                                     {{ b.reference }}
-                                    <span v-if="b.is_online" title="حجز وصل من الموقع" class="ms-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">أونلاين</span>
+                                    <span
+                                        v-if="b.is_online"
+                                        title="حجز وصل من الموقع"
+                                        class="ms-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700"
+                                        >أونلاين</span
+                                    >
                                 </td>
                                 <td v-if="shows('client')" class="px-3 py-3 font-bold text-slate-900">{{ b.client?.name ?? '—' }}</td>
-                                <td v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 font-medium text-slate-800" dir="ltr">{{ b.client?.mobile ?? '—' }}</td>
+                                <td v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 font-medium text-slate-800" dir="ltr">
+                                    {{ b.client?.mobile ?? '—' }}
+                                </td>
                                 <td v-if="shows('event')" class="px-3 py-3">
                                     <span v-if="b.event_type" class="rounded px-1.5 py-0.5 text-xs font-bold" :class="eventBadge(b.event_type.color)">
                                         {{ b.event_type.name }}
@@ -465,46 +617,86 @@ const colorClass = statusChipClass;
                                 </td>
                                 <td v-if="shows('unit')" class="px-3 py-3 font-bold text-slate-900">{{ b.unit.name }}</td>
                                 <td v-if="shows('sections')" class="px-3 py-3">
-                                    <span v-if="b.scope === 'whole'" class="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-bold text-violet-800">الوحدة كاملة</span>
-                                    <span v-else class="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-bold text-sky-800">{{ b.sections.join('، ') }}</span>
+                                    <span v-if="b.scope === 'whole'" class="rounded bg-violet-100 px-1.5 py-0.5 text-xs font-bold text-violet-800"
+                                        >الوحدة كاملة</span
+                                    >
+                                    <span v-else class="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-bold text-sky-800">{{
+                                        b.sections.join('، ')
+                                    }}</span>
                                 </td>
-                                <td v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-900" dir="ltr">{{ money(b.subtotal_amount) }}</td>
-                                <td v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center font-bold" :class="b.discount_amount > 0 ? 'text-amber-800' : 'text-slate-600'" dir="ltr">
+                                <td v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-900" dir="ltr">
+                                    {{ money(b.subtotal_amount) }}
+                                </td>
+                                <td
+                                    v-if="shows('discount')"
+                                    class="whitespace-nowrap px-3 py-3 text-center font-bold"
+                                    :class="b.discount_amount > 0 ? 'text-amber-800' : 'text-slate-600'"
+                                    dir="ltr"
+                                >
                                     {{ money(b.discount_amount) }}
                                 </td>
                                 <td v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center font-bold" dir="ltr">
                                     <span :class="b.is_deposit_settled ? 'text-slate-900' : 'text-amber-800'">{{ money(b.deposit_amount) }}</span>
                                 </td>
-                                <td v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-800" dir="ltr">{{ money(b.tax_amount) }}</td>
-                                <td v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">{{ money(b.total_amount) }}</td>
-                                <td v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center font-bold text-emerald-800" dir="ltr">{{ money(b.paid_amount) }}</td>
-                                <td v-for="m in (shows('methods') ? methods : [])" :key="m.key" class="whitespace-nowrap px-3 py-3 text-center font-medium" dir="ltr"
-                                    :class="b.paid_by_method[m.key] > 0 ? 'font-bold text-slate-900' : 'text-slate-500'">
+                                <td v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-800" dir="ltr">
+                                    {{ money(b.tax_amount) }}
+                                </td>
+                                <td v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(b.total_amount) }}
+                                </td>
+                                <td v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center font-bold text-emerald-800" dir="ltr">
+                                    {{ money(b.paid_amount) }}
+                                </td>
+                                <td
+                                    v-for="m in shows('methods') ? methods : []"
+                                    :key="m.key"
+                                    class="whitespace-nowrap px-3 py-3 text-center font-medium"
+                                    dir="ltr"
+                                    :class="b.paid_by_method[m.key] > 0 ? 'font-bold text-slate-900' : 'text-slate-500'"
+                                >
                                     {{ money(b.paid_by_method[m.key] ?? 0) }}
                                 </td>
-                                <td v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold" :class="b.remaining_amount > 0 ? 'text-red-700' : 'text-emerald-800'" dir="ltr">
+                                <td
+                                    v-if="shows('remaining')"
+                                    class="whitespace-nowrap px-3 py-3 text-center font-extrabold"
+                                    :class="b.remaining_amount > 0 ? 'text-red-700' : 'text-emerald-800'"
+                                    dir="ltr"
+                                >
                                     {{ money(b.remaining_amount) }}
                                 </td>
-                                <td v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center font-bold" :class="b.refunded_amount > 0 ? 'text-red-700' : 'text-slate-500'" dir="ltr">
+                                <td
+                                    v-if="shows('refunded')"
+                                    class="whitespace-nowrap px-3 py-3 text-center font-bold"
+                                    :class="b.refunded_amount > 0 ? 'text-red-700' : 'text-slate-500'"
+                                    dir="ltr"
+                                >
                                     {{ money(b.refunded_amount) }}
                                 </td>
                                 <td v-if="shows('status')" class="px-3 py-3 text-center">
-                                    <span class="whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold" :class="colorClass(b.status_color)">{{ b.status_label }}</span>
+                                    <span class="whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold" :class="colorClass(b.status_color)">{{
+                                        b.status_label
+                                    }}</span>
                                 </td>
                                 <td v-if="shows('pay_status')" class="px-3 py-3 text-center">
-                                    <span class="whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold" :class="payStatusClass(b.payment_status)">
+                                    <span
+                                        class="whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold"
+                                        :class="payStatusClass(b.payment_status)"
+                                    >
                                         {{ b.payment_status }}
                                     </span>
                                 </td>
                                 <!-- الملاحظات عمود مستقل: يُقرأ بنظرة ويُحرَّر بنقرة -->
                                 <td v-if="shows('notes')" class="px-3 py-3 text-center print:hidden">
                                     <button
-                                        type="button" @click="openNotes(b)"
+                                        type="button"
+                                        @click="openNotes(b)"
                                         :title="b.notes || 'عرض/تعديل الملاحظات'"
                                         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border transition"
-                                        :class="b.notes
-                                            ? 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
-                                            : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-600'"
+                                        :class="
+                                            b.notes
+                                                ? 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100'
+                                                : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-600'
+                                        "
                                     >
                                         <StickyNote class="h-4 w-4" />
                                     </button>
@@ -514,52 +706,127 @@ const colorClass = statusChipClass;
                                         <!-- المعاينة أولى الأزرار: هي بديل الأعمدة المخفيّة -->
                                         <TableActionButton variant="view" :icon="Eye" title="معاينة كل التفاصيل" @click="openPreview(b)" />
 
-                                        <TableActionButton v-if="can('bookings.edit')" variant="primary" :icon="Wallet" title="الدفعات والعربون" @click="openPayments(b)" />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit')"
+                                            variant="primary"
+                                            :icon="Wallet"
+                                            title="الدفعات والعربون"
+                                            @click="openPayments(b)"
+                                        />
 
                                         <!-- السند لا يُحرَّر على حجز لم يُقبض منه شيء -->
-                                        <TableActionButton v-if="b.has_payments" variant="dark" :icon="Receipt" title="السند" @click="router.visit(`/admin/bookings/${b.id}/bond`)" />
+                                        <TableActionButton
+                                            v-if="b.has_payments"
+                                            variant="dark"
+                                            :icon="Receipt"
+                                            title="السند"
+                                            @click="router.visit(`/admin/bookings/${b.id}/bond`)"
+                                        />
 
                                         <!-- الفاتورة تُحرَّر على الحجز نفسه، فتصلح قبل القبض وبعده -->
-                                        <TableActionButton variant="success" :icon="FileText" title="الفاتورة" @click="router.visit(`/admin/bookings/${b.id}/invoice`)" />
+                                        <TableActionButton
+                                            variant="success"
+                                            :icon="FileText"
+                                            title="الفاتورة"
+                                            @click="router.visit(`/admin/bookings/${b.id}/invoice`)"
+                                        />
 
                                         <TableActionButton
-                                            v-if="b.contract" variant="danger" :icon="FileSignature"
+                                            v-if="b.contract"
+                                            variant="danger"
+                                            :icon="FileSignature"
                                             :title="`العقد ${b.contract.number}`"
                                             @click="router.visit(`/admin/contracts/${b.contract.id}`)"
                                         />
                                         <TableActionButton
-                                            v-else-if="can('contracts.create')" variant="muted" :icon="FileSignature"
-                                            title="توليد العقد" @click="generateContract(b)"
+                                            v-else-if="can('contracts.create')"
+                                            variant="muted"
+                                            :icon="FileSignature"
+                                            title="توليد العقد"
+                                            @click="generateContract(b)"
                                         />
-                                        <TableActionButton v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)" variant="view" :icon="Bell" title="تذكير واتساب" @click="sendReminder(b)" />
+                                        <TableActionButton
+                                            v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)"
+                                            variant="view"
+                                            :icon="Bell"
+                                            title="تذكير واتساب"
+                                            @click="sendReminder(b)"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('whatsapp.send') && b.client?.mobile && b.remaining_amount > 0 && !isClosedStatus(b.status)"
+                                            variant="view"
+                                            :icon="Wallet"
+                                            title="تذكير بالمتبقي"
+                                            @click="sendBalanceReminder(b)"
+                                        />
 
                                         <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في
                                              المسار، فلا يحتار الموظف بين أزرار لا تنطبق. -->
-                                        <TableActionButton v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)" variant="primary" :icon="Check" title="تأكيد الحجز" @click="changeStatus(b, 'confirmed')" />
-                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'confirmed'" variant="primary" :icon="LogIn" title="تسجيل الدخول" @click="changeStatus(b, 'checked_in')" />
-                                        <TableActionButton v-if="can('bookings.edit') && b.status === 'checked_in'" variant="success" :icon="LogOut" title="تسجيل الخروج" @click="changeStatus(b, 'checked_out')" />
-                                        <TableActionButton v-if="can('bookings.edit') && !isClosedStatus(b.status)" variant="warning" :icon="X" title="إلغاء" @click="changeStatus(b, 'cancelled')" />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
+                                            variant="primary"
+                                            :icon="Check"
+                                            title="تأكيد الحجز"
+                                            @click="changeStatus(b, 'confirmed')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && b.status === 'confirmed'"
+                                            variant="primary"
+                                            :icon="LogIn"
+                                            title="تسجيل الدخول"
+                                            @click="changeStatus(b, 'checked_in')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && b.status === 'checked_in'"
+                                            variant="success"
+                                            :icon="LogOut"
+                                            title="تسجيل الخروج"
+                                            @click="changeStatus(b, 'checked_out')"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                            variant="warning"
+                                            :icon="X"
+                                            title="إلغاء"
+                                            @click="changeStatus(b, 'cancelled')"
+                                        />
 
                                         <!-- التعديل والحذف داخل قائمة النقاط الثلاث: إجراءان يغيّران الحجز نفسه،
                                              فإخفاؤهما خلف نقرة يقلّل الضغط الخاطئ ويُهدّئ صفّ الإجراءات. -->
                                         <DropdownMenu v-if="can('bookings.edit') || can('bookings.delete')">
                                             <DropdownMenuTrigger :as-child="true">
-                                                <button type="button" title="خيارات" class="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-slate-700 shadow-sm transition hover:bg-slate-300 data-[state=open]:bg-slate-300">
+                                                <button
+                                                    type="button"
+                                                    title="خيارات"
+                                                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-slate-700 shadow-sm transition hover:bg-slate-300 data-[state=open]:bg-slate-300"
+                                                >
                                                     <MoreVertical class="h-4 w-4" />
                                                 </button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" class="w-40">
-                                                <DropdownMenuItem v-if="can('bookings.edit')" class="cursor-pointer font-bold text-slate-700" @select="router.visit(`/admin/bookings/halls/${b.id}/edit`)">
+                                                <DropdownMenuItem
+                                                    v-if="can('bookings.edit')"
+                                                    class="cursor-pointer font-bold text-slate-700"
+                                                    @select="router.visit(`/admin/bookings/halls/${b.id}/edit`)"
+                                                >
                                                     <Pencil class="h-4 w-4 text-cyan-600" /> تعديل
                                                 </DropdownMenuItem>
 
                                                 <!-- التأجيل هنا لا في صفّ الإجراءات: أقلّ استعمالًا من الإلغاء
                                                      ويُخلَط به، فإخفاؤه يمنع النقرة الخاطئة. -->
-                                                <DropdownMenuItem v-if="can('bookings.edit') && !isClosedStatus(b.status)" class="cursor-pointer font-bold text-violet-700 focus:bg-violet-50" @select="changeStatus(b, 'postponed')">
+                                                <DropdownMenuItem
+                                                    v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                                    class="cursor-pointer font-bold text-violet-700 focus:bg-violet-50"
+                                                    @select="changeStatus(b, 'postponed')"
+                                                >
                                                     <CalendarClock class="h-4 w-4" /> تأجيل
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator v-if="can('bookings.edit') && can('bookings.delete')" />
-                                                <DropdownMenuItem v-if="can('bookings.delete')" class="cursor-pointer font-bold text-red-600 focus:bg-red-50 focus:text-red-700" @select="destroy(b)">
+                                                <DropdownMenuItem
+                                                    v-if="can('bookings.delete')"
+                                                    class="cursor-pointer font-bold text-red-600 focus:bg-red-50 focus:text-red-700"
+                                                    @select="destroy(b)"
+                                                >
                                                     <Trash2 class="h-4 w-4" /> حذف
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
@@ -568,27 +835,53 @@ const colorClass = statusChipClass;
                                 </td>
                             </tr>
                             <tr v-if="!bookings.data.length">
-                                <td :colspan="columnCount" class="px-4 py-10 text-center text-sm font-medium text-slate-700">لا توجد حجوزات مطابقة</td>
+                                <td :colspan="columnCount" class="px-4 py-10 text-center text-sm font-medium text-slate-700">
+                                    لا توجد حجوزات مطابقة
+                                </td>
                             </tr>
                         </tbody>
 
                         <!-- مجاميع الصفحة المعروضة — تُقرأ تحت أعمدتها مباشرة -->
                         <tfoot v-if="bookings.data.length" class="border-t-2 border-slate-300 bg-slate-100">
                             <tr>
-                                <td :colspan="identityColSpan" class="sticky z-10 bg-slate-100 px-3 py-3 text-right text-xs font-extrabold text-slate-800 ltr:left-0 rtl:right-0">
+                                <td
+                                    :colspan="identityColSpan"
+                                    class="sticky z-10 bg-slate-100 px-3 py-3 text-right text-xs font-extrabold text-slate-800 ltr:left-0 rtl:right-0"
+                                >
                                     مجموع هذه الصفحة ({{ totals.page.count }} حجز)
                                 </td>
-                                <td v-if="shows('subtotal')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">{{ money(totals.page.subtotal) }}</td>
-                                <td v-if="shows('discount')" class="px-3 py-3 text-center text-xs font-extrabold text-amber-800" dir="ltr">{{ money(totals.page.discount) }}</td>
-                                <td v-if="shows('deposit')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">{{ money(totals.page.deposit) }}</td>
-                                <td v-if="shows('tax')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">{{ money(totals.page.tax) }}</td>
-                                <td v-if="shows('total')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">{{ money(totals.page.total) }}</td>
-                                <td v-if="shows('paid')" class="px-3 py-3 text-center text-xs font-extrabold text-emerald-800" dir="ltr">{{ money(totals.page.paid) }}</td>
-                                <td v-for="m in (shows('methods') ? methods : [])" :key="m.key" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">
+                                <td v-if="shows('subtotal')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.page.subtotal) }}
+                                </td>
+                                <td v-if="shows('discount')" class="px-3 py-3 text-center text-xs font-extrabold text-amber-800" dir="ltr">
+                                    {{ money(totals.page.discount) }}
+                                </td>
+                                <td v-if="shows('deposit')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.page.deposit) }}
+                                </td>
+                                <td v-if="shows('tax')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.page.tax) }}
+                                </td>
+                                <td v-if="shows('total')" class="px-3 py-3 text-center text-xs font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.page.total) }}
+                                </td>
+                                <td v-if="shows('paid')" class="px-3 py-3 text-center text-xs font-extrabold text-emerald-800" dir="ltr">
+                                    {{ money(totals.page.paid) }}
+                                </td>
+                                <td
+                                    v-for="m in shows('methods') ? methods : []"
+                                    :key="m.key"
+                                    class="px-3 py-3 text-center text-xs font-extrabold text-slate-900"
+                                    dir="ltr"
+                                >
                                     {{ money(totals.page.paid_by_method[m.key] ?? 0) }}
                                 </td>
-                                <td v-if="shows('remaining')" class="px-3 py-3 text-center text-xs font-extrabold text-red-700" dir="ltr">{{ money(totals.page.remaining) }}</td>
-                                <td v-if="shows('refunded')" class="px-3 py-3 text-center text-xs font-extrabold text-red-700" dir="ltr">{{ money(totals.page.refunded) }}</td>
+                                <td v-if="shows('remaining')" class="px-3 py-3 text-center text-xs font-extrabold text-red-700" dir="ltr">
+                                    {{ money(totals.page.remaining) }}
+                                </td>
+                                <td v-if="shows('refunded')" class="px-3 py-3 text-center text-xs font-extrabold text-red-700" dir="ltr">
+                                    {{ money(totals.page.refunded) }}
+                                </td>
                                 <!-- عمودا الحالة يبقيان في الطباعة، والملاحظات والتحكم لا يُطبعان،
                                      ففُصلا في خليتين حتى لا ينزاح الصف عن ترويسته على الورق. -->
                                 <td v-if="tailColSpan" :colspan="tailColSpan"></td>
@@ -603,7 +896,14 @@ const colorClass = statusChipClass;
                         v-for="l in bookings.links"
                         :key="l.label"
                         :href="l.url ?? '#'"
-                        :class="['rounded-lg px-3 py-1.5 text-xs font-bold', l.active ? 'bg-blue-600 text-white' : l.url ? 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50' : 'cursor-default text-slate-300']"
+                        :class="[
+                            'rounded-lg px-3 py-1.5 text-xs font-bold',
+                            l.active
+                                ? 'bg-blue-600 text-white'
+                                : l.url
+                                  ? 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+                                  : 'cursor-default text-slate-300',
+                        ]"
                         v-html="l.label"
                     />
                 </div>
@@ -622,32 +922,73 @@ const colorClass = statusChipClass;
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">مبلغ الحجز</th>
-                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">الخصم</th>
-                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">المقدم</th>
-                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">الضريبة</th>
-                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">الإجمالي</th>
-                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">المدفوع</th>
-                                <th v-for="m in (shows('methods') ? methods : [])" :key="m.key" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    مبلغ الحجز
+                                </th>
+                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    الخصم
+                                </th>
+                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    المقدم
+                                </th>
+                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    الضريبة
+                                </th>
+                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    الإجمالي
+                                </th>
+                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    المدفوع
+                                </th>
+                                <th
+                                    v-for="m in shows('methods') ? methods : []"
+                                    :key="m.key"
+                                    class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800"
+                                >
                                     {{ m.label }}
                                 </th>
-                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">المتبقي</th>
-                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">المسترجع</th>
+                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    المتبقي
+                                </th>
+                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                    المسترجع
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr class="border-t border-slate-200">
-                                <td v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">{{ money(totals.all.subtotal) }}</td>
-                                <td v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-amber-800" dir="ltr">{{ money(totals.all.discount) }}</td>
-                                <td v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">{{ money(totals.all.deposit) }}</td>
-                                <td v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">{{ money(totals.all.tax) }}</td>
-                                <td v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">{{ money(totals.all.total) }}</td>
-                                <td v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-emerald-800" dir="ltr">{{ money(totals.all.paid) }}</td>
-                                <td v-for="m in (shows('methods') ? methods : [])" :key="m.key" class="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-900" dir="ltr">
+                                <td v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.all.subtotal) }}
+                                </td>
+                                <td v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-amber-800" dir="ltr">
+                                    {{ money(totals.all.discount) }}
+                                </td>
+                                <td v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.all.deposit) }}
+                                </td>
+                                <td v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.all.tax) }}
+                                </td>
+                                <td v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-slate-900" dir="ltr">
+                                    {{ money(totals.all.total) }}
+                                </td>
+                                <td v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-emerald-800" dir="ltr">
+                                    {{ money(totals.all.paid) }}
+                                </td>
+                                <td
+                                    v-for="m in shows('methods') ? methods : []"
+                                    :key="m.key"
+                                    class="whitespace-nowrap px-3 py-3 text-center font-bold text-slate-900"
+                                    dir="ltr"
+                                >
                                     {{ money(totals.all.paid_by_method[m.key] ?? 0) }}
                                 </td>
-                                <td v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-red-700" dir="ltr">{{ money(totals.all.remaining) }}</td>
-                                <td v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-red-700" dir="ltr">{{ money(totals.all.refunded) }}</td>
+                                <td v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-red-700" dir="ltr">
+                                    {{ money(totals.all.remaining) }}
+                                </td>
+                                <td v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center font-extrabold text-red-700" dir="ltr">
+                                    {{ money(totals.all.refunded) }}
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -656,7 +997,11 @@ const colorClass = statusChipClass;
         </div>
 
         <!-- معاينة الحجز — كل تفاصيله مهما أُخفي من الأعمدة -->
-        <div v-if="previewBooking" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" @click.self="previewBooking = null">
+        <div
+            v-if="previewBooking"
+            class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+            @click.self="previewBooking = null"
+        >
             <div class="my-4 w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
                 <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
                     <div class="min-w-0">
@@ -716,7 +1061,9 @@ const colorClass = statusChipClass;
                         <dl class="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                             <div class="flex justify-between gap-3 border-b border-slate-100 py-1">
                                 <dt class="font-bold text-slate-700">القاعة</dt>
-                                <dd class="font-bold text-slate-900">{{ previewBooking.unit.name }} <span class="text-slate-600" dir="ltr">({{ previewBooking.unit.code }})</span></dd>
+                                <dd class="font-bold text-slate-900">
+                                    {{ previewBooking.unit.name }} <span class="text-slate-600" dir="ltr">({{ previewBooking.unit.code }})</span>
+                                </dd>
                             </div>
                             <div class="flex justify-between gap-3 border-b border-slate-100 py-1">
                                 <dt class="font-bold text-slate-700">النطاق</dt>
@@ -781,7 +1128,11 @@ const colorClass = statusChipClass;
                             </div>
                             <div class="flex justify-between gap-3 border-b border-slate-100 py-1">
                                 <dt class="font-bold text-slate-700">المتبقي</dt>
-                                <dd class="font-extrabold" :class="previewBooking.remaining_amount > 0 ? 'text-red-700' : 'text-emerald-800'" dir="ltr">
+                                <dd
+                                    class="font-extrabold"
+                                    :class="previewBooking.remaining_amount > 0 ? 'text-red-700' : 'text-emerald-800'"
+                                    dir="ltr"
+                                >
                                     {{ money(previewBooking.remaining_amount) }}
                                 </dd>
                             </div>
@@ -796,7 +1147,8 @@ const colorClass = statusChipClass;
                         <!-- المقبوض موزّعًا على طرقه -->
                         <div class="mt-2 flex flex-wrap gap-1.5">
                             <span
-                                v-for="m in methods" :key="m.key"
+                                v-for="m in methods"
+                                :key="m.key"
                                 class="rounded-lg px-2 py-1 text-xs font-bold"
                                 :class="previewBooking.paid_by_method[m.key] > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'"
                             >
@@ -855,24 +1207,40 @@ const colorClass = statusChipClass;
                     <div>
                         <h2 class="text-lg font-extrabold text-slate-900">عرض وتعديل الملاحظات</h2>
                         <p class="text-xs font-medium text-slate-500">
-                            <span dir="ltr">{{ notesBooking.reference }}</span> · {{ notesBooking.unit.name }} · {{ notesBooking.client?.name ?? 'بلا عميل' }}
+                            <span dir="ltr">{{ notesBooking.reference }}</span> · {{ notesBooking.unit.name }} ·
+                            {{ notesBooking.client?.name ?? 'بلا عميل' }}
                         </p>
                     </div>
-                    <button type="button" @click="notesBooking = null" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X class="h-5 w-5" /></button>
+                    <button type="button" @click="notesBooking = null" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+                        <X class="h-5 w-5" />
+                    </button>
                 </div>
 
                 <form @submit.prevent="saveNotes" class="px-6 py-4">
                     <label class="mb-1 block text-sm font-bold text-slate-700">الملاحظات</label>
                     <textarea
-                        v-model="notesForm.notes" rows="6"
+                        v-model="notesForm.notes"
+                        rows="6"
                         placeholder="طلبات العميل، تنبيهات المناوبة، أي شيء يخصّ هذا الحجز…"
                         class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     ></textarea>
                     <p v-if="notesForm.errors.notes" class="mt-1 text-xs text-red-500">{{ notesForm.errors.notes }}</p>
 
                     <div class="mt-4 flex justify-end gap-2">
-                        <button type="button" @click="notesBooking = null" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">إلغاء</button>
-                        <button type="submit" :disabled="notesForm.processing" class="rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">حفظ الملاحظات</button>
+                        <button
+                            type="button"
+                            @click="notesBooking = null"
+                            class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                        >
+                            إلغاء
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="notesForm.processing"
+                            class="rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                        >
+                            حفظ الملاحظات
+                        </button>
                     </div>
                 </form>
             </div>
@@ -883,7 +1251,9 @@ const colorClass = statusChipClass;
             <div class="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                     <div>
-                        <h2 class="text-lg font-extrabold text-slate-900">الدفعات — <span dir="ltr">{{ payBooking.reference }}</span></h2>
+                        <h2 class="text-lg font-extrabold text-slate-900">
+                            الدفعات — <span dir="ltr">{{ payBooking.reference }}</span>
+                        </h2>
                         <p class="text-xs font-medium text-slate-500">{{ payBooking.unit.name }} · {{ payBooking.client?.name ?? 'بلا عميل' }}</p>
                     </div>
                     <button type="button" @click="payBooking = null" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
@@ -897,8 +1267,12 @@ const colorClass = statusChipClass;
                             <div class="text-base font-extrabold text-slate-800">{{ money(paySummary.total_amount) }}</div>
                         </div>
                         <div class="rounded-xl p-3 text-center" :class="paySummary.is_deposit_settled ? 'bg-emerald-50' : 'bg-amber-50'">
-                            <div class="text-[11px] font-bold" :class="paySummary.is_deposit_settled ? 'text-emerald-600' : 'text-amber-600'">العربون المطلوب</div>
-                            <div class="text-base font-extrabold" :class="paySummary.is_deposit_settled ? 'text-emerald-700' : 'text-amber-700'">{{ money(paySummary.deposit_amount) }}</div>
+                            <div class="text-[11px] font-bold" :class="paySummary.is_deposit_settled ? 'text-emerald-600' : 'text-amber-600'">
+                                العربون المطلوب
+                            </div>
+                            <div class="text-base font-extrabold" :class="paySummary.is_deposit_settled ? 'text-emerald-700' : 'text-amber-700'">
+                                {{ money(paySummary.deposit_amount) }}
+                            </div>
                         </div>
                         <div class="rounded-xl bg-sky-50 p-3 text-center">
                             <div class="text-[11px] font-bold text-sky-600">المسدَّد</div>
@@ -906,26 +1280,53 @@ const colorClass = statusChipClass;
                         </div>
                         <div class="rounded-xl p-3 text-center" :class="paySummary.is_fully_paid ? 'bg-emerald-50' : 'bg-red-50'">
                             <div class="text-[11px] font-bold" :class="paySummary.is_fully_paid ? 'text-emerald-600' : 'text-red-600'">المتبقي</div>
-                            <div class="text-base font-extrabold" :class="paySummary.is_fully_paid ? 'text-emerald-700' : 'text-red-700'">{{ money(paySummary.remaining_amount) }}</div>
+                            <div class="text-base font-extrabold" :class="paySummary.is_fully_paid ? 'text-emerald-700' : 'text-red-700'">
+                                {{ money(paySummary.remaining_amount) }}
+                            </div>
                         </div>
                     </div>
 
                     <div class="grid gap-4 lg:grid-cols-[300px_1fr]">
                         <!-- تسجيل دفعة -->
-                        <form v-if="can('bookings.edit')" @submit.prevent="submitPayment" class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <form
+                            v-if="can('bookings.edit')"
+                            @submit.prevent="submitPayment"
+                            class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                        >
                             <h3 class="text-sm font-extrabold text-slate-800">تسجيل دفعة</h3>
 
                             <div class="grid grid-cols-3 gap-1">
-                                <button v-for="t in [['deposit','عربون'],['payment','دفعة'],['refund','استرداد']]" :key="t[0]"
-                                    type="button" @click="payForm.type = t[0]"
+                                <button
+                                    v-for="t in [
+                                        ['deposit', 'عربون'],
+                                        ['payment', 'دفعة'],
+                                        ['refund', 'استرداد'],
+                                    ]"
+                                    :key="t[0]"
+                                    type="button"
+                                    @click="payForm.type = t[0]"
                                     class="rounded-lg py-1.5 text-[11px] font-bold transition"
-                                    :class="payForm.type === t[0] ? (t[0] === 'refund' ? 'bg-red-500 text-white' : 'bg-emerald-600 text-white') : 'bg-white text-slate-600 ring-1 ring-slate-200'"
-                                >{{ t[1] }}</button>
+                                    :class="
+                                        payForm.type === t[0]
+                                            ? t[0] === 'refund'
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-emerald-600 text-white'
+                                            : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                                    "
+                                >
+                                    {{ t[1] }}
+                                </button>
                             </div>
 
                             <div>
                                 <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
-                                <input v-model.number="payForm.amount" type="number" min="0.01" step="0.01" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" />
+                                <input
+                                    v-model.number="payForm.amount"
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+                                />
                                 <p v-if="payForm.errors.amount" class="mt-1 text-[11px] text-red-500">{{ payForm.errors.amount }}</p>
                             </div>
 
@@ -938,7 +1339,11 @@ const colorClass = statusChipClass;
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">التاريخ</label>
-                                    <input v-model="payForm.paid_on" type="date" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs" />
+                                    <input
+                                        v-model="payForm.paid_on"
+                                        type="date"
+                                        class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs"
+                                    />
                                 </div>
                             </div>
 
@@ -947,12 +1352,19 @@ const colorClass = statusChipClass;
                                 <input v-model="payForm.reference" dir="ltr" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
                             </div>
 
-                            <label v-if="payBooking.client?.mobile && payForm.type !== 'refund'" class="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700">
+                            <label
+                                v-if="payBooking.client?.mobile && payForm.type !== 'refund'"
+                                class="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700"
+                            >
                                 <input type="checkbox" v-model="payForm.notify" class="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600" />
                                 إشعار العميل على واتساب
                             </label>
 
-                            <button type="submit" :disabled="payForm.processing || payForm.amount <= 0" class="w-full rounded-md bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+                            <button
+                                type="submit"
+                                :disabled="payForm.processing || payForm.amount <= 0"
+                                class="w-full rounded-md bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
                                 تسجيل الدفعة
                             </button>
 
@@ -981,13 +1393,26 @@ const colorClass = statusChipClass;
                                 <tbody>
                                     <tr v-for="p in payments" :key="p.id" class="border-t border-slate-100">
                                         <td class="px-2 py-2">
-                                            <span class="rounded px-1.5 py-0.5 text-[10px] font-bold" :class="p.type === 'refund' ? 'bg-red-100 text-red-700' : p.type === 'deposit' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'">
+                                            <span
+                                                class="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                                                :class="
+                                                    p.type === 'refund'
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : p.type === 'deposit'
+                                                          ? 'bg-amber-100 text-amber-700'
+                                                          : 'bg-emerald-100 text-emerald-700'
+                                                "
+                                            >
                                                 {{ p.type_label }}
                                             </span>
                                         </td>
                                         <td class="px-2 py-2 text-slate-600" dir="ltr">{{ p.paid_on }}</td>
                                         <td class="px-2 py-2 text-slate-600">{{ p.method_label }}</td>
-                                        <td class="px-2 py-2 text-left font-extrabold" :class="p.signed_amount < 0 ? 'text-red-600' : 'text-slate-800'" dir="ltr">
+                                        <td
+                                            class="px-2 py-2 text-left font-extrabold"
+                                            :class="p.signed_amount < 0 ? 'text-red-600' : 'text-slate-800'"
+                                            dir="ltr"
+                                        >
                                             {{ p.signed_amount < 0 ? '−' : '' }}{{ money(p.amount) }}
                                         </td>
                                     </tr>
@@ -1000,6 +1425,5 @@ const colorClass = statusChipClass;
                 </div>
             </div>
         </div>
-
     </AppLayout>
 </template>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
-import { ArrowRight, Printer } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ArrowRight, MessageSquare, Printer } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 interface InvoiceLine {
@@ -59,8 +60,7 @@ const props = defineProps<{
     };
 }>();
 
-const money = (n: number) =>
-    new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
+const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -81,13 +81,23 @@ const spansMoreThanOneDay = computed(() => props.invoice.last_day_date !== props
 const statusTone = computed(
     () =>
         ({
-            'مسدّدة': 'bg-emerald-100 text-emerald-800',
+            مسدّدة: 'bg-emerald-100 text-emerald-800',
             'مسدّدة جزئيًا': 'bg-amber-100 text-amber-800',
             'غير مسدّدة': 'bg-red-100 text-red-800',
         })[props.invoice.payment_status] ?? 'bg-slate-200 text-slate-800',
 );
 
 const print = () => window.print();
+
+const { can } = usePermissions();
+
+// الفاتورة تُرسل نصًّا على واتساب — والمرفق يحتاج ملفًا مخزَّنًا لا شاشةً
+// تُطبع، فذاك بابٌ آخر.
+const sendInvoice = () => {
+    if (!confirm(`إرسال فاتورة الحجز ${props.invoice.number} على واتساب؟`)) return;
+
+    router.post(`/admin/bookings/${props.invoice.booking_id}/invoice/send`, {}, { preserveScroll: true });
+};
 </script>
 
 <template>
@@ -111,6 +121,14 @@ const print = () => window.print();
                     >
                         <Printer class="h-4 w-4" /> طباعة
                     </button>
+                    <button
+                        v-if="can('whatsapp.send')"
+                        type="button"
+                        @click="sendInvoice"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                        <MessageSquare class="h-4 w-4" /> إرسال على واتساب
+                    </button>
                     <Link
                         :href="`/admin/bookings/${invoice.booking_id}/bond`"
                         class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50"
@@ -127,7 +145,9 @@ const print = () => window.print();
             </div>
 
             <!-- ورقة الفاتورة — ما يُطبع ويُسلَّم -->
-            <div class="mx-auto max-w-4xl space-y-5 rounded-xl border border-slate-300 bg-white px-8 py-6 shadow-sm print:max-w-none print:rounded-none print:border-0 print:px-0 print:py-0 print:shadow-none">
+            <div
+                class="mx-auto max-w-4xl space-y-5 rounded-xl border border-slate-300 bg-white px-8 py-6 shadow-sm print:max-w-none print:rounded-none print:border-0 print:px-0 print:py-0 print:shadow-none"
+            >
                 <!-- الترويسة: هوية القاعة يمينًا وبيانات الفاتورة يسارًا -->
                 <header class="grid gap-6 border-b-2 border-slate-800 pb-4 sm:grid-cols-2">
                     <div>
@@ -142,9 +162,15 @@ const print = () => window.print();
                         <p v-if="invoice.unit_name" class="text-sm font-bold text-slate-700">{{ issuer.business_name }}</p>
                         <div class="mt-1 space-y-0.5 text-[13px] font-medium text-slate-700">
                             <p v-if="issuer.address">{{ issuer.address }}</p>
-                            <p v-if="issuer.phone">هاتف: <span dir="ltr">{{ issuer.phone }}</span></p>
-                            <p v-if="issuer.tax_number">الرقم الضريبي: <span dir="ltr">{{ issuer.tax_number }}</span></p>
-                            <p v-if="issuer.commercial_register">س.ت: <span dir="ltr">{{ issuer.commercial_register }}</span></p>
+                            <p v-if="issuer.phone">
+                                هاتف: <span dir="ltr">{{ issuer.phone }}</span>
+                            </p>
+                            <p v-if="issuer.tax_number">
+                                الرقم الضريبي: <span dir="ltr">{{ issuer.tax_number }}</span>
+                            </p>
+                            <p v-if="issuer.commercial_register">
+                                س.ت: <span dir="ltr">{{ issuer.commercial_register }}</span>
+                            </p>
                         </div>
                     </div>
 

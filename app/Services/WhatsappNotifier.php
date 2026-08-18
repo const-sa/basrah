@@ -137,6 +137,88 @@ class WhatsappNotifier
     }
 
     /**
+     * تذكير بالمبلغ المتبقي (§14).
+     *
+     * غير تذكير الموعد: هذا يُرسل لأجل المال لا لأجل التاريخ، وقد يُرسل
+     * والموعد بعيد. ومن سدّد لا يُطالَب، فبلا متبقٍّ لا رسالة أصلًا.
+     */
+    public function balanceReminder(Booking $booking, ?int $userId = null): ?WhatsappMessage
+    {
+        $booking->loadMissing(['unit', 'client']);
+
+        $remaining = $booking->remainingAmount();
+
+        if ($remaining <= 0) {
+            return null;
+        }
+
+        $body = implode("\n", array_filter([
+            'مرحبًا '.($booking->client?->name ?? '').'،',
+            'تذكير بالمبلغ المتبقي على حجزكم رقم '.$booking->reference.'.',
+            'الوحدة: '.($booking->unit?->name ?? '—'),
+            'الموعد: '.$booking->booking_date?->toDateString(),
+            'إجمالي الحجز: '.number_format((float) $booking->total_amount, 2),
+            'المسدَّد: '.number_format((float) $booking->paid_amount, 2),
+            'المتبقي: '.number_format($remaining, 2),
+            'نرجو السداد قبل الموعد. شكرًا لكم.',
+        ]));
+
+        return $this->send($booking->client?->mobile, $body, 'balance_reminder', $booking, $userId);
+    }
+
+    /**
+     * إرسال الفاتورة (§14) — مرفقةً بملفها حين يُمرَّر رابطه.
+     */
+    public function invoice(Booking $booking, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
+    {
+        $booking->loadMissing(['unit', 'client']);
+
+        $body = implode("\n", array_filter([
+            'مرحبًا '.($booking->client?->name ?? '').'،',
+            $pdfUrl
+                ? 'مرفق فاتورة حجزكم رقم '.$booking->reference.'.'
+                : 'فاتورة حجزكم رقم '.$booking->reference.':',
+            'الوحدة: '.($booking->unit?->name ?? '—'),
+            'التاريخ: '.$booking->booking_date?->toDateString(),
+            'الإجمالي: '.number_format((float) $booking->total_amount, 2),
+            'المسدَّد: '.number_format((float) $booking->paid_amount, 2),
+            $booking->remainingAmount() > 0
+                ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
+                : 'مسدَّدة بالكامل.',
+            'شكرًا لتعاملكم معنا.',
+        ]));
+
+        return $this->send($booking->client?->mobile, $body, 'invoice', $booking, $userId, $pdfUrl);
+    }
+
+    /**
+     * إشعار إلغاء (§14).
+     *
+     * الرسالة تذكر ما دُفع إن كان قد دُفع: العميل الذي ألغي حجزه يسأل عن
+     * عربونه قبل أن يسأل عن أي شيء آخر، وصمت الرسالة عنه يجعله يتصل.
+     */
+    public function bookingCancelled(Booking $booking, ?int $userId = null, ?string $reason = null): ?WhatsappMessage
+    {
+        $booking->loadMissing(['unit', 'client']);
+
+        $paid = (float) $booking->paid_amount;
+
+        $body = implode("\n", array_filter([
+            'مرحبًا '.($booking->client?->name ?? '').'،',
+            'نفيدكم بإلغاء الحجز رقم '.$booking->reference.'.',
+            'الوحدة: '.($booking->unit?->name ?? '—'),
+            'الموعد: '.$booking->booking_date?->toDateString(),
+            $reason ? 'السبب: '.$reason : null,
+            $paid > 0
+                ? 'المبلغ المسدَّد: '.number_format($paid, 2).' — سيتم التواصل معكم بشأنه.'
+                : null,
+            'نأسف لذلك، ونسعد بخدمتكم في مناسبة قادمة.',
+        ]));
+
+        return $this->send($booking->client?->mobile, $body, 'cancellation', $booking, $userId);
+    }
+
+    /**
      * توحيد صيغة الرقم السعودي إلى 9665XXXXXXXX.
      */
     private function normalize(?string $number): ?string

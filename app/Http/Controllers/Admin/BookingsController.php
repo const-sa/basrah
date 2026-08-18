@@ -45,6 +45,7 @@ class BookingsController extends Controller
         $data = $request->validate([
             'status' => ['required', Rule::in(array_keys(Booking::STATUSES))],
             'reason' => ['nullable', 'string', 'max:1000'],
+            'notify' => ['boolean'],
         ]);
 
         $this->authorizeUnit($request, $booking->unit_id);
@@ -61,6 +62,13 @@ class BookingsController extends Controller
             'checked_out' => $this->bookings->checkOut($booking, $request->user()?->id),
             default => $booking->update(['status' => $data['status']]),
         };
+
+        // إشعار الإلغاء (§14) يُرسل بطلبٍ صريح كبقية الإشعارات، لا تلقائيًا:
+        // الإلغاء قد يقع تصحيحًا لخطأ إدخال، ورسالةٌ تخرج حينها تُقلق عميلًا
+        // لم يُلغَ حجزه أصلًا.
+        if ($data['status'] === 'cancelled' && $request->boolean('notify')) {
+            $this->whatsapp->bookingCancelled($booking->fresh(), $request->user()?->id, $reason);
+        }
 
         return back()->with('success', match ($data['status']) {
             'cancelled' => 'تم إلغاء الحجز',
@@ -412,6 +420,45 @@ class BookingsController extends Controller
         $this->whatsapp->bookingReminder($booking, $request->user()?->id);
 
         return back()->with('success', 'تم إرسال التذكير على واتساب');
+    }
+
+    /**
+     * تذكير بالمبلغ المتبقي (§14) — غير تذكير الموعد.
+     */
+    public function remindBalance(Request $request, Booking $booking): RedirectResponse
+    {
+        $this->authorizeUnit($request, $booking->unit_id);
+        $booking->loadMissing('client');
+
+        if (blank($booking->client?->mobile)) {
+            return back()->with('warning', 'لا يوجد رقم جوال للعميل.');
+        }
+
+        // من سدَّد لا يُطالَب: الرسالة لا تُرسل، والرد يقول لماذا.
+        if ($booking->remainingAmount() <= 0) {
+            return back()->with('warning', 'لا مبلغ متبقٍّ على هذا الحجز.');
+        }
+
+        $this->whatsapp->balanceReminder($booking, $request->user()?->id);
+
+        return back()->with('success', 'تم إرسال التذكير بالمبلغ المتبقي');
+    }
+
+    /**
+     * إرسال الفاتورة على واتساب (§14).
+     */
+    public function sendInvoice(Request $request, Booking $booking): RedirectResponse
+    {
+        $this->authorizeUnit($request, $booking->unit_id);
+        $booking->loadMissing('client');
+
+        if (blank($booking->client?->mobile)) {
+            return back()->with('warning', 'لا يوجد رقم جوال للعميل.');
+        }
+
+        $this->whatsapp->invoice($booking, $request->user()?->id);
+
+        return back()->with('success', 'تم إرسال الفاتورة على واتساب');
     }
 
     public function destroy(Request $request, Booking $booking): RedirectResponse

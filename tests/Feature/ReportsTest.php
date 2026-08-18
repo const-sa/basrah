@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Booking;
+use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\Role;
 use App\Models\Unit;
@@ -81,13 +82,14 @@ class ReportsTest extends TestCase
             'bookings-daily', 'bookings-weekly', 'bookings-monthly', 'bookings-yearly',
             'bookings-cancelled', 'bookings-postponed', 'bookings-upcoming', 'bookings-by-unit',
             'revenue', 'expenses', 'profit-loss', 'collected', 'outstanding',
-            'expenses-by-category', 'revenue-by-unit', 'revenue-by-employee', 'unit-profit',
+            'expenses-by-category', 'revenue-by-unit', 'revenue-by-employee',
+            'revenue-by-payment-method', 'revenue-by-department', 'unit-profit',
             'employees', 'salaries', 'deductions', 'overtime', 'staff-performance', 'staff-operations',
         ] as $key) {
             $this->assertTrue($keys->contains($key), "التقرير {$key} غير مسجَّل");
         }
 
-        $this->assertCount(23, $keys);
+        $this->assertCount(25, $keys);
     }
 
     public function test_the_hub_lists_the_reports_in_their_groups(): void
@@ -211,6 +213,64 @@ class ReportsTest extends TestCase
         $this->assertNotNull($owner, 'المالك لا يظهر في تقرير العمليات');
         $this->assertSame(1, $owner['created']);
         $this->assertSame($owner['created'] + $owner['updated'] + $owner['deleted'] + $owner['restored'], $owner['total']);
+    }
+
+    /**
+     * الإيراد بطريقة الدفع يُقرأ من المقبوض — والاسترداد يخرج بنفس الطريقة
+     * التي دخل بها، فيُطرح منها لا من غيرها.
+     */
+    public function test_revenue_by_payment_method_nets_refunds_against_their_method(): void
+    {
+        $booking = $this->booking();
+
+        BookingPayment::create([
+            'booking_id' => $booking->id, 'type' => 'deposit',
+            'payment_method_id' => $this->paymentMethodId('cash'),
+            'amount' => 500, 'paid_on' => '2026-08-16',
+        ]);
+
+        BookingPayment::create([
+            'booking_id' => $booking->id, 'type' => 'refund',
+            'payment_method_id' => $this->paymentMethodId('cash'),
+            'amount' => 200, 'paid_on' => '2026-08-16',
+        ]);
+
+        BookingPayment::create([
+            'booking_id' => $booking->id, 'type' => 'payment',
+            'payment_method_id' => $this->paymentMethodId('transfer'),
+            'amount' => 100, 'paid_on' => '2026-08-16',
+        ]);
+
+        $this->actingAs($this->owner)
+            ->get('/admin/reports/revenue-by-payment-method?from=2026-08-01&to=2026-08-31')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('rows', 2)
+                ->where('rows.0.method', 'نقدًا')
+                ->where('rows.0.total', 300)
+                ->where('rows.1.total', 100)
+                ->where('summary.0.value', 400),
+            );
+    }
+
+    /**
+     * القسم يجيب «من أين جاء المال»، والحجوزات لا قسم لها فتُعرض بسطرها —
+     * وإسقاطها يجعل المجموع أقلّ من إيراد المؤسسة بلا سبب ظاهر.
+     */
+    public function test_revenue_by_department_includes_bookings_as_their_own_line(): void
+    {
+        $this->booking(['total_amount' => 1200, 'paid_amount' => 700]);
+
+        $this->actingAs($this->owner)
+            ->get('/admin/reports/revenue-by-department?from=2026-08-01&to=2026-08-31')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('rows', 1)
+                ->where('rows.0.department', 'الحجوزات (قاعات وشاليهات)')
+                ->where('rows.0.amount', 1200)
+                ->where('rows.0.collected', 700)
+                ->where('rows.0.share', 100),
+            );
     }
 
     public function test_a_report_exports_the_shown_rows_as_csv(): void

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Account;
 use App\Models\CostCenter;
+use App\Models\ExpenseCategory;
 use App\Models\Treasury;
 use App\Models\Unit;
 use App\Services\Accounting\Ledger;
@@ -54,11 +55,19 @@ class AccountsSeeder extends Seeder
         [Ledger::SALARIES_EXPENSE, 'الرواتب والأجور', 'expense', false, '5200'],
         ['5300', 'مصروفات عمومية', 'expense', true, '5000'],
         [Ledger::GENERAL_EXPENSE, 'مصروفات متنوعة', 'expense', false, '5300'],
-        ['5320', 'كهرباء ومياه', 'expense', false, '5300'],
+        // بنود المصروف كما نصّ عليها البند التاسع من العرض المعتمد. الكهرباء
+        // والمياه فُصلتا لأن العرض يعدّهما بندين، ولأن ترشيد أحدهما لا يُقاس
+        // ما داما في حسابٍ واحد.
+        ['5320', 'كهرباء', 'expense', false, '5300'],
+        ['5325', 'مياه', 'expense', false, '5300'],
         ['5330', 'صيانة', 'expense', false, '5300'],
-        ['5340', 'تنظيف', 'expense', false, '5300'],
+        ['5340', 'نظافة', 'expense', false, '5300'],
         ['5350', 'تسويق ودعاية', 'expense', false, '5300'],
         ['5360', 'إيجارات', 'expense', false, '5300'],
+        ['5370', 'مشتريات', 'expense', false, '5300'],
+        ['5380', 'خدمات', 'expense', false, '5300'],
+        ['5390', 'إنترنت واتصالات', 'expense', false, '5300'],
+        ['5395', 'قطع غيار', 'expense', false, '5300'],
     ];
 
     public function run(): void
@@ -101,5 +110,8 @@ class AccountsSeeder extends Seeder
                 'is_active' => true,
             ],
         );
+
+        // أنواع المصروف (§9) — بعد الشجرة لأن كل نوع يشير إلى حسابه فيها.
+        ExpenseCategory::seedDefaults();
     }
 }

@@ -35,13 +35,24 @@ class Treasury extends Model
         return $this->hasMany(Voucher::class);
     }
 
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
     /**
-     * الرصيد الحالي = الافتتاحي + المقبوض − المصروف (من السندات المرحَّلة).
+     * الرصيد الحالي = الافتتاحي + المقبوض − المصروف، من المرحَّل وحده.
+     *
+     * المصروف يخرج من الخزينة عبر بابين: سند صرف، ومستند مصروف (§9). وكلٌّ
+     * في جدوله، فيُطرحان معًا — وإسقاط أحدهما يُظهر رصيدًا لا وجود له في
+     * الصندوق.
      */
     public function balance(): float
     {
         $in = (float) $this->vouchers()->where('status', 'posted')->where('type', 'receipt')->sum('amount');
-        $out = (float) $this->vouchers()->where('status', 'posted')->whereIn('type', ['payment', 'expense'])->sum('amount');
+
+        $out = (float) $this->vouchers()->where('status', 'posted')->whereIn('type', ['payment', 'expense'])->sum('amount')
+            + (float) $this->expenses()->posted()->sum('amount');
 
         return round((float) $this->opening_balance + $in - $out, 2);
     }

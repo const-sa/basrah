@@ -19,10 +19,12 @@ class WhatsappMessage extends Model
 
     public const PURPOSES = [
         'booking_confirm' => 'تأكيد حجز',
-        'reminder' => 'تذكير',
+        'reminder' => 'تذكير بالموعد',
+        'balance_reminder' => 'تذكير بالمتبقي',
         'contract' => 'عقد',
         'invoice' => 'فاتورة',
         'payment' => 'إشعار سداد',
+        'cancellation' => 'إشعار إلغاء',
         'welcome' => 'ترحيب',
         'other' => 'أخرى',
     ];

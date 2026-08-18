@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Client;
 use App\Models\Item;
 use App\Models\Role;
 use App\Models\Unit;
@@ -157,5 +158,110 @@ class DashboardMetricsTest extends TestCase
             ->get('/admin')
             ->assertOk()
             ->assertInertia(fn ($p) => $p->where('bookings.today', 1)->has('today', 1));
+    }
+
+    /**
+     * الوحدات المشغولة تُعدّ بالوحدات لا بالحجوزات (§13): قاعةٌ فيها حجزان
+     * في اليوم مشغولةٌ مرةً واحدة، ولولا ذلك لفاق المشغولُ عددَ الوحدات.
+     */
+    public function test_occupied_and_available_units_count_units_not_bookings(): void
+    {
+        $service = app(BookingService::class);
+        $unit = Unit::firstOrFail();
+        $units = Unit::where('is_active', true)->count();
+
+        foreach (['morning', 'evening'] as $period) {
+            $service->create([
+                'unit_id' => $unit->id, 'scope' => 'whole',
+                'booking_date' => now()->toDateString(), 'period' => $period, 'status' => 'confirmed',
+            ]);
+        }
+
+        $this->actingAs($this->user('super-admin'))
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p
+                ->where('bookings.today', 2)
+                ->where('bookings.units_occupied', 1)
+                ->where('bookings.units_total', $units)
+                ->where('bookings.units_available', $units - 1),
+            );
+    }
+
+    /**
+     * إيراد اليوم هو ما دخل الصندوق فعلًا — والاسترداد يُطرح لأنه خروج.
+     */
+    public function test_today_revenue_counts_collected_payments_minus_refunds(): void
+    {
+        $owner = $this->user('super-admin');
+        $service = app(BookingService::class);
+
+        $booking = $service->create([
+            'unit_id' => Unit::firstOrFail()->id, 'scope' => 'whole',
+            'booking_date' => now()->addDay()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+        ]);
+
+        $service->recordPayment($booking, [
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId(),
+            'amount' => 500, 'paid_on' => now()->toDateString(),
+        ], $owner->id);
+
+        $service->recordPayment($booking->fresh(), [
+            'type' => 'refund', 'payment_method_id' => $this->paymentMethodId(),
+            'amount' => 200, 'paid_on' => now()->toDateString(),
+        ], $owner->id);
+
+        $this->actingAs($owner)
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->where('bookings.collected_today', 300));
+    }
+
+    public function test_cancelled_bookings_and_clients_are_reported(): void
+    {
+        $owner = $this->user('super-admin');
+        $service = app(BookingService::class);
+
+        Client::create(['name' => 'عميل جديد', 'is_active' => true]);
+
+        $booking = $service->create([
+            'unit_id' => Unit::firstOrFail()->id, 'scope' => 'whole',
+            'booking_date' => now()->addDay()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+        ]);
+
+        $service->cancel($booking, 'ظرف طارئ');
+
+        $this->actingAs($owner)
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p
+                ->where('bookings.cancelled_month', 1)
+                ->where('clients.total', 1)
+                ->where('clients.new_this_month', 1)
+                ->has('finance.revenue')
+                ->has('finance.expense')
+                ->has('finance.profit'),
+            );
+    }
+
+    /**
+     * أرقام الدفاتر وعدد العملاء محكومة بصلاحياتها كبقية اللوحة.
+     */
+    public function test_finance_and_clients_blocks_are_hidden_without_permission(): void
+    {
+        // الكاشير يرى العملاء (يختار العميل في الفاتورة) ولا يرى الدفاتر.
+        $this->actingAs($this->user('cashier'))
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->where('finance', null)->has('clients'));
+
+        // اللوحة نفسها تحتاج صلاحيتها، وما وراءها من أرقام يحتاج صلاحياته.
+        $role = Role::create(['name' => 'لوحة فقط', 'slug' => 'dashboard-only', 'permissions' => ['dashboard.view']]);
+        $stranger = User::factory()->create(['role_id' => $role->id, 'is_active' => true, 'has_all_units' => true]);
+
+        $this->actingAs($stranger)
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->where('finance', null)->where('clients', null));
     }
 }

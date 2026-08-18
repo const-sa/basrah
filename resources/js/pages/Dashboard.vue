@@ -5,20 +5,43 @@ import { Head, Link } from '@inertiajs/vue3';
 import { AlertTriangle, CalendarDays, Info, Phone, TrendingUp, Wallet } from 'lucide-vue-next';
 
 interface TodayRow {
-    id: number; reference: string; unit: string | null; scope: string;
-    client: string | null; mobile: string | null;
-    period: string; status: string; color: string; remaining: number;
+    id: number;
+    reference: string;
+    unit: string | null;
+    scope: string;
+    client: string | null;
+    mobile: string | null;
+    period: string;
+    status: string;
+    color: string;
+    remaining: number;
 }
 
 defineProps<{
     canSee: { bookings: boolean; pos: boolean; accounting: boolean; hr: boolean };
     bookings: {
-        today: number; upcoming: number; tentative: number;
-        month_count: number; month_value: number; outstanding: number; occupancy: number;
+        today: number;
+        upcoming: number;
+        tentative: number;
+        month_count: number;
+        month_value: number;
+        outstanding: number;
+        occupancy: number;
+        units_total: number;
+        units_occupied: number;
+        units_available: number;
+        today_value: number;
+        collected_today: number;
+        cancelled_month: number;
     } | null;
+    finance: { revenue: number; expense: number; profit: number } | null;
+    clients: { total: number; new_this_month: number } | null;
     today: TodayRow[];
     pos: {
-        today_total: number; today_count: number; month_total: number; month_profit: number;
+        today_total: number;
+        today_count: number;
+        month_total: number;
+        month_profit: number;
         low_stock: number;
     } | null;
     profitability: { name: string; revenue: number; expense: number; profit: number }[];
@@ -54,7 +77,9 @@ const alertClass = (t: string) =>
             <!-- تنبيهات تحتاج تصرّفًا -->
             <div v-if="alerts.length" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <Link
-                    v-for="(a, i) in alerts" :key="i" :href="a.href"
+                    v-for="(a, i) in alerts"
+                    :key="i"
+                    :href="a.href"
                     class="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition hover:brightness-95"
                     :class="alertClass(a.type)"
                 >
@@ -84,8 +109,64 @@ const alertClass = (t: string) =>
                 </div>
                 <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div class="text-xs font-bold text-slate-500">مستحق على العملاء</div>
-                    <div class="mt-1 text-2xl font-extrabold" :class="bookings.outstanding > 0 ? 'text-red-600' : 'text-emerald-600'">{{ money(bookings.outstanding) }}</div>
+                    <div class="mt-1 text-2xl font-extrabold" :class="bookings.outstanding > 0 ? 'text-red-600' : 'text-emerald-600'">
+                        {{ money(bookings.outstanding) }}
+                    </div>
                     <div class="mt-0.5 text-[11px] font-medium text-amber-600">{{ bookings.tentative }} حجز مبدئي</div>
+                </div>
+            </div>
+
+            <!-- المشغول والمتاح، وإيراد اليوم، والملغى، والعملاء (§13) -->
+            <div v-if="bookings" class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">الوحدات المشغولة اليوم</div>
+                    <div class="mt-1 flex items-baseline gap-1">
+                        <span class="text-3xl font-extrabold text-sky-700">{{ bookings.units_occupied }}</span>
+                        <span class="text-sm font-bold text-slate-400">/ {{ bookings.units_total }}</span>
+                    </div>
+                    <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                            class="h-full rounded-full bg-sky-500"
+                            :style="{ width: `${bookings.units_total ? (bookings.units_occupied / bookings.units_total) * 100 : 0}%` }"
+                        ></div>
+                    </div>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">الوحدات المتاحة اليوم</div>
+                    <div class="mt-1 text-3xl font-extrabold text-emerald-600">{{ bookings.units_available }}</div>
+                    <div class="mt-0.5 text-[11px] font-medium text-slate-500">جاهزة للحجز الآن</div>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">إيرادات اليوم</div>
+                    <div class="mt-1 text-2xl font-extrabold text-slate-900">{{ money(bookings.collected_today) }}</div>
+                    <div class="mt-0.5 text-[11px] font-medium text-slate-500">محصَّل · قيمة حجوزات اليوم {{ money(bookings.today_value) }}</div>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">الحجوزات الملغاة هذا الشهر</div>
+                    <div class="mt-1 text-3xl font-extrabold" :class="bookings.cancelled_month > 0 ? 'text-red-600' : 'text-slate-900'">
+                        {{ bookings.cancelled_month }}
+                    </div>
+                    <div v-if="clients" class="mt-0.5 text-[11px] font-medium text-slate-500">
+                        {{ clients.total }} عميل · {{ clients.new_this_month }} جديد هذا الشهر
+                    </div>
+                </div>
+            </div>
+
+            <!-- إيراد الشهر ومصروفه وصافي ربحه (§13) -->
+            <div v-if="finance" class="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">إيرادات الشهر</div>
+                    <div class="mt-1 text-2xl font-extrabold text-emerald-700">{{ money(finance.revenue) }}</div>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">مصروفات الشهر</div>
+                    <div class="mt-1 text-2xl font-extrabold text-red-700">{{ money(finance.expense) }}</div>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="text-xs font-bold text-slate-500">صافي الربح</div>
+                    <div class="mt-1 text-2xl font-extrabold" :class="finance.profit < 0 ? 'text-red-600' : 'text-slate-900'">
+                        {{ money(finance.profit) }}
+                    </div>
                 </div>
             </div>
 
@@ -93,9 +174,7 @@ const alertClass = (t: string) =>
                 <!-- جدول اليوم -->
                 <div v-if="canSee.bookings" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                        <h2 class="flex items-center gap-1.5 font-extrabold text-slate-800">
-                            <CalendarDays class="h-4 w-4" /> جدول اليوم
-                        </h2>
+                        <h2 class="flex items-center gap-1.5 font-extrabold text-slate-800"><CalendarDays class="h-4 w-4" /> جدول اليوم</h2>
                         <div class="flex gap-3">
                             <Link href="/admin/calendar/halls" class="text-xs font-bold text-blue-600 hover:underline">تقويم القاعات</Link>
                             <Link href="/admin/calendar/chalets" class="text-xs font-bold text-teal-600 hover:underline">تقويم الشاليهات</Link>
@@ -131,16 +210,28 @@ const alertClass = (t: string) =>
                 <div class="space-y-4">
                     <!-- نقطة البيع -->
                     <div v-if="pos" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h2 class="mb-3 flex items-center gap-1.5 font-extrabold text-slate-800">
-                            <Wallet class="h-4 w-4" /> نقطة البيع
-                        </h2>
+                        <h2 class="mb-3 flex items-center gap-1.5 font-extrabold text-slate-800"><Wallet class="h-4 w-4" /> نقطة البيع</h2>
                         <div class="space-y-2 text-sm">
-                            <div class="flex justify-between"><span class="text-slate-600">مبيعات اليوم</span><span class="font-extrabold text-slate-900">{{ money(pos.today_total) }}</span></div>
-                            <div class="flex justify-between"><span class="text-slate-600">عدد الفواتير</span><span class="font-bold text-slate-700">{{ pos.today_count }}</span></div>
-                            <div class="flex justify-between border-t border-slate-100 pt-2"><span class="text-slate-600">مبيعات الشهر</span><span class="font-extrabold text-slate-900">{{ money(pos.month_total) }}</span></div>
-                            <div class="flex justify-between"><span class="text-slate-600">مجمل الربح</span><span class="font-extrabold text-emerald-600">{{ money(pos.month_profit) }}</span></div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">مبيعات اليوم</span
+                                ><span class="font-extrabold text-slate-900">{{ money(pos.today_total) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">عدد الفواتير</span><span class="font-bold text-slate-700">{{ pos.today_count }}</span>
+                            </div>
+                            <div class="flex justify-between border-t border-slate-100 pt-2">
+                                <span class="text-slate-600">مبيعات الشهر</span
+                                ><span class="font-extrabold text-slate-900">{{ money(pos.month_total) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">مجمل الربح</span
+                                ><span class="font-extrabold text-emerald-600">{{ money(pos.month_profit) }}</span>
+                            </div>
                         </div>
-                        <Link href="/admin/pos" class="mt-3 block rounded-lg bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                        <Link
+                            href="/admin/pos"
+                            class="mt-3 block rounded-lg bg-emerald-50 px-3 py-2 text-center text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                        >
                             شاشة الفواتير
                         </Link>
                     </div>
@@ -149,9 +240,19 @@ const alertClass = (t: string) =>
                     <div v-if="hr" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <h2 class="mb-3 font-extrabold text-slate-800">الموظفون</h2>
                         <div class="space-y-2 text-sm">
-                            <div class="flex justify-between"><span class="text-slate-600">على رأس العمل</span><span class="font-extrabold text-slate-900">{{ hr.employees }}</span></div>
-                            <div class="flex justify-between"><span class="text-slate-600">كلفة الرواتب الشهرية</span><span class="font-extrabold text-slate-900">{{ money(hr.monthly_cost) }}</span></div>
-                            <div class="flex justify-between"><span class="text-slate-600">وثائق توشك</span><span class="font-extrabold" :class="hr.expiring_docs ? 'text-red-600' : 'text-emerald-600'">{{ hr.expiring_docs }}</span></div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">على رأس العمل</span><span class="font-extrabold text-slate-900">{{ hr.employees }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">كلفة الرواتب الشهرية</span
+                                ><span class="font-extrabold text-slate-900">{{ money(hr.monthly_cost) }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">وثائق توشك</span
+                                ><span class="font-extrabold" :class="hr.expiring_docs ? 'text-red-600' : 'text-emerald-600'">{{
+                                    hr.expiring_docs
+                                }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -160,9 +261,7 @@ const alertClass = (t: string) =>
             <!-- ربحية الوحدات -->
             <div v-if="canSee.accounting && profitability.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                    <h2 class="flex items-center gap-1.5 font-extrabold text-slate-800">
-                        <TrendingUp class="h-4 w-4" /> ربحية الوحدات هذا الشهر
-                    </h2>
+                    <h2 class="flex items-center gap-1.5 font-extrabold text-slate-800"><TrendingUp class="h-4 w-4" /> ربحية الوحدات هذا الشهر</h2>
                     <Link href="/admin/accounting/reports" class="text-xs font-bold text-blue-600 hover:underline">التقارير المالية</Link>
                 </div>
                 <table class="w-full text-sm">
@@ -179,7 +278,9 @@ const alertClass = (t: string) =>
                             <td class="px-4 py-2 font-bold text-slate-800">{{ p.name }}</td>
                             <td class="px-4 py-2 text-left font-bold text-emerald-600" dir="ltr">{{ money(p.revenue) }}</td>
                             <td class="px-4 py-2 text-left font-bold text-red-600" dir="ltr">{{ money(p.expense) }}</td>
-                            <td class="px-4 py-2 text-left font-extrabold" :class="p.profit >= 0 ? 'text-slate-900' : 'text-red-600'" dir="ltr">{{ money(p.profit) }}</td>
+                            <td class="px-4 py-2 text-left font-extrabold" :class="p.profit >= 0 ? 'text-slate-900' : 'text-red-600'" dir="ltr">
+                                {{ money(p.profit) }}
+                            </td>
                         </tr>
                     </tbody>
                 </table>
