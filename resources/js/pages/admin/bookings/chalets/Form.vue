@@ -308,7 +308,7 @@ const submit = () => {
                             <div>
                                 <div class="mb-1 flex items-center justify-between gap-2">
                                     <label class="block text-sm font-bold text-slate-700">النزيل</label>
-                                    <ClientQuickAdd @created="onClientCreated" />
+                                    <ClientQuickAdd category="chalet" @created="onClientCreated" />
                                 </div>
                                 <SearchableSelect
                                     v-model="form.client_id"

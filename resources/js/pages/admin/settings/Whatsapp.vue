@@ -320,9 +320,9 @@ const insertVar = (v: string) => {
                 </div>
 
                 <p class="mb-3 text-sm font-medium text-slate-600">
-                    تُرسَل رسالة الترحيب تلقائياً عند إضافة عميل جديد لديه رقم جوال. النصّ المستخدَم هو قالب «ترحيب بالعميل» من
+                    تُرسَل رسالة الترحيب تلقائياً عند إضافة عميل جديد لديه رقم جوال. يُستخدم قالب «ترحيب» من
                     <Link href="/admin/notifications/library" class="font-bold text-emerald-700 underline underline-offset-2">مكتبة الإشعارات</Link>
-                    إن وُجد، وإلا استُخدم النصّ الاحتياطي أدناه.
+                    — قسم الشاليهات أو القاعات عند الإضافة من نموذج الحجز، أو القسم العام من شاشة العملاء — وإلا يُستخدم النصّ الاحتياطي أدناه.
                 </p>
 
                 <div class="mb-2 flex flex-wrap items-center gap-2">

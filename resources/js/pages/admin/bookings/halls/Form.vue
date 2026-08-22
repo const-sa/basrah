@@ -404,7 +404,7 @@ const eventBadge = (color: string) =>
                                         <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs font-extrabold text-white">2</span>
                                         العميل
                                     </label>
-                                    <ClientQuickAdd @created="onClientCreated" />
+                                    <ClientQuickAdd category="hall" @created="onClientCreated" />
                                 </div>
                                 <SearchableSelect
                                     v-model="form.client_id"

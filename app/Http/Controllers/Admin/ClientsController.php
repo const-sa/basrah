@@ -15,11 +15,13 @@ use App\Models\Setting;
 use App\Models\Voucher;
 use App\Services\WaGateway;
 use Illuminate\Database\Eloquent\Builder;
+use App\Support\NotificationCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -366,6 +368,7 @@ class ClientsController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'mobile' => ['nullable', 'string', 'max:50'],
+            'category' => ['nullable', Rule::in(['chalet', 'hall', 'pool'])],
         ]);
 
         $client = (new Client)->fill([
@@ -376,7 +379,7 @@ class ClientsController extends Controller
 
         $client->save();
 
-        $this->sendWelcome($client);
+        $this->sendWelcome($client, $data['category'] ?? null);
 
         return response()->json([
             'client' => [
@@ -458,8 +461,10 @@ class ClientsController extends Controller
     /**
      * إرسال رسالة الترحيب عبر الواتساب عند إضافة عميل جديد (إن كان التكامل والترحيب مفعّلين وللعميل رقم جوال).
      * لا يجب أن يُفشل إنشاء العميل إن تعذّر الإرسال — نلتقط أي خطأ ونسجّله فقط.
+     *
+     * @param  'chalet'|'hall'|'pool'|null  $category  قسم القالب عند الإضافة من نموذج حجز بعينه.
      */
-    private function sendWelcome(Client $client): void
+    private function sendWelcome(Client $client, ?string $category = null): void
     {
         if (blank($client->mobile)) {
             return;
@@ -471,9 +476,14 @@ class ClientsController extends Controller
             return;
         }
 
+        $templateCategory = in_array($category, NotificationCatalog::categoryKeys(), true)
+            && $category !== 'general'
+            ? $category
+            : 'general';
+
         // قالب المكتبة أولاً — هو ما يراه المستخدم ويحرّره ويقسّمه —
         // ونصّ الإعدادات احتياطٌ لمن لم يُنشئ قالب ترحيب بعد.
-        $body = NotificationTemplate::resolve('welcome')?->body
+        $body = NotificationTemplate::resolve('welcome', $templateCategory)?->body
             ?? $settings->wa_welcome_template;
 
         if (blank($body)) {

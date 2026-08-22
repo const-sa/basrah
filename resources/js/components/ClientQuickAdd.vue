@@ -19,6 +19,11 @@ export interface QuickClient {
 
 const emit = defineEmits<{ created: [client: QuickClient] }>();
 
+const props = withDefaults(
+    defineProps<{ category?: 'chalet' | 'hall' | 'pool' }>(),
+    { category: undefined },
+);
+
 const { can } = usePermissions();
 
 const open = ref(false);
@@ -61,7 +66,11 @@ const submit = async () => {
         const response = await fetch('/admin/clients/quick', {
             method: 'POST',
             headers: jsonHeaders(),
-            body: JSON.stringify({ name: name.value.trim(), mobile: mobile.value.trim() || null }),
+            body: JSON.stringify({
+                name: name.value.trim(),
+                mobile: mobile.value.trim() || null,
+                category: props.category ?? null,
+            }),
         });
 
         if (response.status === 422) {
