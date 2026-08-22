@@ -36,6 +36,9 @@ use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\RevenuesController;
 use App\Http\Controllers\Admin\RolesController;
 use App\Http\Controllers\Admin\SalesController;
+use App\Http\Controllers\Admin\PurchaseController;
+use App\Http\Controllers\Admin\QuotationController;
+use App\Http\Controllers\Admin\SearchController;
 use App\Http\Controllers\Admin\SuppliersController;
 use App\Http\Controllers\Admin\TicketsController;
 use App\Http\Controllers\Admin\UnitsController;
@@ -67,6 +70,8 @@ Route::get('booking/{reference}', [OnlineBookingController::class, 'show'])->nam
 
 Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('perm:dashboard.view')->name('dashboard');
+
+    Route::get('api/search', [SearchController::class, 'index'])->name('api.search');
 
     // مركز التقارير — تقارير الحجوزات والمالية والموظفين (§12)
     Route::get('reports', [ReportsController::class, 'index'])->middleware('perm:reports.view')->name('reports.index');
@@ -229,6 +234,29 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::put('items/{item}', [ItemsController::class, 'update'])->middleware('perm:items.edit')->name('items.update');
         Route::patch('items/{item}/toggle', [ItemsController::class, 'toggle'])->middleware('perm:items.edit')->name('items.toggle');
         Route::delete('items/{item}', [ItemsController::class, 'destroy'])->middleware('perm:items.delete')->name('items.destroy');
+
+        Route::post('inventory/items/{item}/adjust', [ItemsController::class, 'adjustStock'])->middleware('perm:items.edit')->name('items.adjust');
+
+        // فواتير المشتريات
+        Route::get('purchases', [PurchaseController::class, 'index'])->middleware('perm:purchases.view')->name('purchases.index');
+        Route::get('purchases/create', [PurchaseController::class, 'create'])->middleware('perm:purchases.create')->name('purchases.create');
+        Route::post('purchases', [PurchaseController::class, 'store'])->middleware('perm:purchases.create')->name('purchases.store');
+        Route::get('purchases/{purchase}/edit', [PurchaseController::class, 'edit'])->middleware('perm:purchases.edit')->name('purchases.edit');
+        Route::put('purchases/{purchase}', [PurchaseController::class, 'update'])->middleware('perm:purchases.edit')->name('purchases.update');
+        Route::delete('purchases/{purchase}', [PurchaseController::class, 'destroy'])->middleware('perm:purchases.delete')->name('purchases.destroy');
+        Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('perm:purchases.view')->name('purchases.show');
+
+        // عروض الأسعار
+        Route::get('quotations', [QuotationController::class, 'index'])->middleware('perm:quotations.view')->name('quotations.index');
+        Route::get('quotations/create', [QuotationController::class, 'create'])->middleware('perm:quotations.create')->name('quotations.create');
+        Route::post('quotations', [QuotationController::class, 'store'])->middleware('perm:quotations.create')->name('quotations.store');
+        Route::get('quotations/{quotation}/edit', [QuotationController::class, 'edit'])->middleware('perm:quotations.edit')->name('quotations.edit');
+        Route::put('quotations/{quotation}', [QuotationController::class, 'update'])->middleware('perm:quotations.edit')->name('quotations.update');
+        Route::delete('quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('perm:quotations.delete')->name('quotations.destroy');
+        Route::get('quotations/{quotation}', [QuotationController::class, 'show'])->middleware('perm:quotations.view')->name('quotations.show');
+        Route::get('quotations/{quotation}/pdf', [QuotationController::class, 'pdf'])->middleware('perm:quotations.view')->name('quotations.pdf');
+
+
 
         Route::post('inventory/adjust', [ItemsController::class, 'adjust'])->middleware('perm:inventory.approve')->name('inventory.adjust');
         Route::get('inventory/movements', [ItemsController::class, 'movements'])->middleware('perm:inventory.view')->name('inventory.movements');

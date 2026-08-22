@@ -73,6 +73,8 @@ class SystemRegistry
                 'sales' => ['label' => 'المبيعات والمرتجعات', 'actions' => ['view', 'create', 'delete', 'export']],
                 'items' => ['label' => 'الأصناف', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'inventory' => ['label' => 'المخزون والجرد', 'actions' => ['view', 'create', 'edit', 'approve']],
+                'purchases' => ['label' => 'المشتريات', 'actions' => ['view', 'create']],
+                'quotations' => ['label' => 'عروض الأسعار', 'actions' => ['view', 'create']],
             ],
         ],
 

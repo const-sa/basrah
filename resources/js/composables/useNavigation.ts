@@ -28,6 +28,7 @@ import {
     ScrollText,
     Settings,
     ShieldCheck,
+    ShoppingBag,
     ShoppingCart,
     SlidersHorizontal,
     TrendingUp,
@@ -153,6 +154,9 @@ export function useNavigation() {
                 { title: t('nav.items'), href: '/admin/items', icon: Boxes, perm: 'items.view' },
                 { title: t('nav.measure_units'), href: '/admin/inventory/units', icon: Ruler, perm: 'items.view' },
                 { title: t('nav.movements'), href: '/admin/inventory/movements', icon: History, perm: 'inventory.view' },
+                { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view' },
+                { title: t('nav.purchases'), href: '/admin/purchases', icon: ShoppingBag, perm: 'purchases.view' },
+                { title: t('nav.quotations'), href: '/admin/quotations', icon: FileText, perm: 'quotations.view' },
             ],
         },
         {
