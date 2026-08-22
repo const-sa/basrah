@@ -28,7 +28,7 @@ const brand = computed(() => page.props.brand ?? { name: '', logo_url: null });
 <template>
     <!-- ترويسة رفيعة بيضاء: الهويّة والتنقّل في القائمة اليمنى، وهنا الموضع والأدوات فقط. -->
     <header
-        class="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b-2 border-slate-300 bg-white px-3 text-slate-900 shadow-sm md:px-5 print:hidden"
+        class="sticky top-0 z-30 flex h-14 w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden border-b-2 border-slate-300 bg-white px-3 text-slate-900 shadow-sm md:gap-3 md:px-5 print:hidden"
     >
         <SidebarTrigger class="-ms-1 shrink-0 text-[#0BA6CE] hover:bg-[#E6F7FB] hover:text-[#0990B4]" />
 
@@ -48,7 +48,7 @@ const brand = computed(() => page.props.brand ?? { name: '', logo_url: null });
         </Link>
 
         <template v-if="breadcrumbs && breadcrumbs.length > 0">
-            <Breadcrumb class="min-w-0">
+            <Breadcrumb class="hidden min-w-0 sm:block">
                 <BreadcrumbList class="flex-nowrap text-slate-600">
                     <template v-for="(item, index) in breadcrumbs" :key="index">
                         <BreadcrumbItem class="whitespace-nowrap">
