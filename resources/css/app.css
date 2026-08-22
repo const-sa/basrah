@@ -73,14 +73,14 @@ html {
         --chart-5: 27 87% 67%;
         --radius: 0.75rem;
         /* Light sidebar — matching c-wts (white bg, indigo active) */
-        --sidebar-background: 210 10% 23%;
-        --sidebar-foreground: 216 12% 79%;
-        --sidebar-primary: 160 84% 32%;
+        --sidebar-background: 213 82% 15%;
+        --sidebar-foreground: 214 32% 86%;
+        --sidebar-primary: 205 90% 55%;
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 160 84% 32%;
+        --sidebar-accent: 214 55% 26%;
         --sidebar-accent-foreground: 0 0% 100%;
-        --sidebar-border: 210 10% 30%;
-        --sidebar-ring: 160 84% 32%;
+        --sidebar-border: 214 45% 24%;
+        --sidebar-ring: 205 90% 55%;
     }
 
     /* Dark mode disabled — keep all tokens identical to :root (force light) */
@@ -104,14 +104,14 @@ html {
         --border: 214 18% 80%;
         --input: 214 18% 80%;
         --ring: 160 84% 32%;
-        --sidebar-background: 210 10% 23%;
-        --sidebar-foreground: 216 12% 79%;
-        --sidebar-primary: 160 84% 32%;
+        --sidebar-background: 213 82% 15%;
+        --sidebar-foreground: 214 32% 86%;
+        --sidebar-primary: 205 90% 55%;
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 160 84% 32%;
+        --sidebar-accent: 214 55% 26%;
         --sidebar-accent-foreground: 0 0% 100%;
-        --sidebar-border: 210 10% 30%;
-        --sidebar-ring: 160 84% 32%;
+        --sidebar-border: 214 45% 24%;
+        --sidebar-ring: 205 90% 55%;
     }
 }
 
@@ -311,6 +311,19 @@ html {
     /* بقايا الشريط الجانبي إن عاد يومًا، ولوحته في الشاشات الضيقة.
        أما شريط القائمة العلوي فيُخفي نفسه بـ print:hidden في مكوّنه. */
     div.group.peer[data-side],
+    /* المدخل المفتوح في القائمة الكحلية يصير أبيض بنصٍّ كحليّ: المجموعة النشطة تُظلَّل،
+       والصفحة المفتوحة وحدها تُضاء — فلا يلتبس «أين أنا» بـ«أين مجموعتي». */
+    [data-sidebar='menu-sub-button'][data-active='true'] {
+        background-color: #ffffff;
+        color: #0b3b78;
+        font-weight: 800;
+    }
+
+    [data-sidebar='menu-sub-button'][data-active='true']:hover {
+        background-color: #ffffff;
+        color: #0b3b78;
+    }
+
     [data-sidebar='sidebar'][data-mobile='true'] {
         display: none !important;
     }

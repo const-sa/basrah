@@ -8,7 +8,7 @@ import {
     Megaphone, MessageCircle, Receipt, Search, ShieldCheck, ShoppingCart, SlidersHorizontal,
     Truck, Users, Wallet, type LucideIcon,
 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 interface Page {
     href: string;
@@ -18,6 +18,13 @@ interface Page {
     /** الصلاحية التي تُظهر الصفحة في البحث؛ بلا قيمة تظهر للجميع. */
     perm?: string;
 }
+
+interface Props {
+    /** في الترويسة ذات الصفّ الواحد لا يتّسع حقلٌ ممتد؛ فيصير البحث زرّ عدسة ينفتح عند الطلب. */
+    compact?: boolean;
+}
+
+withDefaults(defineProps<Props>(), { compact: false });
 
 const { t } = useLocale();
 const { can } = usePermissions();
@@ -83,6 +90,14 @@ const input = ref<HTMLInputElement | null>(null);
 const query = ref('');
 const open = ref(false);
 const active = ref(0);
+/** الحقل المنسدل من زرّ العدسة — لا معنى له خارج الوضع المضغوط. */
+const expanded = ref(false);
+
+const reveal = () => {
+    expanded.value = true;
+    open.value = true;
+    nextTick(() => input.value?.focus());
+};
 
 const results = computed<Page[]>(() => {
     const q = query.value.trim().toLowerCase();
@@ -100,6 +115,7 @@ const go = (page?: Page) => {
     const target = page ?? results.value[active.value];
     if (!target) return;
     open.value = false;
+    expanded.value = false;
     query.value = '';
     input.value?.blur();
     router.visit(target.href);
@@ -118,6 +134,7 @@ const onKeydown = (e: KeyboardEvent) => {
         go();
     } else if (e.key === 'Escape') {
         open.value = false;
+        expanded.value = false;
         input.value?.blur();
     }
 };
@@ -126,14 +143,16 @@ const onKeydown = (e: KeyboardEvent) => {
 const onGlobalKey = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        input.value?.focus();
-        open.value = true;
+        reveal();
     }
 };
 
 // إغلاق القائمة عند النقر خارج المكوّن.
 const onClickOutside = (e: MouseEvent) => {
-    if (root.value && !root.value.contains(e.target as Node)) open.value = false;
+    if (root.value && !root.value.contains(e.target as Node)) {
+        open.value = false;
+        expanded.value = false;
+    }
 };
 
 onMounted(() => {
@@ -147,45 +166,61 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div ref="root" class="relative w-full max-w-md">
-        <div class="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-white transition focus-within:border-emerald-400/60 focus-within:bg-white/15">
-            <Search class="h-4 w-4 shrink-0 text-slate-300" />
+    <div ref="root" class="relative" :class="compact ? 'h-9 w-9 shrink-0' : 'w-full max-w-md'">
+        <!-- الوضع المضغوط: عدسةٌ ساكنة حتى تُطلب -->
+        <button
+            v-if="compact && !expanded"
+            type="button"
+            :title="t('header.search_placeholder')"
+            @click="reveal"
+            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+        >
+            <Search class="h-5 w-5" />
+        </button>
+
+        <div
+            v-else
+            class="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-800 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100"
+            :class="compact ? 'absolute top-0 z-50 w-[min(78vw,320px)] bg-white shadow-lg ltr:right-0 rtl:left-0' : ''"
+        >
+            <Search class="h-4 w-4 shrink-0 text-slate-400" />
             <input
                 ref="input"
                 v-model="query"
                 type="search"
                 :placeholder="t('header.search_placeholder')"
                 autocomplete="off"
-                class="w-full border-0 bg-transparent p-0 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-0"
+                class="w-full border-0 bg-transparent p-0 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
                 @focus="open = true"
                 @input="onInput"
                 @keydown="onKeydown"
             />
-            <kbd class="hidden items-center gap-0.5 rounded border border-white/20 px-1.5 py-0.5 text-[10px] font-bold text-slate-300 sm:flex">Ctrl K</kbd>
+            <kbd class="hidden items-center gap-0.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-500 sm:flex">Ctrl K</kbd>
         </div>
 
         <!-- قائمة النتائج -->
         <div
             v-if="open"
-            class="absolute inset-x-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-2xl"
+            class="absolute top-[calc(100%+8px)] z-50 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-2xl"
+            :class="compact ? 'w-[min(78vw,320px)] ltr:right-0 rtl:left-0' : 'inset-x-0'"
         >
             <ul class="max-h-[60vh] overflow-y-auto py-1.5">
                 <li v-for="(p, i) in results" :key="p.href">
                     <button
                         type="button"
                         class="flex w-full items-center gap-3 px-3 py-2.5 text-start text-sm transition"
-                        :class="i === active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700 hover:bg-slate-50'"
+                        :class="i === active ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'"
                         @mouseenter="active = i"
                         @mousedown.prevent="go(p)"
                     >
                         <span
                             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                            :class="i === active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'"
+                            :class="i === active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'"
                         >
                             <component :is="p.icon" class="h-4 w-4" />
                         </span>
                         <span class="flex-1 font-bold">{{ p.title }}</span>
-                        <CornerDownLeft v-if="i === active" class="h-3.5 w-3.5 text-emerald-500" />
+                        <CornerDownLeft v-if="i === active" class="h-3.5 w-3.5 text-blue-600" />
                     </button>
                 </li>
                 <li v-if="results.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">
@@ -195,3 +230,16 @@ onBeforeUnmount(() => {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* ستايل الحقول العام (AdminLTE) يفرض على كل input خلفيةً بيضاء وحدًّا رماديًا
+   وهالةَ تركيز خضراء — وهو ما لا يليق بحقل داخل الترويسة: الحاوية المستديرة
+   هي الحقل في نظر العين، فيبقى الـ input شفافًا بلا حدّ، وتتولّى الحاوية
+   إظهار التركيز بالأزرق. */
+input[type="search"] {
+    background-color: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #1e293b !important;
+}
+</style>

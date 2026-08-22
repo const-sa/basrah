@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
+import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
-import AppTopNav from '@/components/AppTopNav.vue';
 import FlashToast from '@/components/FlashToast.vue';
 import type { BreadcrumbItemType, SharedData } from '@/types';
 import { usePage } from '@inertiajs/vue3';
@@ -22,9 +22,9 @@ const version = computed(() => page.props.version);
 
 <template>
     <AppShell variant="sidebar">
+        <AppSidebar />
         <AppContent variant="sidebar">
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
-            <AppTopNav />
             <slot />
             <footer class="mt-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-slate-200 px-5 py-3 text-center text-xs font-bold text-slate-500 print:hidden">
                 <span>
