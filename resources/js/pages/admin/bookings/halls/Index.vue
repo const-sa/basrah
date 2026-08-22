@@ -396,7 +396,7 @@ const colorClass = statusChipClass;
                     <!-- اختصارات شاشات القاعات — تُشتق من القائمة فلا تحتاج صيانة -->
                     <PageShortcuts />
                     <Link
-                        v-if="can('bookings.create')"
+                        v-if="can('hall_bookings.create')"
                         href="/admin/bookings/halls/create"
                         class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
                     >
@@ -508,75 +508,75 @@ const colorClass = statusChipClass;
                                 <!-- رقم الحجز مثبَّت عند حافة الجدول: هو مرساة الصف،
                                      وبضياعه أثناء التمرير الأفقي تصير الأرقام بلا صاحب. -->
                                 <th
-                                    class="sticky z-20 whitespace-nowrap bg-slate-100 px-3 py-3 text-right text-xs font-extrabold text-slate-800 ltr:left-0 rtl:right-0"
+                                    class="sticky z-20 whitespace-nowrap bg-slate-100 px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a] ltr:left-0 rtl:right-0"
                                 >
                                     رقم الحجز
                                 </th>
-                                <th v-if="shows('client')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('client')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     العميل
                                 </th>
-                                <th v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('mobile')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     جوال العميل
                                 </th>
-                                <th v-if="shows('event')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('event')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     نوع المناسبة
                                 </th>
-                                <th v-if="shows('start')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('start')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     بداية الحجز
                                 </th>
-                                <th v-if="shows('end')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('end')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     نهاية الحجز
                                 </th>
-                                <th v-if="shows('unit')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('unit')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     القاعة
                                 </th>
-                                <th v-if="shows('sections')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('sections')" class="whitespace-nowrap px-3 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">
                                     الأقسام
                                 </th>
-                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     مبلغ الحجز
                                 </th>
-                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     الخصم
                                 </th>
-                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المقدم
                                 </th>
-                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     الضريبة
                                 </th>
-                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     الإجمالي
                                 </th>
-                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المدفوع
                                 </th>
                                 <th
                                     v-for="m in shows('methods') ? methods : []"
                                     :key="m.key"
-                                    class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800"
+                                    class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]"
                                 >
                                     {{ m.label }}
                                 </th>
-                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المتبقي
                                 </th>
-                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المسترجع
                                 </th>
-                                <th v-if="shows('status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     حالة الحجز
                                 </th>
-                                <th v-if="shows('pay_status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('pay_status')" class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     حالة الدفع
                                 </th>
                                 <th
                                     v-if="shows('notes')"
-                                    class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800 print:hidden"
+                                    class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a] print:hidden"
                                 >
                                     الملاحظات
                                 </th>
-                                <th class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-slate-800 print:hidden">التحكم</th>
+                                <th class="whitespace-nowrap px-3 py-3 text-center text-xs font-extrabold text-[#1e3a8a] print:hidden">التحكم</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -707,7 +707,7 @@ const colorClass = statusChipClass;
                                         <TableActionButton variant="view" :icon="Eye" title="معاينة كل التفاصيل" @click="openPreview(b)" />
 
                                         <TableActionButton
-                                            v-if="can('bookings.edit')"
+                                            v-if="can('hall_bookings.edit')"
                                             variant="primary"
                                             :icon="Wallet"
                                             title="الدفعات والعربون"
@@ -763,28 +763,28 @@ const colorClass = statusChipClass;
                                         <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في
                                              المسار، فلا يحتار الموظف بين أزرار لا تنطبق. -->
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
+                                            v-if="can('hall_bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
                                             variant="primary"
                                             :icon="Check"
                                             title="تأكيد الحجز"
                                             @click="changeStatus(b, 'confirmed')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && b.status === 'confirmed'"
+                                            v-if="can('hall_bookings.edit') && b.status === 'confirmed'"
                                             variant="primary"
                                             :icon="LogIn"
                                             title="تسجيل الدخول"
                                             @click="changeStatus(b, 'checked_in')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && b.status === 'checked_in'"
+                                            v-if="can('hall_bookings.edit') && b.status === 'checked_in'"
                                             variant="success"
                                             :icon="LogOut"
                                             title="تسجيل الخروج"
                                             @click="changeStatus(b, 'checked_out')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                            v-if="can('hall_bookings.edit') && !isClosedStatus(b.status)"
                                             variant="warning"
                                             :icon="X"
                                             title="إلغاء"
@@ -793,7 +793,7 @@ const colorClass = statusChipClass;
 
                                         <!-- التعديل والحذف داخل قائمة النقاط الثلاث: إجراءان يغيّران الحجز نفسه،
                                              فإخفاؤهما خلف نقرة يقلّل الضغط الخاطئ ويُهدّئ صفّ الإجراءات. -->
-                                        <DropdownMenu v-if="can('bookings.edit') || can('bookings.delete')">
+                                        <DropdownMenu v-if="can('hall_bookings.edit') || can('hall_bookings.delete')">
                                             <DropdownMenuTrigger :as-child="true">
                                                 <button
                                                     type="button"
@@ -805,7 +805,7 @@ const colorClass = statusChipClass;
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" class="w-40">
                                                 <DropdownMenuItem
-                                                    v-if="can('bookings.edit')"
+                                                    v-if="can('hall_bookings.edit')"
                                                     class="cursor-pointer font-bold text-slate-700"
                                                     @select="router.visit(`/admin/bookings/halls/${b.id}/edit`)"
                                                 >
@@ -815,15 +815,15 @@ const colorClass = statusChipClass;
                                                 <!-- التأجيل هنا لا في صفّ الإجراءات: أقلّ استعمالًا من الإلغاء
                                                      ويُخلَط به، فإخفاؤه يمنع النقرة الخاطئة. -->
                                                 <DropdownMenuItem
-                                                    v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                                    v-if="can('hall_bookings.edit') && !isClosedStatus(b.status)"
                                                     class="cursor-pointer font-bold text-violet-700 focus:bg-violet-50"
                                                     @select="changeStatus(b, 'postponed')"
                                                 >
                                                     <CalendarClock class="h-4 w-4" /> تأجيل
                                                 </DropdownMenuItem>
-                                                <DropdownMenuSeparator v-if="can('bookings.edit') && can('bookings.delete')" />
+                                                <DropdownMenuSeparator v-if="can('hall_bookings.edit') && can('hall_bookings.delete')" />
                                                 <DropdownMenuItem
-                                                    v-if="can('bookings.delete')"
+                                                    v-if="can('hall_bookings.delete')"
                                                     class="cursor-pointer font-bold text-red-600 focus:bg-red-50 focus:text-red-700"
                                                     @select="destroy(b)"
                                                 >
@@ -922,35 +922,35 @@ const colorClass = statusChipClass;
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('subtotal')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     مبلغ الحجز
                                 </th>
-                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('discount')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     الخصم
                                 </th>
-                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('deposit')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المقدم
                                 </th>
-                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('tax')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     الضريبة
                                 </th>
-                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('total')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     الإجمالي
                                 </th>
-                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('paid')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المدفوع
                                 </th>
                                 <th
                                     v-for="m in shows('methods') ? methods : []"
                                     :key="m.key"
-                                    class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800"
+                                    class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]"
                                 >
                                     {{ m.label }}
                                 </th>
-                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('remaining')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المتبقي
                                 </th>
-                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-slate-800">
+                                <th v-if="shows('refunded')" class="whitespace-nowrap px-3 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">
                                     المسترجع
                                 </th>
                             </tr>
@@ -1190,7 +1190,7 @@ const colorClass = statusChipClass;
                         </Link>
                     </div>
                     <Link
-                        v-if="can('bookings.edit')"
+                        v-if="can('hall_bookings.edit')"
                         :href="`/admin/bookings/halls/${previewBooking.id}/edit`"
                         class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-100"
                     >
@@ -1289,7 +1289,7 @@ const colorClass = statusChipClass;
                     <div class="grid gap-4 lg:grid-cols-[300px_1fr]">
                         <!-- تسجيل دفعة -->
                         <form
-                            v-if="can('bookings.edit')"
+                            v-if="can('hall_bookings.edit')"
                             @submit.prevent="submitPayment"
                             class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3"
                         >
@@ -1384,10 +1384,10 @@ const colorClass = statusChipClass;
                             <table v-else-if="payments.length" class="w-full text-xs">
                                 <thead class="bg-slate-50">
                                     <tr>
-                                        <th class="px-2 py-2 text-right font-extrabold text-slate-600">النوع</th>
-                                        <th class="px-2 py-2 text-right font-extrabold text-slate-600">التاريخ</th>
-                                        <th class="px-2 py-2 text-right font-extrabold text-slate-600">الطريقة</th>
-                                        <th class="px-2 py-2 text-left font-extrabold text-slate-600">المبلغ</th>
+                                        <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">النوع</th>
+                                        <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                        <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">الطريقة</th>
+                                        <th class="px-2 py-2 text-left font-extrabold text-[#1e3a8a]">المبلغ</th>
                                     </tr>
                                 </thead>
                                 <tbody>

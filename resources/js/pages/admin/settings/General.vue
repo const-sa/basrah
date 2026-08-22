@@ -107,14 +107,9 @@ const submit = () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <form @submit.prevent="submit" class="min-h-full space-y-5 bg-slate-100 p-5">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900">الإعدادات العامة</h1>
-                    <p class="mt-1 text-sm font-medium text-slate-600">شعار النشاط وبياناته وإعدادات الضريبة</p>
-                </div>
-                <button type="submit" :disabled="form.processing" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">
-                    <Save class="h-4 w-4" /> حفظ التغييرات
-                </button>
+            <div>
+                <h1 class="text-2xl font-extrabold text-slate-900">الإعدادات العامة</h1>
+                <p class="mt-1 text-sm font-medium text-slate-600">شعار النشاط وبياناته وإعدادات الضريبة</p>
             </div>
 
             <!-- شريط تحميل المرفوعات أثناء الحفظ -->
@@ -130,7 +125,7 @@ const submit = () => {
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">شعار النشاط (Logo)</label>
                         <div class="flex items-center gap-4">
-                            <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
+                            <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-700 bg-slate-900 p-1">
                                 <img v-if="logoPreview" :src="logoPreview" alt="logo" class="h-full w-full object-contain" />
                                 <Image v-else class="h-6 w-6 text-slate-300" />
                             </div>
@@ -144,7 +139,7 @@ const submit = () => {
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">أيقونة المتصفح (Favicon)</label>
                         <div class="flex items-center gap-4">
-                            <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
+                            <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-700 bg-slate-900 p-1">
                                 <img v-if="faviconPreview" :src="faviconPreview" alt="favicon" class="h-full w-full object-contain" />
                                 <Image v-else class="h-6 w-6 text-slate-300" />
                             </div>
@@ -295,6 +290,13 @@ const submit = () => {
                     </div>
                 </div>
                 <p v-else class="text-sm font-medium text-slate-500">الضريبة غير مفعّلة. فعّل السويتش لإدخال البيانات الضريبية.</p>
+            </div>
+
+            <!-- أزرار الحفظ -->
+            <div class="flex justify-end gap-2 pt-1">
+                <button type="submit" :disabled="form.processing" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">
+                    <Save class="h-4 w-4" /> حفظ التغييرات
+                </button>
             </div>
         </form>
     </AppLayout>

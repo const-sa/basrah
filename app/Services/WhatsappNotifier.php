@@ -5,7 +5,10 @@ namespace App\Services;
 use App\Jobs\SendWhatsappMessage;
 use App\Models\Booking;
 use App\Models\Contract;
+use App\Models\NotificationTemplate;
+use App\Models\Setting;
 use App\Models\WhatsappMessage;
+use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -62,17 +65,18 @@ class WhatsappNotifier
     {
         $booking->loadMissing(['unit', 'client']);
 
-        $body = implode("\n", array_filter([
-            'مرحبًا '.($booking->client?->name ?? '').'،',
-            'تم تأكيد حجزكم رقم '.$booking->reference.'.',
-            'الوحدة: '.($booking->unit?->name ?? '—'),
-            'التاريخ: '.$booking->booking_date->toDateString().' — '.$booking->periodLabel(),
-            'الإجمالي: '.number_format((float) $booking->total_amount, 2),
-            $booking->remainingAmount() > 0
-                ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
-                : 'مسدَّد بالكامل.',
-            'شكرًا لثقتكم.',
-        ]));
+        $body = $this->fromTemplate('booking_confirm', $booking)
+            ?? implode("\n", array_filter([
+                'مرحبًا '.($booking->client?->name ?? '').'،',
+                'تم تأكيد حجزكم رقم '.$booking->reference.'.',
+                'الوحدة: '.($booking->unit?->name ?? '—'),
+                'التاريخ: '.$booking->booking_date->toDateString().' — '.$booking->periodLabel(),
+                'الإجمالي: '.number_format((float) $booking->total_amount, 2),
+                $booking->remainingAmount() > 0
+                    ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
+                    : 'مسدَّد بالكامل.',
+                'شكرًا لثقتكم.',
+            ]));
 
         return $this->send($booking->client?->mobile, $body, 'booking_confirm', $booking, $userId);
     }
@@ -84,15 +88,16 @@ class WhatsappNotifier
     {
         $booking->loadMissing(['unit', 'client']);
 
-        $body = implode("\n", array_filter([
-            'تذكير بحجزكم رقم '.$booking->reference.'.',
-            'الوحدة: '.($booking->unit?->name ?? '—'),
-            'الموعد: '.$booking->booking_date->toDateString().' — '.$booking->periodLabel(),
-            $booking->remainingAmount() > 0
-                ? 'المتبقي عند الحضور: '.number_format($booking->remainingAmount(), 2)
-                : null,
-            'نتشرّف باستقبالكم.',
-        ]));
+        $body = $this->fromTemplate('reminder', $booking)
+            ?? implode("\n", array_filter([
+                'تذكير بحجزكم رقم '.$booking->reference.'.',
+                'الوحدة: '.($booking->unit?->name ?? '—'),
+                'الموعد: '.$booking->booking_date->toDateString().' — '.$booking->periodLabel(),
+                $booking->remainingAmount() > 0
+                    ? 'المتبقي عند الحضور: '.number_format($booking->remainingAmount(), 2)
+                    : null,
+                'نتشرّف باستقبالكم.',
+            ]));
 
         return $this->send($booking->client?->mobile, $body, 'reminder', $booking, $userId);
     }
@@ -107,14 +112,15 @@ class WhatsappNotifier
     {
         $contract->loadMissing(['client', 'booking']);
 
-        $body = implode("\n", array_filter([
-            'مرحبًا '.($contract->client?->name ?? '').'،',
-            $pdfUrl
-                ? 'مرفق عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.'
-                : 'صدر عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.',
-            'رقم العقد: '.$contract->number,
-            'نرجو الاطلاع والتأكيد.',
-        ]));
+        $body = $this->fromTemplate('contract', $contract->booking, ['contract_number' => (string) $contract->number])
+            ?? implode("\n", array_filter([
+                'مرحبًا '.($contract->client?->name ?? '').'،',
+                $pdfUrl
+                    ? 'مرفق عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.'
+                    : 'صدر عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.',
+                'رقم العقد: '.$contract->number,
+                'نرجو الاطلاع والتأكيد.',
+            ]));
 
         return $this->send($contract->client?->mobile, $body, 'contract', $contract, $userId, $pdfUrl);
     }
@@ -126,12 +132,13 @@ class WhatsappNotifier
     {
         $booking->loadMissing('client');
 
-        $body = implode("\n", array_filter([
-            'تم استلام مبلغ '.number_format($amount, 2).' على الحجز '.$booking->reference.'.',
-            $booking->remainingAmount() > 0
-                ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
-                : 'اكتمل السداد. شكرًا لكم.',
-        ]));
+        $body = $this->fromTemplate('payment', $booking, ['amount' => number_format($amount, 2)])
+            ?? implode("\n", array_filter([
+                'تم استلام مبلغ '.number_format($amount, 2).' على الحجز '.$booking->reference.'.',
+                $booking->remainingAmount() > 0
+                    ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
+                    : 'اكتمل السداد. شكرًا لكم.',
+            ]));
 
         return $this->send($booking->client?->mobile, $body, 'payment', $booking, $userId);
     }
@@ -152,16 +159,17 @@ class WhatsappNotifier
             return null;
         }
 
-        $body = implode("\n", array_filter([
-            'مرحبًا '.($booking->client?->name ?? '').'،',
-            'تذكير بالمبلغ المتبقي على حجزكم رقم '.$booking->reference.'.',
-            'الوحدة: '.($booking->unit?->name ?? '—'),
-            'الموعد: '.$booking->booking_date?->toDateString(),
-            'إجمالي الحجز: '.number_format((float) $booking->total_amount, 2),
-            'المسدَّد: '.number_format((float) $booking->paid_amount, 2),
-            'المتبقي: '.number_format($remaining, 2),
-            'نرجو السداد قبل الموعد. شكرًا لكم.',
-        ]));
+        $body = $this->fromTemplate('balance_reminder', $booking)
+            ?? implode("\n", array_filter([
+                'مرحبًا '.($booking->client?->name ?? '').'،',
+                'تذكير بالمبلغ المتبقي على حجزكم رقم '.$booking->reference.'.',
+                'الوحدة: '.($booking->unit?->name ?? '—'),
+                'الموعد: '.$booking->booking_date?->toDateString(),
+                'إجمالي الحجز: '.number_format((float) $booking->total_amount, 2),
+                'المسدَّد: '.number_format((float) $booking->paid_amount, 2),
+                'المتبقي: '.number_format($remaining, 2),
+                'نرجو السداد قبل الموعد. شكرًا لكم.',
+            ]));
 
         return $this->send($booking->client?->mobile, $body, 'balance_reminder', $booking, $userId);
     }
@@ -173,20 +181,21 @@ class WhatsappNotifier
     {
         $booking->loadMissing(['unit', 'client']);
 
-        $body = implode("\n", array_filter([
-            'مرحبًا '.($booking->client?->name ?? '').'،',
-            $pdfUrl
-                ? 'مرفق فاتورة حجزكم رقم '.$booking->reference.'.'
-                : 'فاتورة حجزكم رقم '.$booking->reference.':',
-            'الوحدة: '.($booking->unit?->name ?? '—'),
-            'التاريخ: '.$booking->booking_date?->toDateString(),
-            'الإجمالي: '.number_format((float) $booking->total_amount, 2),
-            'المسدَّد: '.number_format((float) $booking->paid_amount, 2),
-            $booking->remainingAmount() > 0
-                ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
-                : 'مسدَّدة بالكامل.',
-            'شكرًا لتعاملكم معنا.',
-        ]));
+        $body = $this->fromTemplate('invoice', $booking)
+            ?? implode("\n", array_filter([
+                'مرحبًا '.($booking->client?->name ?? '').'،',
+                $pdfUrl
+                    ? 'مرفق فاتورة حجزكم رقم '.$booking->reference.'.'
+                    : 'فاتورة حجزكم رقم '.$booking->reference.':',
+                'الوحدة: '.($booking->unit?->name ?? '—'),
+                'التاريخ: '.$booking->booking_date?->toDateString(),
+                'الإجمالي: '.number_format((float) $booking->total_amount, 2),
+                'المسدَّد: '.number_format((float) $booking->paid_amount, 2),
+                $booking->remainingAmount() > 0
+                    ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
+                    : 'مسدَّدة بالكامل.',
+                'شكرًا لتعاملكم معنا.',
+            ]));
 
         return $this->send($booking->client?->mobile, $body, 'invoice', $booking, $userId, $pdfUrl);
     }
@@ -203,19 +212,68 @@ class WhatsappNotifier
 
         $paid = (float) $booking->paid_amount;
 
-        $body = implode("\n", array_filter([
-            'مرحبًا '.($booking->client?->name ?? '').'،',
-            'نفيدكم بإلغاء الحجز رقم '.$booking->reference.'.',
-            'الوحدة: '.($booking->unit?->name ?? '—'),
-            'الموعد: '.$booking->booking_date?->toDateString(),
-            $reason ? 'السبب: '.$reason : null,
-            $paid > 0
-                ? 'المبلغ المسدَّد: '.number_format($paid, 2).' — سيتم التواصل معكم بشأنه.'
-                : null,
-            'نأسف لذلك، ونسعد بخدمتكم في مناسبة قادمة.',
-        ]));
+        $body = $this->fromTemplate('cancellation', $booking, ['reason' => (string) $reason])
+            ?? implode("\n", array_filter([
+                'مرحبًا '.($booking->client?->name ?? '').'،',
+                'نفيدكم بإلغاء الحجز رقم '.$booking->reference.'.',
+                'الوحدة: '.($booking->unit?->name ?? '—'),
+                'الموعد: '.$booking->booking_date?->toDateString(),
+                $reason ? 'السبب: '.$reason : null,
+                $paid > 0
+                    ? 'المبلغ المسدَّد: '.number_format($paid, 2).' — سيتم التواصل معكم بشأنه.'
+                    : null,
+                'نأسف لذلك، ونسعد بخدمتكم في مناسبة قادمة.',
+            ]));
 
         return $this->send($booking->client?->mobile, $body, 'cancellation', $booking, $userId);
+    }
+
+    /**
+     * نصّ المناسبة من مكتبة القوالب، أو null إن لم يُعرَّف قالبٌ لها.
+     *
+     * القسم يُشتقّ من نوع الوحدة، فيأخذ حجز الشاليه صيغة الشاليهات وحجز
+     * القاعة صيغة القاعات دون أن يختار الموظف شيئًا. وحين تخلو المكتبة
+     * من القالب يعود المُنادي إلى نصّه المدمج، فلا تسقط رسالة أصلًا.
+     *
+     * @param  array<string, string>  $extra
+     */
+    private function fromTemplate(string $event, ?Booking $booking, array $extra = []): ?string
+    {
+        $category = NotificationCatalog::categoryForUnitType($booking?->unit?->type);
+
+        $template = NotificationTemplate::resolve($event, $category);
+
+        if (! $template) {
+            return null;
+        }
+
+        return WaGateway::renderTemplate(
+            $template->body,
+            array_merge($this->variables($booking), $extra),
+        );
+    }
+
+    /**
+     * المتغيّرات المتاحة للقالب من الحجز والعميل والإعدادات.
+     *
+     * @return array<string, string>
+     */
+    private function variables(?Booking $booking): array
+    {
+        $client = $booking?->client;
+
+        return [
+            'name' => (string) ($client?->name ?? ''),
+            'business_name' => (string) (Setting::current()->business_name ?? config('app.name')),
+            'mobile' => (string) ($client?->mobile ?? ''),
+            'reference' => (string) ($booking?->reference ?? ''),
+            'unit' => (string) ($booking?->unit?->name ?? '—'),
+            'date' => (string) ($booking?->booking_date?->toDateString() ?? ''),
+            'period' => (string) ($booking?->periodLabel() ?? ''),
+            'total' => number_format((float) ($booking?->total_amount ?? 0), 2),
+            'paid' => number_format((float) ($booking?->paid_amount ?? 0), 2),
+            'remaining' => number_format((float) ($booking?->remainingAmount() ?? 0), 2),
+        ];
     }
 
     /**

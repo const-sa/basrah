@@ -1,12 +1,36 @@
 <script setup lang="ts">
 import { useLocale } from '@/composables/useLocale';
-import { router } from '@inertiajs/vue3';
 import { usePermissions } from '@/composables/usePermissions';
+import { router } from '@inertiajs/vue3';
 import {
-    Bell, Boxes, Building2, CalculatorIcon, CalendarDays, CalendarRange, Contact, CornerDownLeft,
-    FileBarChart2, FileSignature, FileText, History, Home, LayoutDashboard, LifeBuoy, MapPin,
-    Megaphone, MessageCircle, Receipt, Search, ShieldCheck, ShoppingCart, SlidersHorizontal,
-    Truck, Users, Wallet, type LucideIcon,
+    Bell,
+    Boxes,
+    Building2,
+    CalculatorIcon,
+    CalendarDays,
+    CalendarRange,
+    Contact,
+    CornerDownLeft,
+    FileBarChart2,
+    FileSignature,
+    FileText,
+    History,
+    Home,
+    LayoutDashboard,
+    LifeBuoy,
+    MapPin,
+    Megaphone,
+    MessageCircle,
+    Receipt,
+    Search,
+    ShieldCheck,
+    ShoppingCart,
+    SlidersHorizontal,
+    TrendingUp,
+    Truck,
+    Users,
+    Wallet,
+    type LucideIcon,
 } from 'lucide-vue-next';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -32,54 +56,205 @@ const { can } = usePermissions();
 // فهرس صفحات اللوحة القابلة للبحث. الكلمات المفتاحية تشمل مرادفات عربية/إنجليزية
 // لتسهيل الوصول حتى لو اختلفت صياغة المستخدم عن عنوان الصفحة.
 const allPages = computed<Page[]>(() => [
-    { href: '/admin', icon: LayoutDashboard, title: t('nav.dashboard'), perm: 'dashboard.view', keywords: ['home', 'dashboard', 'رئيسية', 'الرئيسية'] },
+    {
+        href: '/admin',
+        icon: LayoutDashboard,
+        title: t('nav.dashboard'),
+        perm: 'dashboard.view',
+        keywords: ['home', 'dashboard', 'رئيسية', 'الرئيسية'],
+    },
 
     // القاعات — حجز مناسبة بفترة داخل يوم
-    { href: '/admin/bookings/halls', icon: CalendarDays, title: t('nav.hall_bookings'), perm: 'bookings.view', keywords: ['bookings', 'halls', 'حجز', 'حجوزات', 'قاعة', 'قاعات', 'مناسبة', 'موعد'] },
-    { href: '/admin/calendar/halls', icon: CalendarRange, title: t('nav.hall_calendar'), perm: 'calendar.view', keywords: ['calendar', 'halls', 'تقويم', 'روزنامة', 'جدول', 'قاعات'] },
-    { href: '/admin/units/halls', icon: Building2, title: t('nav.halls'), perm: 'units.view', keywords: ['halls', 'units', 'قاعة', 'قاعات', 'وحدة', 'وحدات', 'اقسام'] },
+    {
+        href: '/admin/bookings/halls',
+        icon: CalendarDays,
+        title: t('nav.hall_bookings'),
+        perm: 'hall_bookings.view',
+        keywords: ['bookings', 'halls', 'حجز', 'حجوزات', 'قاعة', 'قاعات', 'مناسبة', 'موعد'],
+    },
+    {
+        href: '/admin/calendar/halls',
+        icon: CalendarRange,
+        title: t('nav.hall_calendar'),
+        perm: 'hall_calendar.view',
+        keywords: ['calendar', 'halls', 'تقويم', 'روزنامة', 'جدول', 'قاعات'],
+    },
+    {
+        href: '/admin/units/halls',
+        icon: Building2,
+        title: t('nav.halls'),
+        perm: 'halls.view',
+        keywords: ['halls', 'units', 'قاعة', 'قاعات', 'وحدة', 'وحدات', 'اقسام'],
+    },
 
     // الشاليهات — إقامة ممتدة بالليالي
-    { href: '/admin/bookings/chalets', icon: CalendarDays, title: t('nav.chalet_bookings'), perm: 'bookings.view', keywords: ['bookings', 'stays', 'chalets', 'حجز', 'حجوزات', 'شاليه', 'شاليهات', 'اقامة', 'مبيت', 'ليالي'] },
-    { href: '/admin/calendar/chalets', icon: CalendarRange, title: t('nav.chalet_calendar'), perm: 'calendar.view', keywords: ['calendar', 'chalets', 'تقويم', 'روزنامة', 'جدول', 'شاليهات', 'اشغال'] },
-    { href: '/admin/units/chalets', icon: Home, title: t('nav.chalets'), perm: 'units.view', keywords: ['chalets', 'units', 'شاليه', 'شاليهات', 'وحدة', 'وحدات', 'اقسام'] },
-    { href: '/admin/units/contract-template', icon: FileText, title: t('nav.hall_contract_template'), perm: 'units.view', keywords: ['contract', 'form', 'نموذج', 'العقد', 'عقد', 'شروط', 'احكام', 'قاعات'] },
+    {
+        href: '/admin/bookings/chalets',
+        icon: CalendarDays,
+        title: t('nav.chalet_bookings'),
+        perm: 'chalet_bookings.view',
+        keywords: ['bookings', 'stays', 'chalets', 'حجز', 'حجوزات', 'شاليه', 'شاليهات', 'اقامة', 'مبيت', 'ليالي'],
+    },
+    {
+        href: '/admin/calendar/chalets',
+        icon: CalendarRange,
+        title: t('nav.chalet_calendar'),
+        perm: 'chalet_calendar.view',
+        keywords: ['calendar', 'chalets', 'تقويم', 'روزنامة', 'جدول', 'شاليهات', 'اشغال'],
+    },
+    {
+        href: '/admin/units/chalets',
+        icon: Home,
+        title: t('nav.chalets'),
+        perm: 'chalets.view',
+        keywords: ['chalets', 'units', 'شاليه', 'شاليهات', 'وحدة', 'وحدات', 'اقسام'],
+    },
+    {
+        href: '/admin/units/contract-template',
+        icon: FileText,
+        title: t('nav.hall_contract_template'),
+        perm: 'hall_contract.view',
+        keywords: ['contract', 'form', 'نموذج', 'العقد', 'عقد', 'شروط', 'احكام', 'قاعات'],
+    },
 
     // العقود والواتساب
     { href: '/admin/contracts', icon: FileSignature, title: t('nav.contracts_list'), perm: 'contracts.view', keywords: ['contracts', 'عقد', 'عقود'] },
-    { href: '/admin/contract-templates', icon: FileText, title: t('nav.contract_templates'), perm: 'contract_templates.view', keywords: ['templates', 'قالب', 'قوالب', 'عقد'] },
-    { href: '/admin/whatsapp-log', icon: MessageCircle, title: t('nav.whatsapp_log'), perm: 'whatsapp.view', keywords: ['whatsapp', 'واتساب', 'رسائل', 'سجل'] },
+    {
+        href: '/admin/contract-templates',
+        icon: FileText,
+        title: t('nav.contract_templates'),
+        perm: 'contract_templates.view',
+        keywords: ['templates', 'قالب', 'قوالب', 'عقد'],
+    },
+    {
+        href: '/admin/whatsapp-log',
+        icon: MessageCircle,
+        title: t('nav.whatsapp_log'),
+        perm: 'whatsapp.view',
+        keywords: ['whatsapp', 'واتساب', 'رسائل', 'سجل'],
+    },
 
     // نقطة البيع
     { href: '/admin/pos', icon: ShoppingCart, title: t('nav.cashier'), perm: 'pos.view', keywords: ['pos', 'cashier', 'كاشير', 'بيع', 'فاتورة'] },
     { href: '/admin/items', icon: Boxes, title: t('nav.items'), perm: 'items.view', keywords: ['items', 'products', 'صنف', 'اصناف', 'مخزون', 'جرد'] },
-    { href: '/admin/inventory/movements', icon: History, title: t('nav.movements'), perm: 'inventory.view', keywords: ['movements', 'حركات', 'مخزون'] },
+    {
+        href: '/admin/inventory/movements',
+        icon: History,
+        title: t('nav.movements'),
+        perm: 'inventory.view',
+        keywords: ['movements', 'حركات', 'مخزون'],
+    },
 
     // المحاسبة
-    { href: '/admin/accounting/accounts', icon: CalculatorIcon, title: t('nav.accounts'), perm: 'accounts.view', keywords: ['accounts', 'حساب', 'حسابات', 'شجرة'] },
-    { href: '/admin/accounting/journal', icon: FileText, title: t('nav.journal'), perm: 'journal.view', keywords: ['journal', 'قيد', 'قيود', 'يومية'] },
-    { href: '/admin/accounting/vouchers', icon: Receipt, title: t('nav.vouchers'), perm: 'vouchers.view', keywords: ['vouchers', 'سند', 'سندات', 'قبض', 'صرف', 'خزينة'] },
-    { href: '/admin/accounting/reports', icon: FileBarChart2, title: t('nav.fin_reports'), perm: 'fin_reports.view', keywords: ['financial', 'ميزانية', 'ميزان', 'دخل', 'ربحية'] },
+    {
+        href: '/admin/accounting/accounts',
+        icon: CalculatorIcon,
+        title: t('nav.accounts'),
+        perm: 'accounts.view',
+        keywords: ['accounts', 'حساب', 'حسابات', 'شجرة'],
+    },
+    {
+        href: '/admin/accounting/journal',
+        icon: FileText,
+        title: t('nav.journal'),
+        perm: 'journal.view',
+        keywords: ['journal', 'قيد', 'قيود', 'يومية'],
+    },
+    {
+        href: '/admin/accounting/vouchers',
+        icon: Receipt,
+        title: t('nav.vouchers'),
+        perm: 'vouchers.view',
+        keywords: ['vouchers', 'سند', 'سندات', 'قبض', 'صرف', 'خزينة'],
+    },
+    {
+        href: '/admin/accounting/revenues',
+        icon: TrendingUp,
+        title: t('nav.revenues'),
+        perm: 'revenues.view',
+        keywords: ['revenue', 'إيراد', 'إيرادات', 'دخل', 'قاعات', 'شاليهات', 'مسابح'],
+    },
+    {
+        href: '/admin/accounting/reports',
+        icon: FileBarChart2,
+        title: t('nav.fin_reports'),
+        perm: 'fin_reports.view',
+        keywords: ['financial', 'ميزانية', 'ميزان', 'دخل', 'ربحية'],
+    },
 
     // الموارد البشرية
     { href: '/admin/hr/staff', icon: Users, title: t('nav.staff'), perm: 'staff.view', keywords: ['staff', 'employees', 'موظف', 'موظفين', 'ملفات'] },
-    { href: '/admin/hr/attendance', icon: CalendarRange, title: t('nav.attendance'), perm: 'attendance.view', keywords: ['attendance', 'حضور', 'غياب', 'انصراف'] },
-    { href: '/admin/hr/leaves', icon: FileText, title: t('nav.leaves'), perm: 'leaves.view', keywords: ['leaves', 'advances', 'اجازة', 'اجازات', 'سلفة', 'سلف'] },
+    {
+        href: '/admin/hr/attendance',
+        icon: CalendarRange,
+        title: t('nav.attendance'),
+        perm: 'attendance.view',
+        keywords: ['attendance', 'حضور', 'غياب', 'انصراف'],
+    },
+    {
+        href: '/admin/hr/leaves',
+        icon: FileText,
+        title: t('nav.leaves'),
+        perm: 'leaves.view',
+        keywords: ['leaves', 'advances', 'اجازة', 'اجازات', 'سلفة', 'سلف'],
+    },
     { href: '/admin/hr/payroll', icon: Wallet, title: t('nav.payroll'), perm: 'payroll.view', keywords: ['payroll', 'راتب', 'رواتب', 'مسير'] },
 
     // العملاء والإدارة
     { href: '/admin/clients', icon: Contact, title: t('nav.clients'), perm: 'clients.view', keywords: ['clients', 'customers', 'عميل', 'عملاء'] },
     { href: '/admin/suppliers', icon: Truck, title: t('nav.suppliers'), perm: 'suppliers.view', keywords: ['suppliers', 'مورد', 'موردين'] },
-    { href: '/admin/employees', icon: ShieldCheck, title: t('nav.employees_list'), perm: 'employees.view', keywords: ['users', 'مستخدمين', 'صلاحيات', 'نطاق'] },
-    { href: '/admin/roles', icon: ShieldCheck, title: t('nav.roles'), perm: 'roles.view', keywords: ['roles', 'permissions', 'دور', 'ادوار', 'صلاحيات'] },
+    {
+        href: '/admin/employees',
+        icon: ShieldCheck,
+        title: t('nav.employees_list'),
+        perm: 'employees.view',
+        keywords: ['users', 'مستخدمين', 'صلاحيات', 'نطاق'],
+    },
+    {
+        href: '/admin/groups',
+        icon: ShieldCheck,
+        title: t('nav.groups'),
+        perm: 'roles.view',
+        keywords: ['groups', 'roles', 'permissions', 'مجموعة', 'مجموعات', 'دور', 'ادوار', 'صلاحيات'],
+    },
     { href: '/admin/cities', icon: MapPin, title: t('nav.cities'), perm: 'cities.view', keywords: ['cities', 'city', 'مدينة', 'مدن'] },
     { href: '/admin/departments', icon: Building2, title: t('nav.departments'), perm: 'departments.view', keywords: ['departments', 'قسم', 'اقسام'] },
-    { href: '/admin/tickets', icon: LifeBuoy, title: t('nav.support'), perm: 'tickets.view', keywords: ['support', 'tickets', 'دعم', 'تذكرة', 'تذاكر'] },
+    {
+        href: '/admin/tickets',
+        icon: LifeBuoy,
+        title: t('nav.support'),
+        perm: 'tickets.view',
+        keywords: ['support', 'tickets', 'دعم', 'تذكرة', 'تذاكر'],
+    },
     { href: '/admin/reports', icon: FileBarChart2, title: t('nav.reports'), perm: 'reports.view', keywords: ['reports', 'تقرير', 'تقارير'] },
-    { href: '/admin/notifications', icon: Bell, title: t('header.notifications'), perm: 'notifications.view', keywords: ['notifications', 'اشعار', 'اشعارات'] },
-    { href: '/admin/notifications/library', icon: Megaphone, title: t('nav.notifications_library'), perm: 'notifications.view', keywords: ['library', 'مكتبة', 'قوالب'] },
-    { href: '/admin/settings/general', icon: SlidersHorizontal, title: t('nav.settings_general'), perm: 'settings.view', keywords: ['settings', 'اعدادات', 'عامة'] },
-    { href: '/admin/settings/whatsapp', icon: MessageCircle, title: t('nav.settings_whatsapp'), perm: 'settings.view', keywords: ['whatsapp', 'واتساب', 'واتس'] },
+    {
+        href: '/admin/notifications',
+        icon: Bell,
+        title: t('header.notifications'),
+        perm: 'notifications.view',
+        keywords: ['notifications', 'اشعار', 'اشعارات'],
+    },
+    {
+        href: '/admin/notifications/library',
+        icon: Megaphone,
+        title: t('nav.notifications_library'),
+        perm: 'notifications.view',
+        keywords: ['library', 'مكتبة', 'قوالب'],
+    },
+    {
+        href: '/admin/settings/general',
+        icon: SlidersHorizontal,
+        title: t('nav.settings_general'),
+        perm: 'settings.view',
+        keywords: ['settings', 'اعدادات', 'عامة'],
+    },
+    {
+        href: '/admin/settings/whatsapp',
+        icon: MessageCircle,
+        title: t('nav.settings_whatsapp'),
+        perm: 'settings.view',
+        keywords: ['whatsapp', 'واتساب', 'واتس'],
+    },
 ]);
 
 // لا يُقترح على المستخدم ما لا يملك صلاحيته — اقتراح يفضي إلى 403 إزعاج لا مساعدة.
@@ -173,29 +348,32 @@ onBeforeUnmount(() => {
             type="button"
             :title="t('header.search_placeholder')"
             @click="reveal"
-            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:border-[#1B75BB] hover:bg-[#EEF5FB] hover:text-[#1B75BB]"
         >
             <Search class="h-5 w-5" />
         </button>
 
         <div
             v-else
-            class="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-800 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100"
+            class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-800 transition focus-within:border-[#1B75BB] focus-within:ring-2 focus-within:ring-[#EEF5FB]"
             :class="compact ? 'absolute top-0 z-50 w-[min(78vw,320px)] bg-white shadow-lg ltr:right-0 rtl:left-0' : ''"
         >
-            <Search class="h-4 w-4 shrink-0 text-slate-400" />
+            <Search class="h-4 w-4 shrink-0 text-slate-500" />
             <input
                 ref="input"
                 v-model="query"
                 type="search"
                 :placeholder="t('header.search_placeholder')"
                 autocomplete="off"
-                class="w-full border-0 bg-transparent p-0 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+                class="w-full border-0 bg-transparent p-0 text-sm text-slate-800 placeholder:text-slate-500 focus:outline-none focus:ring-0"
                 @focus="open = true"
                 @input="onInput"
                 @keydown="onKeydown"
             />
-            <kbd class="hidden items-center gap-0.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-500 sm:flex">Ctrl K</kbd>
+            <kbd
+                class="hidden items-center gap-0.5 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 sm:flex"
+                >Ctrl K</kbd
+            >
         </div>
 
         <!-- قائمة النتائج -->
@@ -236,7 +414,7 @@ onBeforeUnmount(() => {
    وهالةَ تركيز خضراء — وهو ما لا يليق بحقل داخل الترويسة: الحاوية المستديرة
    هي الحقل في نظر العين، فيبقى الـ input شفافًا بلا حدّ، وتتولّى الحاوية
    إظهار التركيز بالأزرق. */
-input[type="search"] {
+input[type='search'] {
     background-color: transparent !important;
     border: 0 !important;
     box-shadow: none !important;

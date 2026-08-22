@@ -215,7 +215,7 @@ const colorClass = statusChipClass;
                     <!-- اختصارات شاشات الشاليهات — تُشتق من القائمة فلا تحتاج صيانة -->
                     <PageShortcuts />
                     <Link
-                        v-if="can('bookings.create')"
+                        v-if="can('chalet_bookings.create')"
                         href="/admin/bookings/chalets/create"
                         class="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-700"
                     >
@@ -280,13 +280,13 @@ const colorClass = statusChipClass;
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">رقم الحجز</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الشاليه والنطاق</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">النزيل</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الدخول والخروج</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">المالية</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">رقم الحجز</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الشاليه والنطاق</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النزيل</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الدخول والخروج</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المالية</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -349,7 +349,7 @@ const colorClass = statusChipClass;
                                 <td class="px-4 py-3">
                                     <div class="flex items-center justify-center gap-1">
                                         <TableActionButton
-                                            v-if="can('bookings.edit')"
+                                            v-if="can('chalet_bookings.edit')"
                                             variant="primary"
                                             :icon="Wallet"
                                             title="الدفعات والعربون"
@@ -372,49 +372,49 @@ const colorClass = statusChipClass;
 
                                         <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في المسار -->
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
+                                            v-if="can('chalet_bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
                                             variant="primary"
                                             :icon="Check"
                                             title="تأكيد الحجز"
                                             @click="changeStatus(b, 'confirmed')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && b.status === 'confirmed'"
+                                            v-if="can('chalet_bookings.edit') && b.status === 'confirmed'"
                                             variant="primary"
                                             :icon="LogIn"
                                             title="تسجيل الدخول"
                                             @click="changeStatus(b, 'checked_in')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && b.status === 'checked_in'"
+                                            v-if="can('chalet_bookings.edit') && b.status === 'checked_in'"
                                             variant="success"
                                             :icon="LogOut"
                                             title="تسجيل الخروج"
                                             @click="changeStatus(b, 'checked_out')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit')"
+                                            v-if="can('chalet_bookings.edit')"
                                             variant="edit"
                                             :icon="Pencil"
                                             title="تعديل"
                                             @click="router.visit(`/admin/bookings/chalets/${b.id}/edit`)"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                            v-if="can('chalet_bookings.edit') && !isClosedStatus(b.status)"
                                             variant="dark"
                                             :icon="CalendarClock"
                                             title="تأجيل"
                                             @click="changeStatus(b, 'postponed')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.edit') && !isClosedStatus(b.status)"
+                                            v-if="can('chalet_bookings.edit') && !isClosedStatus(b.status)"
                                             variant="warning"
                                             :icon="X"
                                             title="إلغاء"
                                             @click="changeStatus(b, 'cancelled')"
                                         />
                                         <TableActionButton
-                                            v-if="can('bookings.delete')"
+                                            v-if="can('chalet_bookings.delete')"
                                             variant="danger"
                                             :icon="Trash2"
                                             title="حذف"
@@ -492,7 +492,7 @@ const colorClass = statusChipClass;
 
                     <div class="grid gap-4 lg:grid-cols-[300px_1fr]">
                         <form
-                            v-if="can('bookings.edit')"
+                            v-if="can('chalet_bookings.edit')"
                             @submit.prevent="submitPayment"
                             class="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3"
                         >
@@ -586,10 +586,10 @@ const colorClass = statusChipClass;
                             <table v-else-if="payments.length" class="w-full text-xs">
                                 <thead class="bg-slate-50">
                                     <tr>
-                                        <th class="px-2 py-2 text-right font-extrabold text-slate-600">النوع</th>
-                                        <th class="px-2 py-2 text-right font-extrabold text-slate-600">التاريخ</th>
-                                        <th class="px-2 py-2 text-right font-extrabold text-slate-600">الطريقة</th>
-                                        <th class="px-2 py-2 text-left font-extrabold text-slate-600">المبلغ</th>
+                                        <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">النوع</th>
+                                        <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                        <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">الطريقة</th>
+                                        <th class="px-2 py-2 text-left font-extrabold text-[#1e3a8a]">المبلغ</th>
                                     </tr>
                                 </thead>
                                 <tbody>

@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Role;
+use App\Models\Unit;
 use App\Models\User;
+use App\Services\BookingService;
+use App\Services\ContractService;
 use Database\Seeders\AccountsSeeder;
 use Database\Seeders\BookingSetupSeeder;
 use Database\Seeders\CatalogSeeder;
@@ -11,6 +14,7 @@ use Database\Seeders\ContractTemplateSeeder;
 use Database\Seeders\RolesSeeder;
 use Database\Seeders\UnitsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -74,7 +78,7 @@ class SystemRoutesGuardTest extends TestCase
      * @param  list<string>  $allowed
      * @param  list<string>  $forbidden
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('roleAccessProvider')]
+    #[DataProvider('roleAccessProvider')]
     public function test_role_reaches_only_its_own_systems(string $slug, array $allowed, array $forbidden): void
     {
         $user = $this->user($slug);
@@ -96,25 +100,25 @@ class SystemRoutesGuardTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_accountant_cannot_manage_users_or_roles(): void
+    public function test_accountant_cannot_manage_users_or_groups(): void
     {
         $accountant = $this->user('accountant');
 
         $this->actingAs($accountant)->get('/admin/employees')->assertForbidden();
-        $this->actingAs($accountant)->get('/admin/roles')->assertForbidden();
+        $this->actingAs($accountant)->get('/admin/groups')->assertForbidden();
     }
 
     public function test_unit_supervisor_cannot_delete_contracts(): void
     {
         // عقد فعلي: ربط النموذج يسبق فحص الصلاحية، فبدونه يأتي 404 لا 403
-        $booking = app(\App\Services\BookingService::class)->create([
-            'unit_id' => \App\Models\Unit::firstOrFail()->id,
+        $booking = app(BookingService::class)->create([
+            'unit_id' => Unit::firstOrFail()->id,
             'scope' => 'whole',
             'booking_date' => '2026-12-01',
             'period' => 'full_day',
             'status' => 'confirmed',
         ]);
-        $contract = app(\App\Services\ContractService::class)->generate($booking);
+        $contract = app(ContractService::class)->generate($booking);
 
         // مشرف الوحدة يملك contracts.create و contracts.send دون contracts.delete
         $this->actingAs($this->user('unit-supervisor'))

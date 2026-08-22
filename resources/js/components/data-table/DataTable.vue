@@ -54,7 +54,7 @@ const alignClass = (a?: string) => (a === 'center' ? 'text-center' : a === 'end'
         <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table class="w-full min-w-[640px] text-sm">
                 <thead>
-                    <tr class="border-b-2 border-slate-200 bg-white text-slate-700">
+                    <tr class="border-b-2 border-slate-200 bg-white text-[#1e3a8a]">
                         <th v-if="showIndex" class="px-4 py-3 text-center font-bold">#</th>
                         <th v-for="col in columns" :key="col.key" :class="['px-4 py-3 font-bold', alignClass(col.align)]">
                             {{ col.label }}

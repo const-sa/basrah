@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\PaymentMethodsController;
 use App\Http\Controllers\Admin\PosController;
 use App\Http\Controllers\Admin\PricingController;
 use App\Http\Controllers\Admin\ReportsController;
+use App\Http\Controllers\Admin\RevenuesController;
 use App\Http\Controllers\Admin\RolesController;
 use App\Http\Controllers\Admin\SalesController;
 use App\Http\Controllers\Admin\SuppliersController;
@@ -90,30 +91,30 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     |--------------------------------------------------------------------------
     | نظام الحجوزات
     |--------------------------------------------------------------------------
-    | الوسيط system:bookings يحرس النظام كاملاً، ثم تفصل صلاحية الإجراء داخله.
+    | الوسيط system:halls|chalets يحرس النشاطين، ثم تفصل صلاحية الإجراء داخلهما.
     */
-    Route::middleware('system:bookings')->group(function () {
+    Route::middleware('system:halls|chalets')->group(function () {
         // نموذج العقد المعتمد للقاعات — قبل units/{type?} حتى لا يُلتقط كمقطع نوع
-        Route::get('units/contract-template', [HallContractTemplateController::class, 'show'])->middleware('perm:units.view')->name('units.contract_template');
-        Route::put('units/contract-template', [HallContractTemplateController::class, 'update'])->middleware('perm:units.edit')->name('units.contract_template.update');
-        Route::post('units/contract-template/reset', [HallContractTemplateController::class, 'reset'])->middleware('perm:units.edit')->name('units.contract_template.reset');
+        Route::get('units/contract-template', [HallContractTemplateController::class, 'show'])->middleware('perm:hall_contract.view')->name('units.contract_template');
+        Route::put('units/contract-template', [HallContractTemplateController::class, 'update'])->middleware('perm:hall_contract.edit')->name('units.contract_template.update');
+        Route::post('units/contract-template/reset', [HallContractTemplateController::class, 'reset'])->middleware('perm:hall_contract.edit')->name('units.contract_template.reset');
 
         // الوحدات والأقسام
         // شاشة واحدة بثلاث مداخل: القاعات، الشاليهات، والكل — يفصلها المقطع {type}
-        Route::get('units/{type?}', [UnitsController::class, 'index'])->where('type', 'halls|chalets')->middleware('perm:units.view')->name('units.index');
-        Route::post('units', [UnitsController::class, 'store'])->middleware('perm:units.create')->name('units.store');
-        Route::put('units/{unit}', [UnitsController::class, 'update'])->middleware('perm:units.edit')->name('units.update');
-        Route::patch('units/{unit}/toggle', [UnitsController::class, 'toggle'])->middleware('perm:units.edit')->name('units.toggle');
+        Route::get('units/{type?}', [UnitsController::class, 'index'])->where('type', 'halls|chalets')->middleware('perm:halls.view|chalets.view')->name('units.index');
+        Route::post('units', [UnitsController::class, 'store'])->middleware('perm:halls.create|chalets.create')->name('units.store');
+        Route::put('units/{unit}', [UnitsController::class, 'update'])->middleware('perm:halls.edit|chalets.edit')->name('units.update');
+        Route::patch('units/{unit}/toggle', [UnitsController::class, 'toggle'])->middleware('perm:halls.edit|chalets.edit')->name('units.toggle');
         // رفع الشعار وحده — تستدعيه مساحة العمل دون فتح نموذج الوحدة كاملًا
-        Route::post('units/{unit}/logo', [UnitsController::class, 'updateLogo'])->middleware('perm:units.edit')->name('units.logo.update');
-        Route::delete('units/{unit}', [UnitsController::class, 'destroy'])->middleware('perm:units.delete')->name('units.destroy');
+        Route::post('units/{unit}/logo', [UnitsController::class, 'updateLogo'])->middleware('perm:halls.edit|chalets.edit')->name('units.logo.update');
+        Route::delete('units/{unit}', [UnitsController::class, 'destroy'])->middleware('perm:halls.delete|chalets.delete')->name('units.destroy');
 
         // تسعيرة الوحدات — تُدار من نافذة الأسعار داخل شاشة الوحدات
-        Route::put('units/{unit}/prices', [PricingController::class, 'updatePrices'])->middleware('perm:units.edit')->name('units.prices.update');
+        Route::put('units/{unit}/prices', [PricingController::class, 'updatePrices'])->middleware('perm:halls.edit|chalets.edit')->name('units.prices.update');
 
         // مساحة عمل وحدة واحدة — حجوزاتها وفواتيرها وربحيتها
         Route::get('units/{unit}/workspace', [UnitWorkspaceController::class, 'show'])
-            ->middleware('perm:units.view')->name('units.workspace');
+            ->middleware('perm:halls.view|chalets.view')->name('units.workspace');
 
         // باقات القاعات
         Route::get('packages', [PackagesController::class, 'index'])->middleware('perm:packages.view')->name('packages.index');
@@ -131,51 +132,51 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::delete('event-types/{eventType}', [EventTypesController::class, 'destroy'])->middleware('perm:event_types.delete')->name('event_types.destroy');
 
         // مرافق الوحدات
-        Route::get('units-facilities', [FacilitiesController::class, 'index'])->middleware('perm:units.view')->name('facilities.index');
-        Route::post('units-facilities', [FacilitiesController::class, 'store'])->middleware('perm:units.create')->name('facilities.store');
-        Route::put('units-facilities/{facility}', [FacilitiesController::class, 'update'])->middleware('perm:units.edit')->name('facilities.update');
-        Route::delete('units-facilities/{facility}', [FacilitiesController::class, 'destroy'])->middleware('perm:units.delete')->name('facilities.destroy');
+        Route::get('units-facilities', [FacilitiesController::class, 'index'])->middleware('perm:halls.view|chalets.view')->name('facilities.index');
+        Route::post('units-facilities', [FacilitiesController::class, 'store'])->middleware('perm:halls.create|chalets.create')->name('facilities.store');
+        Route::put('units-facilities/{facility}', [FacilitiesController::class, 'update'])->middleware('perm:halls.edit|chalets.edit')->name('facilities.update');
+        Route::delete('units-facilities/{facility}', [FacilitiesController::class, 'destroy'])->middleware('perm:halls.delete|chalets.delete')->name('facilities.destroy');
 
         /*
         | حجوزات القاعات وتقويمها — مناسبة داخل يوم واحد بفترة محددة.
         | المسارات النوعية تسبق مسارات {booking} حتى لا يُفسَّر «halls» كمعرّف.
         */
         // «month» قبل شيء آخر تحت calendar/halls — وهي كلمة لا معرّف فلا تلتبس
-        Route::get('calendar/halls/month', [HallMonthCalendarController::class, 'index'])->middleware('perm:calendar.view')->name('calendar.halls.month');
-        Route::get('calendar/halls', [HallCalendarController::class, 'index'])->middleware('perm:calendar.view')->name('calendar.halls');
-        Route::get('bookings/halls', [HallBookingsController::class, 'index'])->middleware('perm:bookings.view')->name('bookings.halls.index');
+        Route::get('calendar/halls/month', [HallMonthCalendarController::class, 'index'])->middleware('perm:hall_calendar.view')->name('calendar.halls.month');
+        Route::get('calendar/halls', [HallCalendarController::class, 'index'])->middleware('perm:hall_calendar.view')->name('calendar.halls');
+        Route::get('bookings/halls', [HallBookingsController::class, 'index'])->middleware('perm:hall_bookings.view')->name('bookings.halls.index');
         // create قبل {booking} حتى لا تُفسَّر كلمةً معرّفًا
-        Route::get('bookings/halls/create', [HallBookingsController::class, 'create'])->middleware('perm:bookings.create')->name('bookings.halls.create');
-        Route::get('bookings/halls/{booking}/edit', [HallBookingsController::class, 'edit'])->middleware('perm:bookings.edit')->name('bookings.halls.edit');
-        Route::post('bookings/halls/quote', [HallBookingsController::class, 'quote'])->middleware('perm:bookings.view')->name('bookings.halls.quote');
-        Route::post('bookings/halls', [HallBookingsController::class, 'store'])->middleware('perm:bookings.create')->name('bookings.halls.store');
-        Route::put('bookings/halls/{booking}', [HallBookingsController::class, 'update'])->middleware('perm:bookings.edit')->name('bookings.halls.update');
+        Route::get('bookings/halls/create', [HallBookingsController::class, 'create'])->middleware('perm:hall_bookings.create')->name('bookings.halls.create');
+        Route::get('bookings/halls/{booking}/edit', [HallBookingsController::class, 'edit'])->middleware('perm:hall_bookings.edit')->name('bookings.halls.edit');
+        Route::post('bookings/halls/quote', [HallBookingsController::class, 'quote'])->middleware('perm:hall_bookings.view')->name('bookings.halls.quote');
+        Route::post('bookings/halls', [HallBookingsController::class, 'store'])->middleware('perm:hall_bookings.create')->name('bookings.halls.store');
+        Route::put('bookings/halls/{booking}', [HallBookingsController::class, 'update'])->middleware('perm:hall_bookings.edit')->name('bookings.halls.update');
 
         /*
         | حجوزات الشاليهات وتقويمها — إقامة ممتدة بتاريخ دخول وخروج وعدد ليالٍ.
         */
-        Route::get('calendar/chalets', [ChaletCalendarController::class, 'index'])->middleware('perm:calendar.view')->name('calendar.chalets');
-        Route::get('bookings/chalets', [ChaletBookingsController::class, 'index'])->middleware('perm:bookings.view')->name('bookings.chalets.index');
-        Route::get('bookings/chalets/create', [ChaletBookingsController::class, 'create'])->middleware('perm:bookings.create')->name('bookings.chalets.create');
-        Route::get('bookings/chalets/{booking}/edit', [ChaletBookingsController::class, 'edit'])->middleware('perm:bookings.edit')->name('bookings.chalets.edit');
-        Route::post('bookings/chalets/quote', [ChaletBookingsController::class, 'quote'])->middleware('perm:bookings.view')->name('bookings.chalets.quote');
-        Route::post('bookings/chalets', [ChaletBookingsController::class, 'store'])->middleware('perm:bookings.create')->name('bookings.chalets.store');
-        Route::put('bookings/chalets/{booking}', [ChaletBookingsController::class, 'update'])->middleware('perm:bookings.edit')->name('bookings.chalets.update');
+        Route::get('calendar/chalets', [ChaletCalendarController::class, 'index'])->middleware('perm:chalet_calendar.view')->name('calendar.chalets');
+        Route::get('bookings/chalets', [ChaletBookingsController::class, 'index'])->middleware('perm:chalet_bookings.view')->name('bookings.chalets.index');
+        Route::get('bookings/chalets/create', [ChaletBookingsController::class, 'create'])->middleware('perm:chalet_bookings.create')->name('bookings.chalets.create');
+        Route::get('bookings/chalets/{booking}/edit', [ChaletBookingsController::class, 'edit'])->middleware('perm:chalet_bookings.edit')->name('bookings.chalets.edit');
+        Route::post('bookings/chalets/quote', [ChaletBookingsController::class, 'quote'])->middleware('perm:chalet_bookings.view')->name('bookings.chalets.quote');
+        Route::post('bookings/chalets', [ChaletBookingsController::class, 'store'])->middleware('perm:chalet_bookings.create')->name('bookings.chalets.store');
+        Route::put('bookings/chalets/{booking}', [ChaletBookingsController::class, 'update'])->middleware('perm:chalet_bookings.edit')->name('bookings.chalets.update');
 
         /*
         | ما بعد الحجز مشترك بين النوعين: الحالة والدفعات والتذكير والحذف.
         */
-        Route::patch('bookings/{booking}/status', [BookingsController::class, 'changeStatus'])->middleware('perm:bookings.edit')->name('bookings.status');
-        Route::get('bookings/{booking}/payments', [BookingsController::class, 'payments'])->middleware('perm:bookings.view')->name('bookings.payments');
-        Route::post('bookings/{booking}/payments', [BookingsController::class, 'storePayment'])->middleware('perm:bookings.edit')->name('bookings.payments.store');
+        Route::patch('bookings/{booking}/status', [BookingsController::class, 'changeStatus'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.status');
+        Route::get('bookings/{booking}/payments', [BookingsController::class, 'payments'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.payments');
+        Route::post('bookings/{booking}/payments', [BookingsController::class, 'storePayment'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.payments.store');
         Route::post('bookings/{booking}/remind', [BookingsController::class, 'remind'])->middleware('perm:whatsapp.send')->name('bookings.remind');
         // تذكير المتبقي وإرسال الفاتورة (§14)
         Route::post('bookings/{booking}/remind-balance', [BookingsController::class, 'remindBalance'])->middleware('perm:whatsapp.send')->name('bookings.remind.balance');
         Route::post('bookings/{booking}/invoice/send', [BookingsController::class, 'sendInvoice'])->middleware('perm:whatsapp.send')->name('bookings.invoice.send');
-        Route::patch('bookings/{booking}/notes', [BookingsController::class, 'updateNotes'])->middleware('perm:bookings.edit')->name('bookings.notes');
-        Route::get('bookings/{booking}/bond', [BookingsController::class, 'bond'])->middleware('perm:bookings.view')->name('bookings.bond');
-        Route::get('bookings/{booking}/invoice', [BookingsController::class, 'invoice'])->middleware('perm:bookings.view')->name('bookings.invoice');
-        Route::delete('bookings/{booking}', [BookingsController::class, 'destroy'])->middleware('perm:bookings.delete')->name('bookings.destroy');
+        Route::patch('bookings/{booking}/notes', [BookingsController::class, 'updateNotes'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.notes');
+        Route::get('bookings/{booking}/bond', [BookingsController::class, 'bond'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.bond');
+        Route::get('bookings/{booking}/invoice', [BookingsController::class, 'invoice'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.invoice');
+        Route::delete('bookings/{booking}', [BookingsController::class, 'destroy'])->middleware('perm:hall_bookings.delete|chalet_bookings.delete')->name('bookings.destroy');
 
         // الروابط القديمة تُحوَّل إلى شاشة القاعات — الروابط المحفوظة لا تنكسر.
         Route::redirect('bookings', 'admin/bookings/halls')->name('bookings.index');
@@ -212,7 +213,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     | نظام نقطة البيع والمخزون
     |--------------------------------------------------------------------------
     */
-    Route::middleware('system:pos')->group(function () {
+    Route::middleware('system:pools')->group(function () {
         Route::get('pos', [PosController::class, 'index'])->middleware('perm:pos.view')->name('pos.index');
         Route::post('pos/checkout', [PosController::class, 'checkout'])->middleware('perm:pos.create')->name('pos.checkout');
         Route::post('pos/sales/{sale}/refund', [PosController::class, 'refund'])->middleware('perm:sales.create')->name('pos.refund');
@@ -262,6 +263,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('accounting/vouchers', [AccountingController::class, 'storeVoucher'])->middleware('perm:vouchers.create')->name('vouchers.store');
         Route::post('accounting/vouchers/{voucher}/post', [AccountingController::class, 'postVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.post');
         Route::post('accounting/vouchers/{voucher}/cancel', [AccountingController::class, 'cancelVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.cancel');
+
+        // الإيرادات — قراءة الدفاتر من جهة الدخل، موزّعة على القاعات
+        // والشاليهات والمسابح
+        Route::get('accounting/revenues', [RevenuesController::class, 'index'])->middleware('perm:revenues.view')->name('revenues.index');
+        Route::get('accounting/revenues/export', [RevenuesController::class, 'export'])->middleware('perm:revenues.export')->name('revenues.export');
 
         // المصروفات والتكاليف (§9) — سندات صرف بوجهٍ تشغيلي
         Route::get('accounting/expenses', [ExpensesController::class, 'index'])->middleware('perm:expenses.view')->name('expenses.index');
@@ -338,7 +344,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // النسخ الاحتياطي (§18) — التنزيل بصلاحية العرض لأنه القاعدة كاملة
     Route::get('backups', [BackupsController::class, 'index'])->middleware('perm:backups.view')->name('backups.index');
     Route::get('backups/{backup}/download', [BackupsController::class, 'download'])->middleware('perm:backups.view')->name('backups.download');
+    // تنزيل نسخة طازجة بنقرة واحدة — تُؤخذ ثم تُرسل في الرد نفسه.
+    Route::get('backups/export', [BackupsController::class, 'export'])->middleware('perm:backups.create')->name('backups.export');
     Route::post('backups', [BackupsController::class, 'store'])->middleware('perm:backups.create')->name('backups.store');
+    Route::post('backups/upload', [BackupsController::class, 'upload'])->middleware('perm:backups.create')->name('backups.upload');
+    Route::post('backups/{backup}/restore', [BackupsController::class, 'restore'])->middleware('perm:backups.restore')->name('backups.restore');
     Route::delete('backups/{backup}', [BackupsController::class, 'destroy'])->middleware('perm:backups.delete')->name('backups.destroy');
 
     // الأرشيف — المحذوفات: استعراض واسترجاع، والإتلاف النهائي بصلاحية مستقلة
@@ -346,11 +356,14 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::post('archive/{type}/{id}/restore', [ArchiveController::class, 'restore'])->middleware('perm:archive.restore')->name('archive.restore');
     Route::delete('archive/{type}/{id}', [ArchiveController::class, 'destroy'])->middleware('perm:archive.delete')->name('archive.destroy');
 
-    // الأدوار والصلاحيات
-    Route::get('roles', [RolesController::class, 'index'])->middleware('perm:roles.view')->name('roles.index');
-    Route::post('roles', [RolesController::class, 'store'])->middleware('perm:roles.create')->name('roles.store');
-    Route::put('roles/{role}', [RolesController::class, 'update'])->middleware('perm:roles.edit')->name('roles.update');
-    Route::delete('roles/{role}', [RolesController::class, 'destroy'])->middleware('perm:roles.delete')->name('roles.destroy');
+    // المجموعات وصلاحياتها — كانت تُسمّى «الأدوار»، والاسم الجديد هو الذي
+    // تعرفه الإدارة. المسار القديم /admin/roles يُحوَّل حتى لا تنكسر الروابط
+    // المحفوظة، وأسماء المسارات (roles.*) باقية لأن مفتاح الصلاحية roles.* .
+    Route::get('groups', [RolesController::class, 'index'])->middleware('perm:roles.view')->name('roles.index');
+    Route::post('groups', [RolesController::class, 'store'])->middleware('perm:roles.create')->name('roles.store');
+    Route::put('groups/{role}', [RolesController::class, 'update'])->middleware('perm:roles.edit')->name('roles.update');
+    Route::delete('groups/{role}', [RolesController::class, 'destroy'])->middleware('perm:roles.delete')->name('roles.destroy');
+    Route::redirect('roles', 'admin/groups');
 
     // العملاء
     Route::get('clients', [ClientsController::class, 'index'])->middleware('perm:clients.view')->name('clients.index');
@@ -380,9 +393,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
     // الأقسام
     Route::get('departments', [DepartmentsController::class, 'index'])->middleware('perm:departments.view')->name('departments.index');
-    Route::post('departments', [DepartmentsController::class, 'store'])->middleware('perm:departments.create')->name('departments.store');
+    // الأقسام ثابتة: لا يُسمح بالإضافة أو الحذف، التعديل فقط
     Route::put('departments/{department}', [DepartmentsController::class, 'update'])->middleware('perm:departments.edit')->name('departments.update');
-    Route::delete('departments/{department}', [DepartmentsController::class, 'destroy'])->middleware('perm:departments.delete')->name('departments.destroy');
 
     // تذاكر الدعم الفني
     Route::get('tickets', [TicketsController::class, 'index'])->middleware('perm:tickets.view')->name('tickets.index');
@@ -399,6 +411,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/whatsapp', [WhatsappSettingsController::class, 'edit'])->middleware('perm:settings.view')->name('settings.whatsapp.edit');
     Route::post('settings/whatsapp', [WhatsappSettingsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.whatsapp.update');
     Route::get('settings/whatsapp/status', [WhatsappSettingsController::class, 'status'])->middleware('perm:settings.view')->name('settings.whatsapp.status');
+    Route::get('settings/whatsapp/connect', [WhatsappSettingsController::class, 'connect'])->middleware('perm:settings.edit')->name('settings.whatsapp.connect');
     Route::post('settings/whatsapp/test', [WhatsappSettingsController::class, 'test'])->middleware('perm:settings.edit')->name('settings.whatsapp.test');
 });
 

@@ -310,7 +310,7 @@ const statusChip = statusRingChipClass;
                                         </div>
 
                                         <!-- ما بقي متاحًا — الحجز يُفتح من الخلية نفسها -->
-                                        <template v-if="can('bookings.create')">
+                                        <template v-if="can('hall_bookings.create')">
                                             <template v-for="slot in row.slots" :key="slot.period">
                                                 <!-- الوحدة كاملة — حين تقبلها الوحدة ولا يشغلها شيء -->
                                                 <Link

@@ -66,7 +66,7 @@ const genderClass = (g: string) =>
  * في شاشة الإعدادات لتغيير صورة واحدة.
  */
 const { can } = usePermissions();
-const canEditLogo = computed(() => can('units.edit'));
+const canEditLogo = computed(() => can(`${kind.value}.edit`));
 
 const logoForm = useForm({ logo: null as File | null, remove_logo: false as boolean });
 const logoEndpoint = computed(() => `/admin/units/${props.unit.id}/logo`);

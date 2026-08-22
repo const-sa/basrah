@@ -71,7 +71,7 @@ const props = defineProps<{
     type: Unit['type'] | null;
 }>();
 
-const { can } = usePermissions();
+const { canAny, canUnit } = usePermissions();
 
 // نصوص الشاشة تتبع النوع المعروض — نفس المكوّن يخدم القاعات والشاليهات والكل.
 const screen = computed(() => {
@@ -344,7 +344,7 @@ const destroy = (u: Unit) => {
                     <Link href="/admin/units-facilities" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
                         <Settings2 class="h-4 w-4" /> إدارة المرافق
                     </Link>
-                    <button v-if="can('units.create')" type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
+                    <button v-if="type ? canUnit(type, 'create') : canAny('halls.create', 'chalets.create')" type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
                         <Plus class="h-4 w-4" /> {{ screen.createLabel }}
                     </button>
                 </div>
@@ -387,10 +387,10 @@ const destroy = (u: Unit) => {
                                 </div>
                             </div>
                             <div class="flex shrink-0 items-center gap-1">
-                                <TableActionButton v-if="can('units.edit')" variant="success" :icon="BadgeDollarSign" title="الأسعار" @click="openPrices(u)" />
-                                <TableActionButton v-if="can('units.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openEdit(u)" />
-                                <TableActionButton v-if="can('units.edit')" :variant="u.is_active ? 'warning' : 'success'" :icon="Power" :title="u.is_active ? 'إيقاف عن الحجز' : 'تفعيل'" @click="toggle(u)" />
-                                <TableActionButton v-if="can('units.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(u)" />
+                                <TableActionButton v-if="canUnit(u.type, 'edit')" variant="success" :icon="BadgeDollarSign" title="الأسعار" @click="openPrices(u)" />
+                                <TableActionButton v-if="canUnit(u.type, 'edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openEdit(u)" />
+                                <TableActionButton v-if="canUnit(u.type, 'edit')" :variant="u.is_active ? 'warning' : 'success'" :icon="Power" :title="u.is_active ? 'إيقاف عن الحجز' : 'تفعيل'" @click="toggle(u)" />
+                                <TableActionButton v-if="canUnit(u.type, 'delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(u)" />
                             </div>
                         </div>
 
@@ -680,7 +680,7 @@ const destroy = (u: Unit) => {
                         <!-- القاعة: صفّان لكل فترة -->
                         <table v-else class="w-full text-sm">
                             <thead>
-                                <tr class="border-y border-slate-100 text-[11px] font-extrabold text-slate-500">
+                                <tr class="border-y border-slate-100 text-[11px] font-extrabold text-[#1e3a8a]">
                                     <th class="px-3 py-2 text-start">الفترة</th>
                                     <th class="px-3 py-2 text-start">أيام الأسبوع</th>
                                     <th class="px-3 py-2 text-start">الجمعة والسبت</th>

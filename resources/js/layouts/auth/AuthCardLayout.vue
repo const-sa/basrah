@@ -13,8 +13,8 @@ defineProps<{
     <div class="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
         <div class="flex w-full max-w-md flex-col gap-6">
             <Link :href="route('home')" class="flex items-center gap-2 self-center font-medium">
-                <div class="flex h-9 w-9 items-center justify-center">
-                    <AppLogoIcon class="size-9 fill-current text-black dark:text-white" />
+                <div class="flex size-14 items-center justify-center overflow-hidden rounded-2xl bg-slate-900 p-1.5 ring-1 ring-inset ring-slate-800">
+                    <AppLogoIcon class="size-full fill-current text-white" />
                 </div>
             </Link>
 

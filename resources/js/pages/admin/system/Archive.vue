@@ -146,12 +146,12 @@ const purge = (row: Row) => {
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">تاريخ الحذف</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">النوع</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">السجل</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">حذفه</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">أُنشئ في</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700"></th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">تاريخ الحذف</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">السجل</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">حذفه</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">أُنشئ في</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]"></th>
                         </tr>
                     </thead>
                     <tbody>

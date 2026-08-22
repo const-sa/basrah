@@ -84,7 +84,7 @@ const props = defineProps<{
     services: { name: string; times: number; kind: string }[];
 }>();
 
-const { can } = usePermissions();
+const { can, canBooking } = usePermissions();
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -143,7 +143,7 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
             <!-- الترويسة -->
             <div class="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5">
                 <div class="flex items-start gap-4">
-                    <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-xl font-extrabold text-white">
+                    <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#0BA6CE] text-xl font-extrabold text-white">
                         {{ client.name.charAt(0) }}
                     </span>
                     <div>
@@ -230,7 +230,7 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                             type="button"
                             @click="tab = t.key"
                             class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold"
-                            :class="tab === t.key ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'"
+                            :class="tab === t.key ? 'bg-[#0BA6CE] text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'"
                         >
                             <component :is="t.icon" class="h-3.5 w-3.5" />
                             {{ t.label }}
@@ -244,19 +244,19 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                             <table v-if="tab === 'bookings'" class="w-full text-sm">
                                 <thead class="bg-slate-100">
                                     <tr>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الحجز</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الوحدة</th>
-                                        <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الإجمالي</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المدفوع</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المتبقي</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الحجز</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوحدة</th>
+                                        <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الإجمالي</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المدفوع</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المتبقي</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr v-for="b in bookings" :key="b.id" class="border-t border-slate-100 hover:bg-slate-50">
                                         <td class="px-4 py-2.5">
                                             <Link
-                                                v-if="can('bookings.view')"
+                                                v-if="canBooking(b.unit_type, 'view')"
                                                 :href="`/admin/bookings/${b.id}/payments`"
                                                 class="font-bold text-slate-800 hover:text-blue-600"
                                             >
@@ -294,11 +294,11 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                             <table v-else-if="tab === 'payments'" class="w-full text-sm">
                                 <thead class="bg-slate-100">
                                     <tr>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">التاريخ</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الحجز</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">النوع</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">طريقة الدفع</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المبلغ</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الحجز</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">طريقة الدفع</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -325,11 +325,11 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                             <table v-else-if="tab === 'sales'" class="w-full text-sm">
                                 <thead class="bg-slate-100">
                                     <tr>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الفاتورة</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الوحدة</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الإجمالي</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المدفوع</th>
-                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المتبقي</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الفاتورة</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوحدة</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الإجمالي</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المدفوع</th>
+                                        <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المتبقي</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -372,10 +372,10 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                             <table v-else class="w-full text-sm">
                                 <thead class="bg-slate-100">
                                     <tr>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">العقد</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الحجز</th>
-                                        <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">أُرسل في</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">العقد</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الحجز</th>
+                                        <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                        <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">أُرسل في</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -427,7 +427,7 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                             type="button"
                             @click="saveNotes"
                             :disabled="notes.processing"
-                            class="mt-2 w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                            class="mt-2 w-full rounded-xl bg-[#0BA6CE] px-4 py-2 text-sm font-bold text-white hover:bg-[#0990B4] disabled:opacity-50"
                         >
                             حفظ الملاحظات
                         </button>

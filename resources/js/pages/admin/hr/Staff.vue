@@ -134,11 +134,11 @@ const destroy = (e: Employee) => {
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الموظف</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الوحدة والوظيفة</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الراتب</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الوثائق</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوحدة والوظيفة</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الراتب</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوثائق</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>

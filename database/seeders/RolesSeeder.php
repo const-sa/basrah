@@ -7,8 +7,11 @@ use App\Support\SystemRegistry;
 use Illuminate\Database\Seeder;
 
 /**
- * أدوار مؤسسة ديوان البصرة (§الطبقة أ - بند 6):
+ * مجموعات مؤسسة ديوان البصرة (§الطبقة أ - بند 6):
  * مالك / محاسب / مشرف وحدة / كاشير.
+ *
+ * القاعات والشاليهات مفتاحان منفصلان منذ إعادة بناء الصلاحيات، فمن أراد
+ * مشرفًا للقاعات وحدها نسخ «مشرف وحدة» ونزع مفاتيح chalet_*.
  */
 class RolesSeeder extends Seeder
 {
@@ -18,7 +21,7 @@ class RolesSeeder extends Seeder
             ['slug' => 'super-admin'],
             [
                 'name' => 'المالك',
-                'description' => 'صلاحية كاملة على كل الأنظمة دون استثناء',
+                'description' => 'صلاحية كاملة على كل الأقسام دون استثناء',
                 'permissions' => SystemRegistry::permissionKeys(),
             ],
         );
@@ -34,7 +37,9 @@ class RolesSeeder extends Seeder
                     SystemRegistry::systemPermissionKeys('hr'),
                     [
                         'dashboard.view', 'reports.view', 'reports.export',
-                        'bookings.view', 'calendar.view', 'units.view',
+                        'hall_bookings.view', 'chalet_bookings.view',
+                        'hall_calendar.view', 'chalet_calendar.view',
+                        'halls.view', 'chalets.view',
                         'contracts.view', 'contracts.export',
                         'sales.view', 'sales.export', 'inventory.view',
                         'clients.view', 'clients.export', 'suppliers.view',
@@ -51,13 +56,13 @@ class RolesSeeder extends Seeder
                 'description' => 'إدارة حجوزات وعقود الوحدات المسندة إليه فقط',
                 'permissions' => [
                     'dashboard.view',
-                    'units.view',
-                    'calendar.view',
-                    'bookings.view', 'bookings.create', 'bookings.edit',
-                    'pricing.view',
+                    'halls.view', 'chalets.view',
+                    'hall_calendar.view', 'chalet_calendar.view',
+                    'hall_bookings.view', 'hall_bookings.create', 'hall_bookings.edit',
+                    'chalet_bookings.view', 'chalet_bookings.create', 'chalet_bookings.edit',
                     'packages.view', 'packages.create', 'packages.edit',
                     'event_types.view', 'event_types.create', 'event_types.edit',
-                    'addons.view', 'addons.create', 'addons.edit',
+                    'hall_contract.view',
                     'contracts.view', 'contracts.create', 'contracts.send', 'contracts.export',
                     'contract_templates.view',
                     'whatsapp.view', 'whatsapp.send',

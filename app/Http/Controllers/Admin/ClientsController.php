@@ -9,6 +9,7 @@ use App\Models\BookingPayment;
 use App\Models\City;
 use App\Models\Client;
 use App\Models\Contract;
+use App\Models\NotificationTemplate;
 use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Voucher;
@@ -30,6 +31,14 @@ class ClientsController extends Controller
         $filters = $this->parseFilters($request);
 
         $clients = $this->filteredQuery($filters)
+            // عدّادات الملف في القائمة: الصف يقول كم تعامل معنا العميل وكم بقي
+            // عليه قبل فتح ملفه — وتُحسب بالتجميع لا بالحلقة فلا تتكاثر الاستعلامات.
+            ->withCount([
+                'bookings as bookings_count' => fn ($q) => $q->where('status', '!=', 'cancelled'),
+                'sales as sales_count' => fn ($q) => $q->where('type', 'sale'),
+            ])
+            ->withSum(['bookings as bookings_total' => fn ($q) => $q->where('status', '!=', 'cancelled')], 'total_amount')
+            ->withSum(['bookings as bookings_paid' => fn ($q) => $q->where('status', '!=', 'cancelled')], 'paid_amount')
             ->latest('id')
             ->paginate(10)
             ->withQueryString()
@@ -45,6 +54,10 @@ class ClientsController extends Controller
                 'tax_address' => $c->tax_address,
                 'is_active' => $c->is_active,
                 'is_walk_in' => $c->is_walk_in,
+                'bookings_count' => (int) $c->bookings_count,
+                'sales_count' => (int) $c->sales_count,
+                // المتبقي هنا من الحجوزات القائمة وحدها؛ تفصيل الفواتير في الملف.
+                'remaining' => round((float) $c->bookings_total - (float) $c->bookings_paid, 2),
                 'created_at' => $c->created_at?->format('Y-m-d'),
             ]);
 
@@ -130,7 +143,7 @@ class ClientsController extends Controller
     public function show(Client $client): Response
     {
         $bookings = $client->bookings()
-            ->with(['unit:id,name', 'eventType:id,name'])
+            ->with(['unit:id,name,type', 'eventType:id,name'])
             ->orderByDesc('booking_date')
             ->get();
 
@@ -454,14 +467,24 @@ class ClientsController extends Controller
 
         $settings = Setting::current();
 
-        if (! $settings->wa_enabled || ! $settings->wa_welcome_enabled || blank($settings->wa_welcome_template)) {
+        if (! $settings->wa_enabled || ! $settings->wa_welcome_enabled) {
+            return;
+        }
+
+        // قالب المكتبة أولاً — هو ما يراه المستخدم ويحرّره ويقسّمه —
+        // ونصّ الإعدادات احتياطٌ لمن لم يُنشئ قالب ترحيب بعد.
+        $body = NotificationTemplate::resolve('welcome')?->body
+            ?? $settings->wa_welcome_template;
+
+        if (blank($body)) {
             return;
         }
 
         try {
-            $message = WaGateway::renderTemplate($settings->wa_welcome_template, [
+            $message = WaGateway::renderTemplate($body, [
                 'name' => $client->name,
                 'business_name' => $settings->business_name ?? '',
+                'mobile' => (string) $client->mobile,
             ]);
 
             // الإرسال في الطابور حتى لا يُعلّق إنشاء العميل على استجابة البوابة.

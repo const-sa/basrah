@@ -117,13 +117,13 @@ const typeClass = (t: string) =>
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">السند</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">النوع</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الخزينة والحساب</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الطرف</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المبلغ</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">السند</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الخزينة والحساب</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الطرف</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>

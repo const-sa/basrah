@@ -137,7 +137,7 @@ const hovered = ref<CalBooking | null>(null);
                     <table class="w-full border-collapse text-xs">
                         <thead>
                             <tr>
-                                <th class="sticky z-20 min-w-[11rem] border-b border-e border-slate-200 bg-slate-100 px-3 py-2 text-right text-xs font-extrabold text-slate-700 ltr:left-0 rtl:right-0">
+                                <th class="sticky z-20 min-w-[11rem] border-b border-e border-slate-200 bg-slate-100 px-3 py-2 text-right text-xs font-extrabold text-[#1e3a8a] ltr:left-0 rtl:right-0">
                                     القاعة / القسم
                                 </th>
                                 <th
@@ -146,8 +146,8 @@ const hovered = ref<CalBooking | null>(null);
                                     class="min-w-[2.5rem] border-b border-slate-200 px-1 py-2 text-center"
                                     :class="[d.is_weekend ? 'bg-amber-50' : 'bg-slate-100', d.is_today && 'ring-2 ring-inset ring-blue-400']"
                                 >
-                                    <div class="text-[10px] font-bold text-slate-500">{{ d.weekday }}</div>
-                                    <div class="text-xs font-extrabold text-slate-800">{{ d.day }}</div>
+                                    <div class="text-[10px] font-bold text-[#1e3a8a]">{{ d.weekday }}</div>
+                                    <div class="text-xs font-extrabold text-[#1e3a8a]">{{ d.day }}</div>
                                 </th>
                             </tr>
                         </thead>

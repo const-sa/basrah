@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue';
+import type { SharedData } from '@/types';
+import { usePage } from '@inertiajs/vue3';
+import { computed, type HTMLAttributes } from 'vue';
 
 defineOptions({
     inheritAttrs: false,
@@ -10,10 +12,19 @@ interface Props {
 }
 
 defineProps<Props>();
+
+/**
+ * العلامة وحدها بلا نصّ. تتبع شعار الإعدادات إن رُفع، وإلا رجعت إلى العلامة
+ * المدمجة — فلا تظهر شاشةٌ بمربّعٍ فارغٍ قبل رفع الشعار.
+ */
+const page = usePage<SharedData>();
+const logo = computed(() => page.props.brand?.logo_url ?? null);
+const name = computed(() => page.props.brand?.name ?? '');
 </script>
 
 <template>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 42" :class="className" v-bind="$attrs">
+    <img v-if="logo" :src="logo" :alt="name" :class="className" v-bind="$attrs" class="object-contain" />
+    <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 42" :class="className" v-bind="$attrs">
         <path
             fill="currentColor"
             fill-rule="evenodd"

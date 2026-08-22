@@ -19,12 +19,23 @@ export function usePermissions() {
     /** المدير العام يُمرَّر له '*' بدل سرد 144 مفتاحًا. */
     const isSuperAdmin = computed(() => (auth.value.permissions ?? []).includes('*'));
 
-    /** هل يملك المستخدم صلاحية محددة مثل bookings.create؟ */
+    /** هل يملك المستخدم صلاحية محددة مثل hall_bookings.create؟ */
     const can = (permission: string): boolean =>
         isSuperAdmin.value || (auth.value.permissions ?? []).includes(permission);
 
     /** هل يملك أيًا من الصلاحيات المعطاة؟ */
     const canAny = (...permissions: string[]): boolean => permissions.some(can);
+
+    /**
+     * صلاحية على وحدة بحسب نوعها: hall → halls.edit، chalet → chalets.edit.
+     * تُطابق AuthorizesByUnitType على الخادم، فما يظهر في الشاشة هو ما يُقبل.
+     */
+    const canUnit = (type: string | null | undefined, action: string): boolean =>
+        can(`${type === 'chalet' ? 'chalets' : 'halls'}.${action}`);
+
+    /** صلاحية على حجز بحسب نوع وحدته: hall_bookings.* أو chalet_bookings.*. */
+    const canBooking = (type: string | null | undefined, action: string): boolean =>
+        can(`${type === 'chalet' ? 'chalet' : 'hall'}_bookings.${action}`);
 
     /** هل يصل المستخدم إلى نظام كامل مثل accounting؟ */
     const inSystem = (system: string): boolean =>
@@ -38,5 +49,5 @@ export function usePermissions() {
     const canAccessUnit = (unitId: number): boolean =>
         seesAllUnits.value || (unitIds.value ?? []).includes(unitId);
 
-    return { can, canAny, inSystem, isSuperAdmin, unitIds, seesAllUnits, canAccessUnit };
+    return { can, canAny, canUnit, canBooking, inSystem, isSuperAdmin, unitIds, seesAllUnits, canAccessUnit };
 }

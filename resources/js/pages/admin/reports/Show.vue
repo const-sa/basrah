@@ -179,7 +179,7 @@ const numeric = (type: string) => type === 'currency' || type === 'number';
                             <th
                                 v-for="column in report.columns"
                                 :key="column.key"
-                                class="whitespace-nowrap px-4 py-3 text-xs font-extrabold text-slate-700"
+                                class="whitespace-nowrap px-4 py-3 text-xs font-extrabold text-[#1e3a8a]"
                                 :class="numeric(column.type) ? 'text-center' : 'text-right'"
                             >
                                 {{ column.label }}

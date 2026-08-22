@@ -3,8 +3,8 @@ import { StatusBadge } from '@/components/data-table';
 import SmallBox from '@/components/lte/SmallBox.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router, useForm } from '@inertiajs/vue3';
-import { Ban, Building2, Pencil, Plus, Search, Trash2, X } from 'lucide-vue-next';
+import { Head, useForm } from '@inertiajs/vue3';
+import { Ban, Building2, Lock, Pencil, Search, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface DepartmentRow {
@@ -38,20 +38,13 @@ const filtered = computed(() => {
     return props.departments.filter((d) => d.name.includes(q));
 });
 
-// ===== نموذج الإضافة/التعديل =====
+// ===== نموذج التعديل (الأقسام ثابتة: لا إضافة ولا حذف) =====
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
 const form = useForm({
     name: '',
     is_active: true,
 });
-
-const openCreate = () => {
-    editingId.value = null;
-    form.reset();
-    form.clearErrors();
-    showModal.value = true;
-};
 
 const openEdit = (d: DepartmentRow) => {
     editingId.value = d.id;
@@ -63,17 +56,8 @@ const openEdit = (d: DepartmentRow) => {
 };
 
 const submit = () => {
-    if (editingId.value) {
-        form.put(`/admin/departments/${editingId.value}`, { preserveScroll: true, onSuccess: () => (showModal.value = false) });
-    } else {
-        form.post('/admin/departments', { preserveScroll: true, onSuccess: () => (showModal.value = false) });
-    }
-};
-
-const destroy = (d: DepartmentRow) => {
-    if (confirm(`حذف القسم «${d.name}»؟`)) {
-        router.delete(`/admin/departments/${d.id}`, { preserveScroll: true });
-    }
+    if (!editingId.value) return;
+    form.put(`/admin/departments/${editingId.value}`, { preserveScroll: true, onSuccess: () => (showModal.value = false) });
 };
 </script>
 
@@ -101,10 +85,10 @@ const destroy = (d: DepartmentRow) => {
                             <span class="flex items-center bg-slate-50 px-2.5 text-slate-400"><Search class="h-4 w-4" /></span>
                             <input v-model="search" type="search" placeholder="بحث عن قسم" class="w-44 border-0 px-3 py-2 text-sm focus:outline-none focus:ring-0" />
                         </div>
-                        <!-- إضافة -->
-                        <button type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700">
-                            <Plus class="h-4 w-4" /> قسم جديد
-                        </button>
+                        <!-- الأقسام ثابتة: لا يمكن الإضافة أو الحذف -->
+                        <span class="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">
+                            <Lock class="h-3.5 w-3.5" /> أقسام ثابتة — التعديل فقط
+                        </span>
                     </div>
                 </div>
 
@@ -112,7 +96,7 @@ const destroy = (d: DepartmentRow) => {
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[520px] text-sm">
                         <thead>
-                            <tr class="border-b-2 border-[#dee2e6] text-gray-500">
+                            <tr class="border-b-2 border-[#dee2e6] text-[#1e3a8a]">
                                 <th class="px-4 py-3 text-start font-semibold">القسم</th>
                                 <th class="px-4 py-3 text-center font-semibold">الحالة</th>
                                 <th class="px-4 py-3 text-center font-semibold">التاريخ</th>
@@ -134,7 +118,6 @@ const destroy = (d: DepartmentRow) => {
                                     <div class="flex justify-end">
                                         <div class="inline-flex divide-x divide-slate-300 overflow-hidden rounded-md border border-slate-300 rtl:divide-x-reverse">
                                             <button type="button" @click="openEdit(d)" title="تعديل" class="px-2.5 py-2 text-slate-600 transition hover:bg-slate-100"><Pencil class="h-4 w-4" /></button>
-                                            <button type="button" @click="destroy(d)" title="حذف" class="px-2.5 py-2 text-red-600 transition hover:bg-red-50"><Trash2 class="h-4 w-4" /></button>
                                         </div>
                                     </div>
                                 </td>
@@ -156,7 +139,7 @@ const destroy = (d: DepartmentRow) => {
         <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="showModal = false">
             <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
                 <div class="mb-4 flex items-center justify-between">
-                    <h2 class="text-lg font-extrabold text-slate-900">{{ editingId ? 'تعديل قسم' : 'قسم جديد' }}</h2>
+                    <h2 class="text-lg font-extrabold text-slate-900">تعديل قسم</h2>
                     <button type="button" @click="showModal = false" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X class="h-5 w-5" /></button>
                 </div>
                 <form @submit.prevent="submit" class="space-y-3">

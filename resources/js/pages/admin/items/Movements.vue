@@ -70,12 +70,12 @@ const typeClass = (t: string) =>
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">التاريخ</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الصنف</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">النوع</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الكمية</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الرصيد بعدها</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">المستخدم / ملاحظة</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الصنف</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الكمية</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الرصيد بعدها</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المستخدم / ملاحظة</th>
                             </tr>
                         </thead>
                         <tbody>

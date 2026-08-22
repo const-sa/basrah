@@ -104,11 +104,11 @@ const destroyDept = (d: Dept) => {
                 <table class="w-full text-sm">
                     <thead class="bg-slate-50">
                         <tr>
-                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-slate-700">القسم</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">مبيعات</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">الأصناف</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">قيمة المخزون</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">القسم</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">مبيعات</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">الأصناف</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">قيمة المخزون</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -154,11 +154,11 @@ const destroyDept = (d: Dept) => {
                 <table class="w-full text-sm">
                     <thead class="bg-slate-50">
                         <tr>
-                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-slate-700">الوحدة</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">الرمز</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">تقبل الكسور</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">الأصناف</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">الوحدة</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">الرمز</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">تقبل الكسور</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">الأصناف</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody>

@@ -20,6 +20,8 @@ class Backup extends Model
     public const TRIGGERS = [
         'manual' => 'يدوية',
         'schedule' => 'مجدولة',
+        'upload' => 'مرفوعة',
+        'pre_restore' => 'قبل استعادة',
     ];
 
     protected $fillable = [

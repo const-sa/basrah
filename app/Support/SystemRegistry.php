@@ -3,16 +3,19 @@
 namespace App\Support;
 
 /**
- * سجل أنظمة المنصة وصلاحياتها.
+ * سجل أقسام المنصة وصلاحياتها.
  *
  * البنية ثلاثية المستوى:
- *   نظام (System)  →  وحدة (Module)  →  إجراء (Action)
+ *   قسم (Section)  →  شاشة (Screen)  →  إجراء (Action)
  *
- * مفتاح الصلاحية النهائي يبقى "{module}.{action}" (مثل: bookings.create)
- * حتى يعمل مع الوسيط الحالي ->middleware('perm:bookings.create') دون تغيير.
+ * مفتاح الصلاحية النهائي يبقى "{screen}.{action}" (مثل: hall_bookings.create)
+ * حتى يعمل مع الوسيط ->middleware('perm:hall_bookings.create') دون تغيير.
  *
- * فائدة مستوى "النظام" أنه يسمح بمنح أو منع نظام كامل بضغطة واحدة،
- * وبإخفاء قوائم النظام من الشريط الجانبي لمن لا يملك أي صلاحية فيه.
+ * الأقسام الثلاثة الأولى أنشطة المؤسسة: القاعات والشاليهات والمسابح، ولكلٍّ
+ * منها مفاتيحه المستقلة. كان مفتاحٌ واحد (bookings.*, units.*, calendar.*)
+ * يخدم القاعات والشاليهات معًا، فمنحُ موظفِ القاعات حجوزاتِها يمنحه حجوزات
+ * الشاليهات كذلك دون أن يظهر ذلك في الشاشة؛ والفصل هنا يجعل ما تراه في
+ * المجموعة هو ما يُمنح فعلًا. ثم تأتي الأقسام الإدارية المشتركة.
  */
 class SystemRegistry
 {
@@ -31,11 +34,48 @@ class SystemRegistry
     ];
 
     /**
-     * الأنظمة ووحداتها.
+     * الأقسام وشاشاتها.
      *
      * @var array<string, array{label: string, icon: string, description: string, modules: array<string, array{label: string, actions: list<string>}>}>
      */
     public const SYSTEMS = [
+        'halls' => [
+            'label' => 'القاعات',
+            'icon' => 'Building2',
+            'description' => 'حجوزات القاعات وتقويمها والباقات وأنواع المناسبات وقالب العقد',
+            'modules' => [
+                'hall_bookings' => ['label' => 'حجوزات القاعات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'hall_calendar' => ['label' => 'تقويم القاعات', 'actions' => ['view']],
+                'halls' => ['label' => 'القاعات ومساحات عملها', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'packages' => ['label' => 'باقات القاعات', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'event_types' => ['label' => 'أنواع المناسبات', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'hall_contract' => ['label' => 'قالب عقد القاعات', 'actions' => ['view', 'edit']],
+            ],
+        ],
+
+        'chalets' => [
+            'label' => 'الشاليهات',
+            'icon' => 'Home',
+            'description' => 'حجوزات الشاليهات بالليالي وتقويمها وملفات الوحدات',
+            'modules' => [
+                'chalet_bookings' => ['label' => 'حجوزات الشاليهات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'chalet_calendar' => ['label' => 'تقويم الشاليهات', 'actions' => ['view']],
+                'chalets' => ['label' => 'الشاليهات ومساحات عملها', 'actions' => ['view', 'create', 'edit', 'delete']],
+            ],
+        ],
+
+        'pools' => [
+            'label' => 'المسابح',
+            'icon' => 'Waves',
+            'description' => 'فواتير منتجات المسابح وخدمات الصيانة والأصناف والمخزون',
+            'modules' => [
+                'pos' => ['label' => 'شاشة الفواتير', 'actions' => ['view', 'create']],
+                'sales' => ['label' => 'المبيعات والمرتجعات', 'actions' => ['view', 'create', 'delete', 'export']],
+                'items' => ['label' => 'الأصناف', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'inventory' => ['label' => 'المخزون والجرد', 'actions' => ['view', 'create', 'edit', 'approve']],
+            ],
+        ],
+
         'core' => [
             'label' => 'الرئيسية',
             'icon' => 'LayoutDashboard',
@@ -44,21 +84,6 @@ class SystemRegistry
                 'dashboard' => ['label' => 'لوحة التحكم', 'actions' => ['view']],
                 'reports' => ['label' => 'التقارير', 'actions' => ['view', 'export']],
                 'notifications' => ['label' => 'الإشعارات', 'actions' => ['view', 'create', 'edit', 'delete', 'send']],
-            ],
-        ],
-
-        'bookings' => [
-            'label' => 'نظام الحجوزات',
-            'icon' => 'CalendarDays',
-            'description' => 'الوحدات والأقسام، التقويم، الحجوزات، الأسعار والخدمات الإضافية',
-            'modules' => [
-                'units' => ['label' => 'الوحدات والأقسام', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'bookings' => ['label' => 'الحجوزات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
-                'calendar' => ['label' => 'التقويم الموحّد', 'actions' => ['view']],
-                'pricing' => ['label' => 'الأسعار والمواسم', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'addons' => ['label' => 'الخدمات الإضافية', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'packages' => ['label' => 'باقات القاعات', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'event_types' => ['label' => 'أنواع المناسبات', 'actions' => ['view', 'create', 'edit', 'delete']],
             ],
         ],
 
@@ -73,18 +98,6 @@ class SystemRegistry
             ],
         ],
 
-        'pos' => [
-            'label' => 'المسابح — بيع وصيانة',
-            'icon' => 'ShoppingCart',
-            'description' => 'نشاط مستقل: فواتير منتجات المسابح وخدمات الصيانة والمخزون',
-            'modules' => [
-                'pos' => ['label' => 'شاشة الفواتير', 'actions' => ['view', 'create']],
-                'items' => ['label' => 'الأصناف', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'inventory' => ['label' => 'المخزون والجرد', 'actions' => ['view', 'create', 'edit', 'approve']],
-                'sales' => ['label' => 'المبيعات والمرتجعات', 'actions' => ['view', 'create', 'delete', 'export']],
-            ],
-        ],
-
         'accounting' => [
             'label' => 'المحاسبة',
             'icon' => 'Calculator',
@@ -95,6 +108,9 @@ class SystemRegistry
                 'treasury' => ['label' => 'الصناديق والبنوك', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'payment_methods' => ['label' => 'طرق الدفع', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'vouchers' => ['label' => 'سندات القبض والصرف', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                // الإيرادات شاشة قراءة لا إدخال: القيد يأتي من الحجز والفاتورة
+                // والسند، فلا معنى لـ create/edit فيها.
+                'revenues' => ['label' => 'الإيرادات', 'actions' => ['view', 'export']],
                 'expenses' => ['label' => 'المصروفات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'receivables' => ['label' => 'ذمم العملاء والموردين', 'actions' => ['view', 'create', 'edit', 'export']],
                 'cost_centers' => ['label' => 'مراكز التكلفة', 'actions' => ['view', 'create', 'edit', 'delete']],
@@ -130,22 +146,55 @@ class SystemRegistry
         'system' => [
             'label' => 'الإدارة والنظام',
             'icon' => 'Settings',
-            'description' => 'المستخدمون والأدوار والإعدادات وسجل التدقيق',
+            'description' => 'الموظفون والمجموعات والإعدادات وسجل التدقيق',
             'modules' => [
                 'employees' => ['label' => 'مستخدمو النظام', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'roles' => ['label' => 'الأدوار والصلاحيات', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'roles' => ['label' => 'المجموعات والصلاحيات', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'cities' => ['label' => 'المدن', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'departments' => ['label' => 'الأقسام الإدارية', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'departments' => ['label' => 'الأقسام الإدارية', 'actions' => ['view', 'edit']],
                 'audit' => ['label' => 'سجل التدقيق', 'actions' => ['view', 'export']],
                 // الحذف هنا هو الإتلاف النهائي من الأرشيف وحده — ولذلك
                 // يُمنح منفصلًا عن الاسترجاع وعن حذف الشاشات الاعتيادي.
                 'archive' => ['label' => 'الأرشيف (المحذوفات)', 'actions' => ['view', 'restore', 'delete']],
                 // نسخة القاعدة تُنزَّل بصلاحية لا برابط — فيها بيانات العملاء
                 // كلها، وتنزيلها يعادل قراءة النظام بأسره.
-                'backups' => ['label' => 'النسخ الاحتياطي', 'actions' => ['view', 'create', 'delete']],
+                // والاستعادة تُمنح منفصلة عما سواها: تنزيل النسخة قراءة،
+                // والاستعادة كتابة فوق القاعدة كلها لا تُراجَع.
+                'backups' => ['label' => 'النسخ الاحتياطي', 'actions' => ['view', 'create', 'restore', 'delete']],
                 'settings' => ['label' => 'الإعدادات العامة', 'actions' => ['view', 'edit']],
             ],
         ],
+    ];
+
+    /**
+     * ترجمة مفاتيح ما قبل فصل القاعات عن الشاليهات إلى مفاتيح اليوم.
+     *
+     * المفتاح القديم الواحد كان يخدم النشاطين معًا، فترجمته تعطي مفتاحي
+     * النشاطين — وهو السلوك الذي يُبقي المجموعات القائمة على ما كانت عليه
+     * بعد الترقية بدل أن تفقد صلاحياتها صامتةً.
+     *
+     * @var array<string, list<string>>
+     */
+    public const LEGACY_KEY_MAP = [
+        'bookings.view' => ['hall_bookings.view', 'chalet_bookings.view'],
+        'bookings.create' => ['hall_bookings.create', 'chalet_bookings.create'],
+        'bookings.edit' => ['hall_bookings.edit', 'chalet_bookings.edit'],
+        'bookings.delete' => ['hall_bookings.delete', 'chalet_bookings.delete'],
+        'bookings.approve' => ['hall_bookings.approve', 'chalet_bookings.approve'],
+        'calendar.view' => ['hall_calendar.view', 'chalet_calendar.view'],
+        'units.view' => ['halls.view', 'chalets.view', 'hall_contract.view'],
+        'units.create' => ['halls.create', 'chalets.create'],
+        'units.edit' => ['halls.edit', 'chalets.edit', 'hall_contract.edit'],
+        'units.delete' => ['halls.delete', 'chalets.delete'],
+        // شاشتان لم يكن لهما مسار قط — تسقطان بلا بديل.
+        'pricing.view' => [],
+        'pricing.create' => [],
+        'pricing.edit' => [],
+        'pricing.delete' => [],
+        'addons.view' => [],
+        'addons.create' => [],
+        'addons.edit' => [],
+        'addons.delete' => [],
     ];
 
     /**
@@ -168,7 +217,7 @@ class SystemRegistry
     }
 
     /**
-     * مفاتيح صلاحيات نظام واحد — تُستخدم لمنح أو سحب نظام كامل دفعة واحدة.
+     * مفاتيح صلاحيات قسم واحد — تُستخدم لمنح أو سحب قسم كامل دفعة واحدة.
      *
      * @return list<string>
      */
@@ -185,7 +234,7 @@ class SystemRegistry
     }
 
     /**
-     * خريطة الوحدة → النظام الذي تتبعه (مثل: bookings → bookings، payroll → hr).
+     * خريطة الشاشة → القسم الذي تتبعه (مثل: hall_bookings → halls، payroll → hr).
      *
      * @return array<string, string>
      */
@@ -221,7 +270,36 @@ class SystemRegistry
     }
 
     /**
-     * تمثيل الأنظمة جاهزًا للواجهة الأمامية (شجرة: نظام ← وحدات ← إجراءات).
+     * ترجمة قائمة صلاحيات محفوظة بالمفاتيح القديمة إلى مفاتيح اليوم،
+     * مع إسقاط أي مفتاح لم يعد له وجود.
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     */
+    public static function migrateLegacyKeys(array $permissions): array
+    {
+        $valid = array_flip(self::permissionKeys());
+        $out = [];
+
+        foreach ($permissions as $key) {
+            if (array_key_exists($key, self::LEGACY_KEY_MAP)) {
+                foreach (self::LEGACY_KEY_MAP[$key] as $mapped) {
+                    $out[$mapped] = true;
+                }
+
+                continue;
+            }
+
+            if (isset($valid[$key])) {
+                $out[$key] = true;
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    /**
+     * تمثيل الأقسام جاهزًا للواجهة الأمامية (شجرة: قسم ← شاشات ← إجراءات).
      *
      * @return list<array<string, mixed>>
      */

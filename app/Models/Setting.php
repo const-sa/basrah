@@ -19,6 +19,7 @@ class Setting extends Model
         'tax_enabled', 'tax_number', 'tax_rate', 'commercial_register',
         // الواتساب
         'wa_enabled', 'wa_instance_id', 'wa_access_token',
+        'wa_number', 'wa_connected_at',
         'wa_welcome_enabled', 'wa_welcome_template',
         // المدراء والتواقيع والختم
         'manager_name', 'manager_signature_path',
@@ -33,6 +34,7 @@ class Setting extends Model
             'tax_rate' => 'decimal:2',
             'wa_enabled' => 'boolean',
             'wa_welcome_enabled' => 'boolean',
+            'wa_connected_at' => 'datetime',
         ];
     }
 

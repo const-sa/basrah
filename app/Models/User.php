@@ -73,7 +73,24 @@ class User extends Authenticatable
     }
 
     /**
-     * هل يصل المستخدم إلى النظام المحدد (مثل: pos أو accounting)؟
+     * هل يملك أيًّا من الصلاحيات المعطاة؟
+     *
+     * لازمٌ بعد فصل القاعات عن الشاليهات: شاشةٌ تخدم النشاطين تظهر لمن
+     * يملك أحدهما، فسؤالها عن مفتاح واحد يُخفيها عن نصف من يستحقها.
+     */
+    public function hasAnyPermission(string ...$permissions): bool
+    {
+        foreach ($permissions as $permission) {
+            if ($this->hasPermission($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * هل يصل المستخدم إلى النظام المحدد (مثل: pools أو accounting)؟
      */
     public function hasSystemAccess(string $system): bool
     {

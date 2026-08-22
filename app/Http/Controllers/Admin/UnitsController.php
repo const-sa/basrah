@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesByUnitType;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Facility;
@@ -21,6 +22,8 @@ use Inertia\Response;
  */
 class UnitsController extends Controller
 {
+    use AuthorizesByUnitType;
+
     /**
      * القاعات والشاليهات لكل نوع مدخله الخاص في القائمة، و«الكل» عند غياب المقطع.
      *
@@ -34,8 +37,20 @@ class UnitsController extends Controller
             default => null,
         };
 
+        // مدخل النوع الواحد يشترط صلاحية ذلك النوع وحده، ومدخل «الكل» يعرض ما
+        // يملك المستخدم صلاحية رؤيته منهما — فلا يتسرّب نشاطٌ عبر شاشةٍ جامعة.
+        if ($unitType) {
+            $this->authorizeUnitAction($request, $unitType, 'view');
+        }
+
+        $visibleTypes = collect(['hall' => 'halls.view', 'chalet' => 'chalets.view'])
+            ->filter(fn (string $key) => $request->user()?->hasPermission($key))
+            ->keys()
+            ->all();
+
         $units = Unit::query()
             ->visibleTo($request->user())
+            ->whereIn('type', $visibleTypes)
             ->when($unitType, fn ($q) => $q->where('type', $unitType))
             ->with(['sections.facilities:id,name,icon', 'manager:id,name', 'prices'])
             ->withCount(['bookings' => fn ($q) => $q->blocking()])
@@ -99,6 +114,8 @@ class UnitsController extends Controller
     {
         $data = $this->validated($request);
 
+        $this->authorizeUnitAction($request, $data['type'], 'create');
+
         $unit = Unit::create([
             ...collect($data)->except(['sections', 'logo'])->all(),
             'logo_path' => $this->storeLogo($request),
@@ -112,7 +129,12 @@ class UnitsController extends Controller
 
     public function update(Request $request, Unit $unit): RedirectResponse
     {
+        $this->authorizeUnitAction($request, $unit, 'edit');
+
         $data = $this->validated($request, $unit);
+
+        // نقل الوحدة من نوع إلى نوع يلزمه امتلاك النوعين معًا.
+        $this->authorizeUnitAction($request, $data['type'], 'edit');
 
         $payload = collect($data)->except(['sections', 'logo'])->all();
 
@@ -137,6 +159,8 @@ class UnitsController extends Controller
      */
     public function updateLogo(Request $request, Unit $unit): RedirectResponse
     {
+        $this->authorizeUnitAction($request, $unit, 'edit');
+
         // نطاق الوحدات يُطبَّق هنا كما في مساحة العمل: صلاحية التعديل لا تكفي وحدها.
         if (! $request->user()?->canAccessUnit($unit)) {
             abort(403, 'ليس لديك صلاحية الوصول إلى هذه الوحدة.');
@@ -166,8 +190,10 @@ class UnitsController extends Controller
     /**
      * إيقاف الوحدة أو تفعيلها — الموقوفة لا تقبل حجزًا جديدًا.
      */
-    public function toggle(Unit $unit): RedirectResponse
+    public function toggle(Request $request, Unit $unit): RedirectResponse
     {
+        $this->authorizeUnitAction($request, $unit, 'edit');
+
         $unit->update(['is_active' => ! $unit->is_active]);
 
         return back()->with(
@@ -178,8 +204,10 @@ class UnitsController extends Controller
         );
     }
 
-    public function destroy(Unit $unit): RedirectResponse
+    public function destroy(Request $request, Unit $unit): RedirectResponse
     {
+        $this->authorizeUnitAction($request, $unit, 'delete');
+
         // الوحدة المرتبطة بحجوزات لا تُحذف حتى لا يُفقد سجلها المالي والمحاسبي.
         if ($unit->bookings()->exists()) {
             return back()->with('warning', 'لا يمكن حذف وحدة مرتبطة بحجوزات — أوقفها بدل حذفها.');

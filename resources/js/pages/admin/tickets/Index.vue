@@ -144,7 +144,7 @@ const destroy = (t: TicketRow) => {
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[820px] text-sm">
                         <thead>
-                            <tr class="border-b-2 border-[#dee2e6] text-gray-500">
+                            <tr class="border-b-2 border-[#dee2e6] text-[#1e3a8a]">
                                 <th class="px-4 py-3 text-start font-semibold">رقم التذكرة</th>
                                 <th class="px-4 py-3 text-start font-semibold">العنوان</th>
                                 <th class="px-4 py-3 text-start font-semibold">العميل</th>

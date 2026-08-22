@@ -49,7 +49,7 @@ const year = new Date().getFullYear();
                         <span class="hidden sm:inline">تواصل معنا</span>
                     </a>
                     <Link
-                        href="/login"
+                        :href="route('login')"
                         class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
                     >
                         <LogIn class="h-4 w-4" />

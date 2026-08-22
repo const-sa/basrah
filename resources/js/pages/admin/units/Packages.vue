@@ -268,9 +268,9 @@ const destroy = (p: Pkg) => {
                                     <thead class="bg-slate-100">
                                         <tr>
                                             <th class="w-8 px-2 py-2"></th>
-                                            <th class="px-3 py-2 text-right text-xs font-extrabold text-slate-700">الصنف</th>
-                                            <th class="w-28 px-3 py-2 text-center text-xs font-extrabold text-slate-700">العدد</th>
-                                            <th class="w-28 px-3 py-2 text-center text-xs font-extrabold text-slate-700">الوحدة</th>
+                                            <th class="px-3 py-2 text-right text-xs font-extrabold text-[#1e3a8a]">الصنف</th>
+                                            <th class="w-28 px-3 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">العدد</th>
+                                            <th class="w-28 px-3 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">الوحدة</th>
                                             <th class="w-12 px-2 py-2"></th>
                                         </tr>
                                     </thead>

@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Backup;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use PDO;
 use RuntimeException;
 use Symfony\Component\Process\Exception\ProcessFailedException;
@@ -79,6 +81,39 @@ class BackupService
     }
 
     /**
+     * تبنّي ملف نسخة مرفوع من الخارج: يُنقل إلى مجلد النسخ ويُسجَّل صفًّا.
+     *
+     * الملف يُحفظ باسمٍ مولَّد لا باسمه الأصلي: اسمٌ يأتي من متصفّح المستخدم
+     * ليس ممّا يُبنى عليه مسارٌ على القرص وإن بدا بريئًا. ولا يُستبقى منه
+     * سوى امتداده بعد تنقيته، لأن فارق المضغوط عن النصّ يُقرأ منه.
+     *
+     * ويُسجَّل «مكتملة» لأن الملف موجود فعلًا — وصلاحيته للاستعادة يحكم عليها
+     * RestoreService حين يُقرأ، لا هذه الدالة حين يُنقَل.
+     */
+    public function adopt(UploadedFile $file, ?int $userId = null): Backup
+    {
+        $extension = strtolower((string) preg_replace('/[^A-Za-z0-9]/', '', (string) $file->getClientOriginalExtension()));
+        $extension = in_array($extension, ['sql', 'gz', 'sqlite', 'sqlite3', 'db'], true) ? $extension : 'sql';
+
+        $filename = 'upload-'.now()->format('Y-m-d-His').'-'.Str::random(6).'.'.$extension;
+        $path = $this->path($filename);
+
+        File::ensureDirectoryExists(dirname($path));
+        $file->move(dirname($path), basename($path));
+
+        return Backup::create([
+            'filename' => $filename,
+            'disk' => 'local',
+            'size' => File::size($path),
+            'trigger' => 'upload',
+            'created_by' => $userId,
+            'driver' => DB::connection()->getDriverName(),
+            'method' => 'upload',
+            'status' => 'completed',
+        ]);
+    }
+
+    /**
      * المسار المطلق لملف نسخة.
      */
     public function path(string $filename): string
@@ -107,7 +142,15 @@ class BackupService
     {
         $keep = (int) config('operations.backup.keep', 14);
 
-        $stale = Backup::completed()->orderByDesc('id')->skip($keep)->take(100)->get();
+        // الملفات المرفوعة تُستثنى من التقليم: جاءت بفعلٍ مقصود من مستخدم،
+        // وحذفُها تلقائيًا يعني أن نسخةً رُفعت لتُستعاد قد تختفي قبل استعادتها
+        // — والتقليم يجري داخل run()، وهي نفسها تُستدعى قبل كل استعادة.
+        $stale = Backup::completed()
+            ->where('trigger', '!=', 'upload')
+            ->orderByDesc('id')
+            ->skip($keep)
+            ->take(100)
+            ->get();
 
         foreach ($stale as $backup) {
             $this->delete($backup);
@@ -165,6 +208,14 @@ class BackupService
 
         try {
             $process->mustRun();
+
+            // الخروج بصفرٍ ليس دليل نجاح كافٍ: mysqldump قد ينتهي بلا شكوى
+            // ولا يترك ملفًا (مسارٌ لم يُقبل، أو ثنائيٌّ آخر يحمل الاسم نفسه)،
+            // فيقع الخطأ بعدها عند الضغط برسالة «الملف غير موجود» لا تدلّ على
+            // سببه. فيُتحقّق من الملف هنا ويُحوَّل إلى المُصدِّر الداخلي.
+            if (! File::exists($path) || File::size($path) === 0) {
+                throw new RuntimeException('انتهى mysqldump دون أن يكتب ملفًا.');
+            }
 
             return 'mysqldump';
         } catch (ProcessFailedException|RuntimeException $e) {
@@ -296,7 +347,10 @@ class BackupService
             if ($driver === 'sqlite') {
                 $row = DB::selectOne('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?', ['table', $table]);
 
-                return $row?->sql;
+                // الإسقاط قبل الإنشاء كما في MySQL: نسخةٌ بلا DROP لا تصلح
+                // للاستعادة على قاعدةٍ عامرة — تفشل عبارات الإنشاء لوجود
+                // الجداول، ثم تُضاف الصفوف فوق صفوفٍ قائمة فتتضاعف.
+                return $row?->sql ? "DROP TABLE IF EXISTS \"{$table}\";\n".$row->sql : null;
             }
         } catch (Throwable $e) {
             Log::warning("تعذّر قراءة بنية الجدول {$table}", ['error' => $e->getMessage()]);
@@ -328,8 +382,16 @@ class BackupService
         return $target;
     }
 
+    /**
+     * اسم ملف النسخة — بالوقت ولاحقةٍ عشوائية.
+     *
+     * الوقت وحده بدقّة الثانية ليس مميِّزًا: نسختان تُؤخذان في الثانية نفسها
+     * تحملان الاسم نفسه، فتكتب الثانية فوق الأولى ويبقى في السجل صفّان
+     * يشيران إلى ملفٍ واحد. وهذا يقع فعلًا لا نظريًّا — نسخة الأمان تُؤخذ
+     * لحظة الاستعادة، فتمحو الملف الذي جيء لاستعادته.
+     */
     private function filename(string $driver): string
     {
-        return 'backup-'.now()->format('Y-m-d-His').'-'.$driver.'.sql';
+        return 'backup-'.now()->format('Y-m-d-His').'-'.Str::random(6).'-'.$driver.'.sql';
     }
 }

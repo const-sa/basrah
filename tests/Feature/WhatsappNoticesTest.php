@@ -170,7 +170,7 @@ class WhatsappNoticesTest extends TestCase
      */
     public function test_sending_requires_the_whatsapp_permission(): void
     {
-        $role = Role::create(['name' => 'حجوزات بلا واتساب', 'slug' => 'no-wa', 'permissions' => ['bookings.view', 'bookings.edit']]);
+        $role = Role::create(['name' => 'حجوزات بلا واتساب', 'slug' => 'no-wa', 'permissions' => ['hall_bookings.view', 'hall_bookings.edit', 'chalet_bookings.view', 'chalet_bookings.edit']]);
 
         $staff = User::factory()->create(['role_id' => $role->id, 'is_active' => true, 'has_all_units' => true]);
         $booking = $this->booking();

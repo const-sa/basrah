@@ -128,10 +128,10 @@ const groupAccounts = computed(() => props.accounts.filter((a) => a.is_group));
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الحساب</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">النوع</th>
-                            <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الرصيد</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الحساب</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الرصيد</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody>

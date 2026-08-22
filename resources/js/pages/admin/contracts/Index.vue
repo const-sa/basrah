@@ -111,11 +111,11 @@ const statusClass = (s: string) =>
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">رقم العقد</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الحجز والوحدة</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">العميل</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">رقم العقد</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الحجز والوحدة</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">العميل</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>

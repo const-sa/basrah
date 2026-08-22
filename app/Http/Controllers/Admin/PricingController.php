@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesByUnitType;
 use App\Http\Controllers\Controller;
 use App\Models\Unit;
 use App\Models\UnitPrice;
@@ -23,12 +24,17 @@ use Illuminate\Validation\Rule;
  */
 class PricingController extends Controller
 {
+    use AuthorizesByUnitType;
+
     /**
      * حفظ تسعيرة وحدة: صف لكل (قسم أو الوحدة كاملة) × فترة.
      * العربون لا يُمَس هنا — يُحفظ من مكانه فلا تُصفّره شاشة الأسعار.
      */
     public function updatePrices(Request $request, Unit $unit): RedirectResponse
     {
+        // تسعيرة الوحدة تعديلٌ عليها، فتلزمها صلاحية تعديل نوعها.
+        $this->authorizeUnitAction($request, $unit, 'edit');
+
         // فترات الشاليه تختلف عن فترات القاعة، فيُقبَل من كل نوع ما يخصّه:
         // قبول «الليلة» على قاعة يخزّن صفًا لا يقرؤه أحد.
         $periods = $unit->type === 'chalet'

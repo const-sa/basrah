@@ -32,21 +32,6 @@ class DepartmentsController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
-    {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'is_active' => ['boolean'],
-        ]);
-
-        Department::create([
-            'name' => $data['name'],
-            'is_active' => $data['is_active'] ?? true,
-        ]);
-
-        return back()->with('success', 'تم إضافة القسم بنجاح');
-    }
-
     public function update(Request $request, Department $department): RedirectResponse
     {
         $data = $request->validate([
@@ -60,12 +45,5 @@ class DepartmentsController extends Controller
         ]);
 
         return back()->with('success', 'تم تحديث القسم');
-    }
-
-    public function destroy(Department $department): RedirectResponse
-    {
-        $department->delete();
-
-        return back()->with('success', 'تم حذف القسم');
     }
 }

@@ -35,13 +35,14 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard', [
             'canSee' => [
-                'bookings' => $user->hasPermission('bookings.view'),
+                'bookings' => $user->hasAnyPermission('hall_bookings.view', 'chalet_bookings.view'),
                 'pos' => $user->hasPermission('sales.view') || $user->hasPermission('pos.view'),
                 'accounting' => $user->hasPermission('fin_reports.view'),
                 'hr' => $user->hasPermission('staff.view'),
             ],
-            'bookings' => $user->hasPermission('bookings.view') ? $this->bookingStats($user, $today, $monthStart) : null,
-            'today' => $user->hasPermission('bookings.view') ? $this->todaySchedule($user, $today) : [],
+            'bookings' => $user->hasAnyPermission('hall_bookings.view', 'chalet_bookings.view') ? $this->bookingStats($user, $today, $monthStart) : null,
+            'today' => $user->hasAnyPermission('hall_bookings.view', 'chalet_bookings.view') ? $this->todaySchedule($user, $today) : [],
+            'series' => $user->hasAnyPermission('hall_bookings.view', 'chalet_bookings.view') ? $this->series($user, $today) : [],
             'pos' => ($user->hasPermission('sales.view') || $user->hasPermission('pos.view'))
                 ? $this->posStats($user, $today, $monthStart) : null,
             'profitability' => $user->hasPermission('fin_reports.view')
@@ -105,6 +106,59 @@ class DashboardController extends Controller
                 ->whereBetween('booking_date', [$monthStart->toDateString(), $monthStart->endOfMonth()->toDateString()])
                 ->count(),
         ];
+    }
+
+    /**
+     * حركة آخر أربعة عشر يومًا — عدد الحجوزات وما تحصّل فعلًا كل يوم.
+     *
+     * الرسم يحتاج صفًّا لكل يوم حتى الأيام الخالية، وإلا انكمش المحور
+     * وأظهر ارتفاعًا كاذبًا بين يومين متباعدين.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function series($user, CarbonImmutable $today): array
+    {
+        $from = $today->subDays(13);
+
+        // whereDate لا whereBetween: عمود التاريخ قد يحمل وقتًا في بعض
+        // المحرّكات، فتسقط مقارنةُ النصّ صفوفَ اليوم الأخير.
+        $bookings = Booking::visibleTo($user)->blocking()
+            ->whereDate('booking_date', '>=', $from->toDateString())
+            ->whereDate('booking_date', '<=', $today->toDateString())
+            ->groupBy('booking_date')
+            ->selectRaw('booking_date, COUNT(*) AS c, SUM(total_amount) AS v')
+            ->get()
+            ->keyBy(fn ($r) => CarbonImmutable::parse($r->booking_date)->toDateString());
+
+        // الدفعات تُجمع في PHP لأن الاسترداد يُطرح ولا يُجمع.
+        $payments = BookingPayment::query()
+            ->whereHas('booking', fn ($q) => $q->visibleTo($user))
+            ->whereDate('paid_on', '>=', $from->toDateString())
+            ->whereDate('paid_on', '<=', $today->toDateString())
+            ->get(['paid_on', 'type', 'amount'])
+            ->groupBy(fn ($p) => CarbonImmutable::parse($p->paid_on)->toDateString());
+
+        $rows = [];
+
+        for ($i = 0; $i < 14; $i++) {
+            $day = $from->addDays($i);
+            $key = $day->toDateString();
+            $paid = $payments->get($key);
+
+            $rows[] = [
+                'date' => $key,
+                'label' => $day->format('d/m'),
+                'bookings' => (int) ($bookings->get($key)->c ?? 0),
+                'value' => round((float) ($bookings->get($key)->v ?? 0), 2),
+                'collected' => $paid ? round(
+                    (float) $paid->whereIn('type', ['deposit', 'payment'])->sum('amount')
+                    - (float) $paid->where('type', 'refund')->sum('amount'),
+                    2,
+                ) : 0.0,
+            ];
+        }
+
+        return $rows;
     }
 
     /**
@@ -266,24 +320,27 @@ class DashboardController extends Controller
         $alerts = [];
 
         // التنبيه يُفصَل بحسب النوع لأن شاشتَي الحجز منفصلتان: تنبيهٌ واحد
-        // يجمعهما يقود إلى شاشة لا تعرض نصف حجوزاته.
-        if ($user->hasPermission('bookings.view')) {
-            foreach ([
-                ['hall', 'events', 'حجزًا في القاعات', 'halls'],
-                ['chalet', 'stays', 'إقامةً في الشاليهات', 'chalets'],
-            ] as [$type, $scope, $label, $screen]) {
-                $unpaid = Booking::visibleTo($user)->blocking()->{$scope}()
-                    ->whereHas('unit', fn ($q) => $q->where('type', $type))
-                    ->whereColumn('paid_amount', '<', 'deposit_amount')
-                    ->count();
+        // يجمعهما يقود إلى شاشة لا تعرض نصف حجوزاته — ولأن الصلاحية نفسها
+        // صارت مفصولة، فلا يُنبَّه أحدٌ إلى نشاط لا يراه.
+        foreach ([
+            ['hall', 'events', 'حجزًا في القاعات', 'halls'],
+            ['chalet', 'stays', 'إقامةً في الشاليهات', 'chalets'],
+        ] as [$type, $scope, $label, $screen]) {
+            if (! $user->hasPermission("{$type}_bookings.view")) {
+                continue;
+            }
 
-                if ($unpaid > 0) {
-                    $alerts[] = [
-                        'type' => 'warning',
-                        'text' => "{$unpaid} {$label} لم يُستوفَ عربونها",
-                        'href' => "/admin/bookings/{$screen}",
-                    ];
-                }
+            $unpaid = Booking::visibleTo($user)->blocking()->{$scope}()
+                ->whereHas('unit', fn ($q) => $q->where('type', $type))
+                ->whereColumn('paid_amount', '<', 'deposit_amount')
+                ->count();
+
+            if ($unpaid > 0) {
+                $alerts[] = [
+                    'type' => 'warning',
+                    'text' => "{$unpaid} {$label} لم يُستوفَ عربونها",
+                    'href' => "/admin/bookings/{$screen}",
+                ];
             }
         }
 

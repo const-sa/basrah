@@ -4,7 +4,7 @@ import SmallBox from '@/components/lte/SmallBox.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { FileSpreadsheet, Pencil, Plus, Power, ReceiptText, Search, Trash2, UserCheck, Users, UserX, X } from 'lucide-vue-next';
+import { Eye, FileSpreadsheet, Pencil, Plus, Power, ReceiptText, Search, Trash2, UserCheck, Users, UserX, X } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
 
 interface ClientRow {
@@ -20,6 +20,11 @@ interface ClientRow {
     is_active: boolean;
     /** العميل النقدي الافتراضي — لا يُوقَف ولا يُحذف. */
     is_walk_in: boolean;
+    /** حجوزاته القائمة (غير الملغاة) وفواتير بيعه — مختصر ملفه في الصف. */
+    bookings_count: number;
+    sales_count: number;
+    /** المتبقي على حجوزاته القائمة. */
+    remaining: number;
     created_at: string | null;
 }
 interface Paginated<T> {
@@ -54,6 +59,8 @@ const props = defineProps<{
     stats: ClientStats;
     cities: string[];
 }>();
+
+const money = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
 // خيارات المدينة في نموذج العميل: قائمة المدن المفعّلة، مع تضمين القيمة الحالية
 // إن كانت مخزّنة سابقاً لكنها غير موجودة/موقوفة في قائمة المدن (حفاظاً على البيانات القديمة).
@@ -216,12 +223,13 @@ const destroy = (c: ClientRow) => {
 
                 <!-- الجدول (card-body p-0) -->
                 <div class="overflow-x-auto">
-                    <table class="w-full min-w-[720px] text-sm">
+                    <table class="w-full min-w-[860px] text-sm">
                         <thead>
-                            <tr class="border-b-2 border-[#dee2e6] text-gray-500">
+                            <tr class="border-b-2 border-[#dee2e6] text-[#1e3a8a]">
                                 <th class="px-4 py-3 text-start font-semibold">العميل</th>
                                 <th class="px-4 py-3 text-start font-semibold">الجوال</th>
                                 <th class="px-4 py-3 text-start font-semibold">البريد</th>
+                                <th class="px-4 py-3 text-center font-semibold">التعاملات</th>
                                 <th class="px-4 py-3 text-center font-semibold">النوع</th>
                                 <th class="px-4 py-3 text-center font-semibold">الحالة</th>
                                 <th class="px-4 py-3 text-center font-semibold">التاريخ</th>
@@ -247,6 +255,26 @@ const destroy = (c: ClientRow) => {
                                 </td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900" dir="ltr">{{ c.mobile || '—' }}</td>
                                 <td class="px-4 py-2.5" dir="ltr">{{ c.email || '—' }}</td>
+                                <!-- التعاملات: بابٌ إلى ملفه — الأرقام تُغري بالنقر قبل السؤال -->
+                                <td class="px-4 py-2.5 text-center">
+                                    <Link :href="`/admin/clients/${c.id}`" class="inline-flex flex-col items-center gap-1">
+                                        <span class="inline-flex items-center gap-1">
+                                            <span
+                                                class="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-extrabold text-blue-700"
+                                                title="الحجوزات القائمة"
+                                                >{{ c.bookings_count }} حجز</span
+                                            >
+                                            <span
+                                                class="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-extrabold text-slate-600"
+                                                title="فواتير البيع"
+                                                >{{ c.sales_count }} فاتورة</span
+                                            >
+                                        </span>
+                                        <span v-if="c.remaining > 0" class="text-[11px] font-bold text-red-600" dir="ltr"
+                                            >{{ money(c.remaining) }} متبقٍ</span
+                                        >
+                                    </Link>
+                                </td>
                                 <td class="px-4 py-2.5 text-center">
                                     <StatusBadge :variant="c.is_taxable ? 'info' : 'neutral'" :label="c.is_taxable ? 'ضريبي' : 'عادي'" />
                                 </td>
@@ -260,6 +288,13 @@ const destroy = (c: ClientRow) => {
                                         <div
                                             class="inline-flex divide-x divide-slate-300 overflow-hidden rounded-md border border-slate-300 rtl:divide-x-reverse"
                                         >
+                                            <Link
+                                                :href="`/admin/clients/${c.id}`"
+                                                title="ملف العميل: حجوزاته وفواتيره ودفعاته"
+                                                class="px-2.5 py-2 text-blue-600 transition hover:bg-blue-50"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                            </Link>
                                             <button
                                                 type="button"
                                                 @click="openEdit(c)"
@@ -291,7 +326,7 @@ const destroy = (c: ClientRow) => {
                                 </td>
                             </tr>
                             <tr v-if="clients.data.length === 0">
-                                <td colspan="7" class="px-4 py-12 text-center text-sm text-slate-400">لا يوجد عملاء مطابقون.</td>
+                                <td colspan="8" class="px-4 py-12 text-center text-sm text-slate-400">لا يوجد عملاء مطابقون.</td>
                             </tr>
                         </tbody>
                     </table>

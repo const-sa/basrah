@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesByUnitType;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\CostCenter;
@@ -20,8 +21,12 @@ use Inertia\Response;
  */
 class UnitWorkspaceController extends Controller
 {
+    use AuthorizesByUnitType;
+
     public function show(Request $request, Unit $unit): Response
     {
+        $this->authorizeUnitAction($request, $unit, 'view');
+
         // نطاق الوحدات يُطبَّق هنا أيضًا: العنوان المباشر ليس ثغرة.
         if (! $request->user()?->canAccessUnit($unit)) {
             abort(403, 'ليس لديك صلاحية الوصول إلى هذه الوحدة.');

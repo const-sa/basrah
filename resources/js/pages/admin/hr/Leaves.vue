@@ -112,12 +112,12 @@ const statusClass = (s: string) =>
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الموظف</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">النوع</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الفترة</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الأيام</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراء</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الفترة</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الأيام</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراء</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -145,12 +145,12 @@ const statusClass = (s: string) =>
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الموظف</th>
-                            <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المبلغ</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الأقساط</th>
-                            <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المستقطع / المتبقي</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراء</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الأقساط</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المستقطع / المتبقي</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراء</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -179,13 +179,13 @@ const statusClass = (s: string) =>
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الموظف</th>
-                            <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المبلغ</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">السبب</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">تاريخ المنح</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">المسيّر</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراء</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">السبب</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">تاريخ المنح</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المسيّر</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراء</th>
                         </tr>
                     </thead>
                     <tbody>

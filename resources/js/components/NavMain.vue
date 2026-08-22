@@ -12,7 +12,7 @@ defineProps<{
 const page = usePage<SharedData>();
 
 // نحفظ تفضيل المستخدم لكل قائمة (مفتوحة/مغلقة) في المتصفح حتى لا تنغلق عند التنقل بين الصفحات.
-// نستخدم حالة صريحة لكل قائمة: عندما يحددها المستخدم نحترم اختياره، وإلا نفتح المجموعة النشطة افتراضياً.
+// الافتراض أن جميع القوائم مغلقة عند الدخول؛ لا تُفتح إلا بنقرة صريحة من المستخدم.
 const STORAGE_KEY = 'sidebar-open-menus';
 const loadState = (): Record<string, boolean> => {
     try {
@@ -46,11 +46,8 @@ const isGroupActive = (item: NavItem): boolean => {
     return item.children.some((c) => isActive(c.href) || isGroupActive(c));
 };
 
-const isOpen = (item: NavItem): boolean => {
-    const explicit = menuState.value[item.title];
-    if (explicit !== undefined) return explicit;
-    return isGroupActive(item);
-};
+// مغلقة افتراضياً: المجموعة النشطة لا تُفتح تلقائياً، يكفي إبرازها بلون النشاط.
+const isOpen = (item: NavItem): boolean => menuState.value[item.title] === true;
 
 const toggleMenu = (item: NavItem) => {
     menuState.value = { ...menuState.value, [item.title]: !isOpen(item) };

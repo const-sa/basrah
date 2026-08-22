@@ -87,9 +87,9 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumF
                 <table v-if="prices.length" class="w-full overflow-hidden rounded-xl text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-slate-700">{{ isStay ? 'الوحدة' : 'الفترة' }}</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">أيام الأسبوع</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">نهاية الأسبوع</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">{{ isStay ? 'الوحدة' : 'الفترة' }}</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">أيام الأسبوع</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">نهاية الأسبوع</th>
                         </tr>
                     </thead>
                     <tbody>

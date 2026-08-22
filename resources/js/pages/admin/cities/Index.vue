@@ -119,7 +119,7 @@ const destroy = (c: CityRow) => {
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[560px] text-sm">
                         <thead>
-                            <tr class="border-b-2 border-[#dee2e6] text-gray-500">
+                            <tr class="border-b-2 border-[#dee2e6] text-[#1e3a8a]">
                                 <th class="px-4 py-3 text-start font-semibold">المدينة</th>
                                 <th class="px-4 py-3 text-center font-semibold">عدد العملاء</th>
                                 <th class="px-4 py-3 text-center font-semibold">الحالة</th>

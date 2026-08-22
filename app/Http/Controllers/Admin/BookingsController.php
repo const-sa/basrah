@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesByUnitType;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingPayment;
@@ -30,6 +31,10 @@ use Inertia\Response;
  */
 class BookingsController extends Controller
 {
+    // المسار المشترك لا يعرف نوع الحجز قبل جلبه، فالوسيط يقبل بديلَي النوعين
+    // ويتم الفصل هنا بمفتاح النوع وحده.
+    use AuthorizesByUnitType;
+
     public function __construct(
         private readonly BookingService $bookings,
         private readonly WhatsappNotifier $whatsapp,
@@ -42,6 +47,8 @@ class BookingsController extends Controller
      */
     public function changeStatus(Request $request, Booking $booking): RedirectResponse
     {
+        $this->authorizeBookingAction($request, $booking, 'edit');
+
         $data = $request->validate([
             'status' => ['required', Rule::in(array_keys(Booking::STATUSES))],
             'reason' => ['nullable', 'string', 'max:1000'],
@@ -85,6 +92,8 @@ class BookingsController extends Controller
      */
     public function storePayment(Request $request, Booking $booking): RedirectResponse
     {
+        $this->authorizeBookingAction($request, $booking, 'edit');
+
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(BookingPayment::TYPES))],
             // الطريقة تُفحص في الجدول لا في ثابت: المعطَّلة تُرفض هنا،
@@ -114,6 +123,8 @@ class BookingsController extends Controller
      */
     public function payments(Request $request, Booking $booking): JsonResponse
     {
+        $this->authorizeBookingAction($request, $booking, 'view');
+
         $this->authorizeUnit($request, $booking->unit_id);
 
         return response()->json([
@@ -149,6 +160,8 @@ class BookingsController extends Controller
      */
     public function updateNotes(Request $request, Booking $booking): RedirectResponse
     {
+        $this->authorizeBookingAction($request, $booking, 'edit');
+
         $data = $request->validate([
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
@@ -165,6 +178,8 @@ class BookingsController extends Controller
      */
     public function bond(Request $request, Booking $booking): Response
     {
+        $this->authorizeBookingAction($request, $booking, 'view');
+
         $this->authorizeUnit($request, $booking->unit_id);
 
         $booking->load(['unit:id,name,code,type,logo_path', 'client:id,name,mobile', 'eventType:id,name', 'creator:id,name']);
@@ -227,6 +242,8 @@ class BookingsController extends Controller
      */
     public function invoice(Request $request, Booking $booking): Response
     {
+        $this->authorizeBookingAction($request, $booking, 'view');
+
         $this->authorizeUnit($request, $booking->unit_id);
 
         $booking->load([
@@ -463,6 +480,8 @@ class BookingsController extends Controller
 
     public function destroy(Request $request, Booking $booking): RedirectResponse
     {
+        $this->authorizeBookingAction($request, $booking, 'delete');
+
         $this->authorizeUnit($request, $booking->unit_id);
 
         // الحجز المسدَّد جزئيًا لا يُحذف — يُلغى ليبقى أثره المالي في السجل.

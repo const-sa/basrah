@@ -13,6 +13,36 @@ use App\Models\Setting;
 class SiteIdentity
 {
     /**
+     * الهوية المصغّرة المشتركة مع كل صفحة: الاسم والشعار والأيقونة وحدها.
+     *
+     * مفصولة عن current() لأنها تُقرأ في *كل* طلب لبناء ترويسة الشريط
+     * الجانبي، فلا يصحّ أن تجرّ معها الهاتف والعنوان والبريد بلا حاجة.
+     *
+     * @return array{name: string, logo_url: string|null, favicon_url: string|null}
+     */
+    public static function brand(): array
+    {
+        $settings = Setting::current();
+
+        return [
+            'name' => $settings->business_name ?: config('app.name'),
+            'logo_url' => self::url($settings->logo_path),
+            'favicon_url' => self::url($settings->favicon_path),
+        ];
+    }
+
+    /**
+     * مسار الملف المخزَّن → رابطًا مطلقًا، وnull إن لم يُضبط.
+     *
+     * يمرّ عليه كل حقول الصور: تُخزَّن نسبيةً إلى public/ فيكفي asset()،
+     * لكن تكرار الشرط الثلاثي في كل حقل يُغفل واحدًا عند الإضافة.
+     */
+    private static function url(?string $path): ?string
+    {
+        return $path ? asset($path) : null;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function current(): array
@@ -21,7 +51,7 @@ class SiteIdentity
 
         return [
             'name' => $settings->business_name ?: config('app.name'),
-            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
+            'logo_url' => self::url($settings->logo_path),
             'phone' => $settings->phone,
             // رقم الواتساب يرجع إلى الهاتف عند غيابه: زرّ تواصلٍ لا يعمل
             // أسوأ من زرٍّ لا يظهر.

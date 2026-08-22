@@ -21,7 +21,7 @@ class RolesController extends Controller
 
     public function index(): Response
     {
-        return Inertia::render('admin/roles/Index', [
+        return Inertia::render('admin/groups/Index', [
             'roles' => Role::withCount('users')->orderBy('id')->get()->map(fn ($r) => [
                 'id' => $r->id,
                 'name' => $r->name,
@@ -48,14 +48,14 @@ class RolesController extends Controller
             'permissions' => array_values($data['permissions'] ?? []),
         ]);
 
-        return back()->with('success', 'تم إضافة الدور بنجاح');
+        return back()->with('success', 'تم إضافة المجموعة بنجاح');
     }
 
     public function update(Request $request, Role $role): RedirectResponse
     {
         $data = $this->validated($request);
 
-        // دور المدير العام محمي: يحتفظ بكل الصلاحيات دائماً.
+        // مجموعة المالك محمية: تحتفظ بكل الصلاحيات دائماً.
         $permissions = $role->slug === 'super-admin'
             ? self::permissionKeys()
             : array_values($data['permissions'] ?? []);
@@ -66,22 +66,22 @@ class RolesController extends Controller
             'permissions' => $permissions,
         ]);
 
-        return back()->with('success', 'تم تحديث الدور');
+        return back()->with('success', 'تم تحديث المجموعة');
     }
 
     public function destroy(Role $role): RedirectResponse
     {
         if ($role->slug === 'super-admin') {
-            return back()->with('warning', 'لا يمكن حذف دور المدير العام');
+            return back()->with('warning', 'لا يمكن حذف مجموعة المالك');
         }
 
         if ($role->users()->exists()) {
-            return back()->with('warning', 'لا يمكن حذف دور مرتبط بمستخدمين');
+            return back()->with('warning', 'لا يمكن حذف مجموعة مرتبطة بموظفين');
         }
 
         $role->delete();
 
-        return back()->with('success', 'تم حذف الدور');
+        return back()->with('success', 'تم حذف المجموعة');
     }
 
     /**
@@ -129,7 +129,7 @@ class RolesController extends Controller
 
     private function uniqueSlug(string $name): string
     {
-        $base = Str::slug($name) ?: 'role';
+        $base = Str::slug($name) ?: 'group';
         $slug = $base;
         $i = 1;
         while (Role::where('slug', $slug)->exists()) {

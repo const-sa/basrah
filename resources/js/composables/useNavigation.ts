@@ -19,9 +19,7 @@ import {
     Home,
     LayoutDashboard,
     LifeBuoy,
-    Lightbulb,
     MapPin,
-    Megaphone,
     MessageCircle,
     Package as PackageIcon,
     PartyPopper,
@@ -32,6 +30,7 @@ import {
     ShieldCheck,
     ShoppingCart,
     SlidersHorizontal,
+    TrendingUp,
     Truck,
     Users,
     UsersRound,
@@ -84,22 +83,13 @@ export function useNavigation() {
     const unitsOfType = (type: SidebarUnit['type']) => sidebarUnits.value.filter((u) => u.type === type);
 
     const allNavItems = computed<GuardedNavItem[]>(() => [
-        // «الإدارة» أولًا وتجمع ما لا يتبع نظامًا بعينه: لوحة التحكم والعملاء
-        // والتقارير وما إليها. تركها مبعثرة في سطر أفقي كان يُطيل
-        // الشريط بمداخل مفردة ويزاحم الأنظمة التي لها أقسام.
-        {
-            title: t('nav.administration'),
-            href: '#administration',
-            icon: LayoutDashboard,
-            children: [
-                { title: t('nav.dashboard'), href: '/admin', icon: LayoutDashboard, perm: 'dashboard.view' },
-                { title: t('nav.clients'), href: '/admin/clients', icon: Contact, perm: 'clients.view' },
-                { title: t('nav.reports'), href: '/admin/reports', icon: FileBarChart2, perm: 'reports.view' },
-                { title: t('nav.support'), href: '/admin/tickets', icon: LifeBuoy, perm: 'tickets.view' },
-                { title: t('nav.notifications_library'), href: '/admin/notifications/library', icon: Megaphone, perm: 'notifications.view' },
-                { title: t('nav.about'), href: '/admin/about', icon: Lightbulb },
-            ],
-        },
+        // شاشاتٌ عامّة لا تتبع نظامًا بعينه، وكلٌّ منها شاشةٌ واحدة لا قسم.
+        // كانت مجموعةً باسم «الإدارة»، فكان الوصول إلى أكثر الشاشات ترددًا
+        // (لوحة التحكم والعملاء) يمرّ بنقرةِ فتحٍ لا تكشف إلا رابطًا واحدًا؛
+        // وهنا تصير مداخل مفردة في أعلى القائمة تُفتح بنقرة.
+        { title: t('nav.dashboard'), href: '/admin', icon: LayoutDashboard, perm: 'dashboard.view' },
+        { title: t('nav.clients'), href: '/admin/clients', icon: Contact, perm: 'clients.view' },
+        { title: t('nav.reports'), href: '/admin/reports', icon: FileBarChart2, perm: 'reports.view' },
         // نظاما القاعات والشاليهات منفصلان تمامًا: لكلٍّ حجوزاته وتقويمه ونموذجه،
         // لأن القاعة تُحجز بفترة داخل يوم والشاليه يُحجز بليالٍ ممتدة. جمعهما في
         // مدخل «حجوزات» واحد كان يُخفي هذا الاختلاف ويجعل الموظف يبحث عن الشاشة.
@@ -107,22 +97,22 @@ export function useNavigation() {
             title: t('nav.halls'),
             href: '#halls',
             icon: Building2,
-            perm: 'units.view',
+            perm: 'halls.view',
             children: [
-                { title: t('nav.hall_bookings'), href: '/admin/bookings/halls', icon: CalendarDays, perm: 'bookings.view' },
-                { title: t('nav.hall_calendar'), href: '/admin/calendar/halls', icon: CalendarRange, perm: 'calendar.view' },
-                { title: t('nav.hall_month_calendar'), href: '/admin/calendar/halls/month', icon: CalendarDays, perm: 'calendar.view' },
-                { title: t('nav.all_halls'), href: '/admin/units/halls', icon: Building2, perm: 'units.view' },
+                { title: t('nav.hall_bookings'), href: '/admin/bookings/halls', icon: CalendarDays, perm: 'hall_bookings.view' },
+                { title: t('nav.hall_calendar'), href: '/admin/calendar/halls', icon: CalendarRange, perm: 'hall_calendar.view' },
+                { title: t('nav.hall_month_calendar'), href: '/admin/calendar/halls/month', icon: CalendarDays, perm: 'hall_calendar.view' },
+                { title: t('nav.all_halls'), href: '/admin/units/halls', icon: Building2, perm: 'halls.view' },
                 { title: t('nav.packages'), href: '/admin/packages', icon: PackageIcon, perm: 'packages.view' },
                 { title: t('nav.event_types'), href: '/admin/event-types', icon: PartyPopper, perm: 'event_types.view' },
-                { title: t('nav.hall_contract_template'), href: '/admin/units/contract-template', icon: FileText, perm: 'units.view' },
+                { title: t('nav.hall_contract_template'), href: '/admin/units/contract-template', icon: FileText, perm: 'hall_contract.view' },
                 // كل قاعة مدخل مستقل: لها حجوزاتها وفواتيرها وربحيتها، فالوصول
                 // إليها مباشرة أسرع من تصفية الشاشات العامة في كل مرة.
                 ...unitsOfType('hall').map((u) => ({
                     title: u.name,
                     href: `/admin/units/${u.id}/workspace`,
                     icon: Building2,
-                    perm: 'units.view',
+                    perm: 'halls.view',
                 })),
             ],
         },
@@ -130,16 +120,16 @@ export function useNavigation() {
             title: t('nav.chalets'),
             href: '#chalets',
             icon: Home,
-            perm: 'units.view',
+            perm: 'chalets.view',
             children: [
-                { title: t('nav.chalet_bookings'), href: '/admin/bookings/chalets', icon: CalendarDays, perm: 'bookings.view' },
-                { title: t('nav.chalet_calendar'), href: '/admin/calendar/chalets', icon: CalendarRange, perm: 'calendar.view' },
-                { title: t('nav.all_chalets'), href: '/admin/units/chalets', icon: Home, perm: 'units.view' },
+                { title: t('nav.chalet_bookings'), href: '/admin/bookings/chalets', icon: CalendarDays, perm: 'chalet_bookings.view' },
+                { title: t('nav.chalet_calendar'), href: '/admin/calendar/chalets', icon: CalendarRange, perm: 'chalet_calendar.view' },
+                { title: t('nav.all_chalets'), href: '/admin/units/chalets', icon: Home, perm: 'chalets.view' },
                 ...unitsOfType('chalet').map((u) => ({
                     title: u.name,
                     href: `/admin/units/${u.id}/workspace`,
                     icon: Home,
-                    perm: 'units.view',
+                    perm: 'chalets.view',
                 })),
             ],
         },
@@ -176,7 +166,11 @@ export function useNavigation() {
                 { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view' },
                 { title: t('nav.journal'), href: '/admin/accounting/journal', icon: FileText, perm: 'journal.view' },
                 { title: t('nav.vouchers'), href: '/admin/accounting/vouchers', icon: Receipt, perm: 'vouchers.view' },
+                { title: t('nav.revenues'), href: '/admin/accounting/revenues', icon: TrendingUp, perm: 'revenues.view' },
                 { title: t('nav.expenses'), href: '/admin/accounting/expenses', icon: Receipt, perm: 'expenses.view' },
+                // طريقة الدفع حسابٌ نقديّ أو بنكيّ تُرحَّل إليه السندات، لا خيارَ
+                // إعداداتٍ عامّ، فمكانها مع دفاتر المحاسبة التي تُقيَّد فيها.
+                { title: t('nav.settings_payment_methods'), href: '/admin/settings/payment-methods', icon: CreditCard, perm: 'payment_methods.view' },
                 { title: t('nav.fin_reports'), href: '/admin/accounting/reports', icon: FileBarChart2, perm: 'fin_reports.view' },
             ],
         },
@@ -197,10 +191,9 @@ export function useNavigation() {
             icon: ShieldCheck,
             children: [
                 { title: t('nav.employees_list'), href: '/admin/employees', icon: Users, perm: 'employees.view' },
-                { title: t('nav.roles'), href: '/admin/roles', icon: ShieldCheck, perm: 'roles.view' },
+                { title: t('nav.groups'), href: '/admin/groups', icon: ShieldCheck, perm: 'roles.view' },
                 { title: t('nav.audit_log'), href: '/admin/audit-log', icon: ScrollText, perm: 'audit.view' },
                 { title: t('nav.archive'), href: '/admin/archive', icon: ArchiveIcon, perm: 'archive.view' },
-                { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
             ],
         },
         {
@@ -210,11 +203,17 @@ export function useNavigation() {
             children: [
                 { title: t('nav.settings_general'), href: '/admin/settings/general', icon: SlidersHorizontal, perm: 'settings.view' },
                 { title: t('nav.settings_whatsapp'), href: '/admin/settings/whatsapp', icon: MessageCircle, perm: 'settings.view' },
-                { title: t('nav.settings_payment_methods'), href: '/admin/settings/payment-methods', icon: CreditCard, perm: 'payment_methods.view' },
+                { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
                 { title: t('nav.departments'), href: '/admin/departments', icon: Building2, perm: 'departments.view' },
                 { title: t('nav.cities'), href: '/admin/cities', icon: MapPin, perm: 'cities.view' },
             ],
         },
+        // شاشاتٌ مساندة لا تخدم العمل اليومي: تُفتح عند الحاجة لا كل يوم،
+        // فذيل القائمة مكانها كي يبقى أعلاها للعمل ولأقسام الأنظمة.
+        { title: t('nav.support'), href: '/admin/tickets', icon: LifeBuoy, perm: 'tickets.view' },
+        // مخفيّان من القائمة بطلب الإدارة (الصفحتان والمساران باقيان يُفتحان بالرابط المباشر):
+        // { title: t('nav.notifications_library'), href: '/admin/notifications/library', icon: Megaphone, perm: 'notifications.view' },
+        // { title: t('nav.about'), href: '/admin/about', icon: Lightbulb },
     ]);
 
     /**

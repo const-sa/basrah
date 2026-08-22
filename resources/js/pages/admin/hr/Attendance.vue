@@ -85,12 +85,12 @@ const statusClass = (s: string) =>
                         <table class="w-full text-sm">
                             <thead class="bg-slate-100">
                                 <tr>
-                                    <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الموظف</th>
-                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحضور</th>
-                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الانصراف</th>
-                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">ساعات إضافية</th>
-                                    <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">ملاحظة</th>
+                                    <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحضور</th>
+                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الانصراف</th>
+                                    <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">ساعات إضافية</th>
+                                    <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">ملاحظة</th>
                                 </tr>
                             </thead>
                             <tbody>

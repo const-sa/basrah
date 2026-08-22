@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Eye, EyeOff, LayoutDashboard, LoaderCircle, Mail } from 'lucide-vue-next';
+import { Eye, EyeOff, LayoutDashboard, LoaderCircle, Mail, UserRound } from 'lucide-vue-next';
 import { ref } from 'vue';
+
+interface DemoAccount {
+    email: string;
+    label: string;
+    role: string | null;
+}
 
 defineProps<{
     status?: string;
     canResetPassword: boolean;
+    /** حسابات التجربة المفعّلة — null حين لا حساب منها مفعّلًا. */
+    demo?: { password: string; accounts: DemoAccount[] } | null;
 }>();
 
 const form = useForm({
@@ -21,6 +29,16 @@ const submit = () => {
     form.post(route('login'), {
         onFinish: () => form.reset('password'),
     });
+};
+
+/**
+ * الدخول بحساب تجربة بنقرة واحدة: تُعبَّأ الحقول ثم يُرسَل النموذج.
+ * كلمة السر واحدة لكل حسابات التجربة، فلا داعي لسؤال المستخدم عنها.
+ */
+const loginAs = (account: DemoAccount, password: string) => {
+    form.email = account.email;
+    form.password = password;
+    submit();
 };
 </script>
 
@@ -113,6 +131,37 @@ const submit = () => {
                         <span>دخول</span>
                     </button>
                 </form>
+
+                <!-- حسابات التجربة — تظهر فقط حين تُفعَّل من شاشة الموظفين -->
+                <div v-if="demo && demo.accounts.length" class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                    <div class="mb-2.5 flex items-center justify-between gap-2">
+                        <span class="text-sm font-extrabold text-emerald-800">حسابات التجربة</span>
+                        <span class="rounded-md bg-white px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                            كلمة السر: <span dir="ltr">{{ demo.password }}</span>
+                        </span>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <button
+                            v-for="a in demo.accounts"
+                            :key="a.email"
+                            type="button"
+                            :disabled="form.processing"
+                            @click="loginAs(a, demo.password)"
+                            class="flex w-full items-center gap-2.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-right transition hover:border-emerald-400 hover:bg-emerald-50 disabled:opacity-60"
+                        >
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                                <UserRound class="h-4 w-4" />
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-sm font-bold text-slate-900">{{ a.label }}</span>
+                                <span class="block truncate text-[11px] text-slate-500" dir="ltr">{{ a.email }}</span>
+                            </span>
+                        </button>
+                    </div>
+
+                    <p class="mt-2.5 text-[11px] font-medium text-emerald-700">اضغط على أي حساب للدخول به مباشرة.</p>
+                </div>
 
                 <!-- Footer credit -->
                 <div class="mt-8 flex items-center justify-center gap-2 text-center text-xs text-slate-500">

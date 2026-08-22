@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -35,9 +36,19 @@ class WaGateway
     /** هل التكامل مفعّل ومكتمل المعرّفات؟ */
     public function isConfigured(): bool
     {
-        return $this->enabled
-            && filled($this->instanceId)
-            && filled($this->accessToken);
+        return $this->enabled && $this->hasCredentials();
+    }
+
+    /**
+     * هل المعرّفات موجودة (بصرف النظر عن التفعيل)؟
+     *
+     * شاشة الربط تحتاج هذا لا isConfigured: الربط يسبق التفعيل عادةً،
+     * فلو اشترطنا التفعيل لتعذّر جلب رمز QR أصلاً وبقي المستخدم في حلقة
+     * «فعّل لتربط، واربط لتفعّل».
+     */
+    public function hasCredentials(): bool
+    {
+        return filled($this->instanceId) && filled($this->accessToken);
     }
 
     /**
@@ -158,7 +169,7 @@ class WaGateway
     }
 
     /** توحيد شكل الاستجابة إلى مصفوفة تحوي على الأقل ok/status. */
-    private function normalize(\Illuminate\Http\Client\Response $response): array
+    private function normalize(Response $response): array
     {
         $data = $response->json();
 

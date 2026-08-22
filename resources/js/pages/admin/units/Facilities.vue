@@ -15,7 +15,7 @@ interface Facility {
 
 const props = defineProps<{ facilities: Facility[]; icons: string[] }>();
 
-const { can } = usePermissions();
+const { canAny } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -75,7 +75,7 @@ const destroy = (f: Facility) => {
                 </div>
                 <div class="flex gap-2">
                     <Link href="/admin/units" class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">الوحدات</Link>
-                    <button v-if="can('units.create')" type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                    <button v-if="canAny('halls.create', 'chalets.create')" type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
                         <Plus class="h-4 w-4" /> مرفق جديد
                     </button>
                 </div>
@@ -104,8 +104,8 @@ const destroy = (f: Facility) => {
                     </div>
 
                     <div class="flex shrink-0 gap-1">
-                        <TableActionButton v-if="can('units.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openEdit(f)" />
-                        <TableActionButton v-if="can('units.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(f)" />
+                        <TableActionButton v-if="canAny('halls.edit', 'chalets.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openEdit(f)" />
+                        <TableActionButton v-if="canAny('halls.delete', 'chalets.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(f)" />
                     </div>
                 </div>
 

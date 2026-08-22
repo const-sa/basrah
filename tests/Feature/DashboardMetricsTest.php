@@ -124,6 +124,43 @@ class DashboardMetricsTest extends TestCase
         $this->assertNotEmpty(array_filter($alerts, fn ($a) => str_contains($a['text'], 'حد إعادة الطلب')));
     }
 
+    public function test_series_returns_a_row_for_every_one_of_the_last_fourteen_days(): void
+    {
+        $owner = $this->user('super-admin');
+        $service = app(BookingService::class);
+
+        $booking = $service->create([
+            'unit_id' => Unit::firstOrFail()->id, 'scope' => 'whole',
+            'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+        ]);
+
+        $service->recordPayment($booking, [
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId(),
+            'amount' => 400, 'paid_on' => now()->toDateString(),
+        ], $owner->id);
+
+        $this->actingAs($owner)
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p
+                ->has('series', 14)
+                // اليوم آخر الصف، والأيام الخالية قبله تُملأ بأصفار لا تُحذف.
+                ->where('series.13.date', now()->toDateString())
+                ->where('series.13.bookings', 1)
+                ->where('series.13.collected', 400)
+                ->where('series.12.bookings', 0)
+                ->where('series.12.collected', 0),
+            );
+    }
+
+    public function test_series_is_hidden_from_a_user_without_booking_permission(): void
+    {
+        $this->actingAs($this->user('cashier'))
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->where('series', []));
+    }
+
     public function test_cashier_sees_pos_metrics_but_not_accounting_or_bookings(): void
     {
         $this->actingAs($this->user('cashier'))

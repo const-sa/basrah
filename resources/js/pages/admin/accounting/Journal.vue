@@ -133,9 +133,9 @@ const statusClass = (s: string) =>
                         <table class="w-full text-xs">
                             <thead class="bg-slate-50">
                                 <tr>
-                                    <th class="px-4 py-2 text-right font-extrabold text-slate-600">الحساب</th>
-                                    <th class="px-4 py-2 text-left font-extrabold text-slate-600">مدين</th>
-                                    <th class="px-4 py-2 text-left font-extrabold text-slate-600">دائن</th>
+                                    <th class="px-4 py-2 text-right font-extrabold text-[#1e3a8a]">الحساب</th>
+                                    <th class="px-4 py-2 text-left font-extrabold text-[#1e3a8a]">مدين</th>
+                                    <th class="px-4 py-2 text-left font-extrabold text-[#1e3a8a]">دائن</th>
                                 </tr>
                             </thead>
                             <tbody>

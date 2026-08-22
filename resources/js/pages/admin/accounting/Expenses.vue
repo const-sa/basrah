@@ -330,14 +330,14 @@ const removeCategory = (category: Category) => {
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">المصروف</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">النوع</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الوحدة</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الوصف</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الدفع</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المبلغ</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المصروف</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوحدة</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوصف</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الدفع</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -614,11 +614,11 @@ const removeCategory = (category: Category) => {
                     <table class="w-full text-sm">
                         <thead class="sticky top-0 bg-slate-100">
                             <tr>
-                                <th class="px-3 py-2 text-right text-xs font-extrabold text-slate-700">النوع</th>
-                                <th class="px-3 py-2 text-right text-xs font-extrabold text-slate-700">الحساب المحاسبي</th>
-                                <th class="px-3 py-2 text-center text-xs font-extrabold text-slate-700">مصروفات</th>
-                                <th class="px-3 py-2 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                <th class="px-3 py-2 text-center text-xs font-extrabold text-slate-700"></th>
+                                <th class="px-3 py-2 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                <th class="px-3 py-2 text-right text-xs font-extrabold text-[#1e3a8a]">الحساب المحاسبي</th>
+                                <th class="px-3 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">مصروفات</th>
+                                <th class="px-3 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                <th class="px-3 py-2 text-center text-xs font-extrabold text-[#1e3a8a]"></th>
                             </tr>
                         </thead>
                         <tbody>

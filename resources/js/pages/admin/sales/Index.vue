@@ -279,17 +279,17 @@ const submitRefund = () => {
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الفاتورة</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">العميل</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الدفع</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">السعر</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الضريبة</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الإجمالي</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المرتجع</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المسدّد</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">المتبقي</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الفاتورة</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">العميل</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الدفع</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">السعر</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الضريبة</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الإجمالي</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المرتجع</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المسدّد</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المتبقي</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -429,13 +429,13 @@ const submitRefund = () => {
                     <table class="w-full border border-slate-300 text-xs">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-700">#</th>
-                                <th class="border border-slate-300 px-2 py-2 text-right font-extrabold text-slate-700">الصنف</th>
-                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-700">الكمية</th>
-                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-700">السعر</th>
-                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-700">الخصم</th>
-                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-700">الضريبة</th>
-                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-700">الإجمالي</th>
+                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">#</th>
+                                <th class="border border-slate-300 px-2 py-2 text-right font-extrabold text-[#1e3a8a]">الصنف</th>
+                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الكمية</th>
+                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">السعر</th>
+                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الخصم</th>
+                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الضريبة</th>
+                                <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الإجمالي</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -632,10 +632,10 @@ const submitRefund = () => {
                                 <table class="w-full text-xs">
                                     <thead class="bg-slate-50">
                                         <tr>
-                                            <th class="px-3 py-2 text-right font-extrabold text-slate-600">الصنف</th>
-                                            <th class="px-3 py-2 text-center font-extrabold text-slate-600">المتاح</th>
-                                            <th class="px-3 py-2 text-center font-extrabold text-slate-600">المرتجع</th>
-                                            <th class="px-3 py-2 text-left font-extrabold text-slate-600">القيمة</th>
+                                            <th class="px-3 py-2 text-right font-extrabold text-[#1e3a8a]">الصنف</th>
+                                            <th class="px-3 py-2 text-center font-extrabold text-[#1e3a8a]">المتاح</th>
+                                            <th class="px-3 py-2 text-center font-extrabold text-[#1e3a8a]">المرتجع</th>
+                                            <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">القيمة</th>
                                         </tr>
                                     </thead>
                                     <tbody>

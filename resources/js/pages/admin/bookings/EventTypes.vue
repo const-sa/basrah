@@ -153,11 +153,11 @@ const destroy = (t: EventType) => {
                 <table v-if="typesOf(hall.id).length" class="w-full">
                     <thead class="bg-slate-100/70">
                         <tr>
-                            <th class="px-4 py-2 text-right text-xs font-extrabold text-slate-700">النوع</th>
-                            <th class="px-4 py-2 text-right text-xs font-extrabold text-slate-700">الوصف</th>
-                            <th class="px-4 py-2 text-center text-xs font-extrabold text-slate-700">سعر الحجز</th>
-                            <th class="px-4 py-2 text-center text-xs font-extrabold text-slate-700">الحجوزات</th>
-                            <th class="px-4 py-2 text-center text-xs font-extrabold text-slate-700">الحالة</th>
+                            <th class="px-4 py-2 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                            <th class="px-4 py-2 text-right text-xs font-extrabold text-[#1e3a8a]">الوصف</th>
+                            <th class="px-4 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">سعر الحجز</th>
+                            <th class="px-4 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">الحجوزات</th>
+                            <th class="px-4 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
                             <th class="px-4 py-2"></th>
                         </tr>
                     </thead>

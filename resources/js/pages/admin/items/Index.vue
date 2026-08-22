@@ -198,12 +198,12 @@ const typeClass = (t: string) =>
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الصنف</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">القسم</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">النوع</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">التكلفة / السعر</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الرصيد</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الصنف</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">القسم</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التكلفة / السعر</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الرصيد</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -378,10 +378,10 @@ const typeClass = (t: string) =>
                         <table class="w-full text-sm">
                             <thead class="bg-slate-50">
                                 <tr>
-                                    <th class="px-2 py-2 text-right text-xs font-extrabold text-slate-700">الصنف</th>
-                                    <th class="px-2 py-2 text-center text-xs font-extrabold text-slate-700">الدفتري</th>
-                                    <th class="px-2 py-2 text-center text-xs font-extrabold text-slate-700">المعدود</th>
-                                    <th class="px-2 py-2 text-center text-xs font-extrabold text-slate-700">الفرق</th>
+                                    <th class="px-2 py-2 text-right text-xs font-extrabold text-[#1e3a8a]">الصنف</th>
+                                    <th class="px-2 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">الدفتري</th>
+                                    <th class="px-2 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">المعدود</th>
+                                    <th class="px-2 py-2 text-center text-xs font-extrabold text-[#1e3a8a]">الفرق</th>
                                 </tr>
                             </thead>
                             <tbody>

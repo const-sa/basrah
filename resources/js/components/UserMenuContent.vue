@@ -28,8 +28,9 @@ defineProps<Props>();
         </DropdownMenuItem>
     </DropdownMenuGroup>
     <DropdownMenuSeparator />
-    <DropdownMenuItem :as-child="true">
-        <Link class="block w-full" method="post" :href="route('logout')" as="button">
+    <!-- الخروج أحمر: فِعلٌ يقطع الجلسة، فيُميَّز عمّا فوقه من تنقّلٍ عاديّ. -->
+    <DropdownMenuItem :as-child="true" class="text-red-600 focus:bg-red-50 focus:text-red-700">
+        <Link class="flex w-full items-center font-bold text-red-600" method="post" :href="route('logout')" as="button">
             <LogOut class="ml-2 h-4 w-4" />
             تسجيل الخروج
         </Link>

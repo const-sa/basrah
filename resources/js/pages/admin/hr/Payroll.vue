@@ -108,15 +108,15 @@ const approve = (p: Payroll) => {
                         <table class="w-full text-xs">
                             <thead class="bg-slate-50">
                                 <tr>
-                                    <th class="px-4 py-2 text-right font-extrabold text-slate-600">الموظف</th>
-                                    <th class="px-3 py-2 text-center font-extrabold text-slate-600">أيام</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">الأساسي</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">البدلات</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">إضافي</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">مكافآت</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">غياب</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">سلف</th>
-                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">الصافي</th>
+                                    <th class="px-4 py-2 text-right font-extrabold text-[#1e3a8a]">الموظف</th>
+                                    <th class="px-3 py-2 text-center font-extrabold text-[#1e3a8a]">أيام</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">الأساسي</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">البدلات</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">إضافي</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">مكافآت</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">غياب</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">سلف</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">الصافي</th>
                                 </tr>
                             </thead>
                             <tbody>

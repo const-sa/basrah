@@ -23,10 +23,10 @@ class SiteController extends Controller
 {
     public function home(): Response
     {
+        // وضع «قريبًا»: لا تُستعلم الوحدات ولا تُمرّر — الصفحة لا تعرض شيئًا
+        // منها، واستعلامها هنا حِملٌ على كل زائرٍ بلا مقابل.
         return Inertia::render('site/Home', [
             'org' => $this->org(),
-            'halls' => $this->units('hall'),
-            'chalets' => $this->units('chalet'),
         ]);
     }
 
@@ -103,6 +103,9 @@ class SiteController extends Controller
 
     /**
      * الوحدات المعروضة للعموم: الفعّالة وحدها.
+     *
+     * غير مستعملةٍ ما دامت الواجهة في وضع «قريبًا»، وتُبقى كما هي ليعود
+     * عرض الوحدات بسطرٍ واحد في home() يوم الإطلاق.
      *
      * @return list<array<string, mixed>>
      */

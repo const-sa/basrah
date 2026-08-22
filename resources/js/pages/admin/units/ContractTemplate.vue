@@ -96,10 +96,10 @@ const print = () => window.print();
                     <button type="button" @click="print" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
                         <Printer class="h-4 w-4" /> طباعة
                     </button>
-                    <button v-if="can('units.edit') && editing" type="button" @click="resetToDefault" class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100">
+                    <button v-if="can('hall_contract.edit') && editing" type="button" @click="resetToDefault" class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100">
                         <RotateCcw class="h-4 w-4" /> استعادة الأصل
                     </button>
-                    <button v-if="can('units.edit')" type="button" @click="editing ? (editing = false) : startEdit()" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                    <button v-if="can('hall_contract.edit')" type="button" @click="editing ? (editing = false) : startEdit()" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
                         <component :is="editing ? Eye : Pencil" class="h-4 w-4" />
                         {{ editing ? 'عرض النموذج' : 'تعديل النموذج' }}
                     </button>

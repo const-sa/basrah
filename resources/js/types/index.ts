@@ -18,9 +18,17 @@ export interface NavItem {
     children?: NavItem[];
 }
 
+/** هوية المنشأة المشتركة مع كل صفحة — من `SiteIdentity::brand()`. */
+export interface Brand {
+    name: string;
+    logo_url: string | null;
+    favicon_url: string | null;
+}
+
 export interface SharedData {
     name: string;
     version: string;
+    brand?: Brand;
     quote: { message: string; author: string };
     auth: Auth;
     flash?: {

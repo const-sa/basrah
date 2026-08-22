@@ -8,8 +8,10 @@ use App\Models\Client;
 use App\Models\NotificationTemplate;
 use App\Models\Setting;
 use App\Services\WaGateway;
+use App\Support\NotificationCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,42 +20,52 @@ class NotificationTemplatesController extends Controller
     public function index(): Response
     {
         return Inertia::render('admin/notifications/Library', [
-            'templates' => NotificationTemplate::latest('id')->get()->map(fn ($t) => [
-                'id' => $t->id,
-                'title' => $t->title,
-                'body' => $t->body,
-                'created_at' => $t->created_at?->toDateString(),
-            ]),
+            'templates' => NotificationTemplate::query()
+                ->orderBy('category')
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (NotificationTemplate $t) => [
+                    'id' => $t->id,
+                    'category' => $t->category,
+                    'category_label' => $t->categoryLabel(),
+                    'event' => $t->event,
+                    'event_label' => $t->eventLabel(),
+                    'title' => $t->title,
+                    'body' => $t->body,
+                    'is_active' => $t->is_active,
+                    'sort_order' => $t->sort_order,
+                    'created_at' => $t->created_at?->toDateString(),
+                ]),
+            'catalog' => NotificationCatalog::forFrontend(),
             'clients' => Client::where('is_active', true)
                 ->whereNotNull('mobile')
                 ->orderBy('name')
                 ->get(['id', 'name', 'mobile'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'mobile' => $c->mobile]),
-            'wa_configured' => (new WaGateway())->isConfigured(),
+            'wa_configured' => (new WaGateway)->isConfigured(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $this->validated($request);
+        NotificationTemplate::create($this->validated($request));
 
-        NotificationTemplate::create($data);
-
-        return back()->with('success', 'تم إضافة الإشعار إلى المكتبة');
+        return back()->with('success', 'تم إضافة القالب إلى المكتبة');
     }
 
     public function update(Request $request, NotificationTemplate $template): RedirectResponse
     {
         $template->update($this->validated($request));
 
-        return back()->with('success', 'تم تحديث الإشعار');
+        return back()->with('success', 'تم تحديث القالب');
     }
 
     public function destroy(NotificationTemplate $template): RedirectResponse
     {
         $template->delete();
 
-        return back()->with('success', 'تم حذف الإشعار من المكتبة');
+        return back()->with('success', 'تم حذف القالب من المكتبة');
     }
 
     /**
@@ -66,10 +78,10 @@ class NotificationTemplatesController extends Controller
             'client_id' => ['nullable', 'required_if:target,client', 'exists:clients,id'],
         ]);
 
-        $gateway = new WaGateway();
+        $gateway = new WaGateway;
 
         if (! $gateway->isConfigured()) {
-            return back()->with('warning', 'تكامل الواتساب غير مفعّل. فعّله واحفظ الإعدادات أولاً.');
+            return back()->with('warning', 'تكامل الواتساب غير مفعّل. اربط الجهاز من إعدادات الواتساب أولاً.');
         }
 
         $businessName = Setting::current()->business_name ?? config('app.name');
@@ -90,13 +102,14 @@ class NotificationTemplatesController extends Controller
             $message = WaGateway::renderTemplate($template->body, [
                 'name' => $client->name,
                 'business_name' => $businessName,
+                'mobile' => (string) $client->mobile,
             ]);
 
             SendWhatsappMessage::dispatch((string) $client->mobile, $message);
             $queued++;
         }
 
-        return back()->with('success', "تمت جدولة إرسال الإشعار إلى {$queued} عميل.");
+        return back()->with('success', "تمت جدولة إرسال القالب إلى {$queued} عميل.");
     }
 
     /**
@@ -105,8 +118,12 @@ class NotificationTemplatesController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
+            'category' => ['required', Rule::in(NotificationCatalog::categoryKeys())],
+            'event' => ['required', Rule::in(NotificationCatalog::eventKeys())],
             'title' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string', 'max:2000'],
+            'is_active' => ['boolean'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:999'],
         ]);
     }
 }

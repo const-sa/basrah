@@ -219,14 +219,14 @@ const sendInvoice = () => {
                 <table class="w-full border border-slate-300 text-[13px]">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-slate-800">رقم الحجز</th>
-                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-slate-800">
+                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-[#1e3a8a]">رقم الحجز</th>
+                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-[#1e3a8a]">
                                 {{ invoice.unit_type === 'chalet' ? 'الشاليه' : 'القاعة' }}
                             </th>
-                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-slate-800">المناسبة</th>
-                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-slate-800">المدة</th>
-                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-slate-800">من</th>
-                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-slate-800">إلى</th>
+                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-[#1e3a8a]">المناسبة</th>
+                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-[#1e3a8a]">المدة</th>
+                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-[#1e3a8a]">من</th>
+                            <th class="border border-slate-300 px-2 py-2 font-extrabold text-[#1e3a8a]">إلى</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -250,10 +250,10 @@ const sendInvoice = () => {
                 <table class="w-full border border-slate-300 text-[13px]">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-800">#</th>
-                            <th class="border border-slate-300 px-2 py-2 text-right font-extrabold text-slate-800">البند</th>
-                            <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-800">الكمية</th>
-                            <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-slate-800">الإجمالي</th>
+                            <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">#</th>
+                            <th class="border border-slate-300 px-2 py-2 text-right font-extrabold text-[#1e3a8a]">البند</th>
+                            <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الكمية</th>
+                            <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الإجمالي</th>
                         </tr>
                     </thead>
                     <tbody>

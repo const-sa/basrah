@@ -96,11 +96,11 @@ const destroy = (s: Supplier) => {
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">المورد</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">التواصل</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الرقم الضريبي</th>
-                            <th class="px-4 py-3 text-left text-xs font-extrabold text-slate-700">الرصيد</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">إجراءات</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المورد</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التواصل</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الرقم الضريبي</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الرصيد</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody>

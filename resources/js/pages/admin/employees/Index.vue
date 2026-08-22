@@ -82,7 +82,7 @@ const form = useForm({
     unit_ids: [] as number[],
 });
 
-/** المدير العام يرى كل الوحدات بحكم دوره، فلا معنى لتقييده. */
+/** المالك يرى كل الوحدات بحكم مجموعته، فلا معنى لتقييده. */
 const selectedRoleIsSuperAdmin = computed(
     () => props.roles.find((r) => r.id === Number(form.role_id))?.slug === 'super-admin',
 );
@@ -213,10 +213,10 @@ const deleteDemo = () => {
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[720px] text-sm">
                         <thead>
-                            <tr class="border-b-2 border-[#dee2e6] text-gray-500">
+                            <tr class="border-b-2 border-[#dee2e6] text-[#1e3a8a]">
                                 <th class="px-4 py-3 text-start font-semibold">الموظف</th>
                                 <th class="px-4 py-3 text-start font-semibold">البريد</th>
-                                <th class="px-4 py-3 text-center font-semibold">الدور والأنظمة</th>
+                                <th class="px-4 py-3 text-center font-semibold">المجموعة والأقسام</th>
                                 <th class="px-4 py-3 text-center font-semibold">نطاق الوحدات</th>
                                 <th class="px-4 py-3 text-center font-semibold">الحالة</th>
                                 <th class="px-4 py-3 text-end font-semibold">الإجراءات</th>
@@ -377,9 +377,9 @@ const deleteDemo = () => {
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="mb-1 block text-sm font-bold text-slate-700">الدور</label>
+                            <label class="mb-1 block text-sm font-bold text-slate-700">المجموعة</label>
                             <select v-model="form.role_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
-                                <option value="">— بدون دور —</option>
+                                <option value="">— بدون مجموعة —</option>
                                 <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.name }}</option>
                             </select>
                         </div>
@@ -401,7 +401,7 @@ const deleteDemo = () => {
                             <input type="checkbox" v-model="form.has_all_units" class="h-4 w-4 rounded border-slate-300 text-violet-600" />
                             يرى كل الوحدات دون تقييد
                         </label>
-                        <p v-else class="mb-1 text-xs font-bold text-violet-700">المدير العام يرى كل الوحدات بحكم دوره.</p>
+                        <p v-else class="mb-1 text-xs font-bold text-violet-700">المالك يرى كل الوحدات بحكم مجموعته.</p>
 
                         <div v-if="!form.has_all_units && !selectedRoleIsSuperAdmin">
                             <p class="mb-1.5 text-[11px] font-medium text-slate-600">اختر الوحدات التي يعمل عليها — لن يرى غيرها في أي شاشة.</p>

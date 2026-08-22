@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Http\Controllers\Admin\NotificationsController;
+use App\Models\Unit;
+use App\Support\SiteIdentity;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -42,6 +44,12 @@ class HandleInertiaRequests extends Middleware
         return array_merge(parent::share($request), [
             'name' => config('app.name'),
             'version' => config('app.version'),
+            /**
+             * هوية المنشأة (الاسم والشعار) — يعرضها الشريط الجانبي وشاشات
+             * الدخول. مشتركة عالميًا لأن الشعار يظهر في كل صفحة: تمريره من
+             * كل متحكّم على حدة يعني شاشةً منسيّةً بلا شعار.
+             */
+            'brand' => fn () => SiteIdentity::brand(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
@@ -61,7 +69,7 @@ class HandleInertiaRequests extends Middleware
              * يصح أن تعتمد على ما ترسله صفحة بعينها.
              */
             'sidebarUnits' => fn () => $request->user()
-                ? \App\Models\Unit::visibleTo($request->user())
+                ? Unit::visibleTo($request->user())
                     ->where('is_active', true)
                     ->orderBy('type')
                     ->orderBy('sort_order')

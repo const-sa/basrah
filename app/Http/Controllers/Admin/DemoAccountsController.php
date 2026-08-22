@@ -93,6 +93,43 @@ class DemoAccountsController extends Controller
     }
 
     /**
+     * حسابات التجربة المفعّلة كما تظهر في شاشة الدخول.
+     *
+     * تُبنى من الحسابات القائمة لا من القوالب: القالب وصفٌ لما يمكن إنشاؤه،
+     * وعرضه في شاشة الدخول يَعِد بحسابٍ لا وجود له. فإذا حُذفت حسابات
+     * التجربة من شاشة الموظفين اختفت اللوحة من شاشة الدخول من نفسها.
+     *
+     * @return array{password: string, accounts: list<array{email: string, label: string, role: string|null}>}|null
+     */
+    public static function loginPanel(): ?array
+    {
+        $labels = collect(self::presets())->keyBy('email');
+
+        $accounts = User::query()
+            ->where('is_demo', true)
+            ->where('is_active', true)
+            ->with('role:id,name')
+            ->orderBy('id')
+            ->get(['id', 'name', 'email', 'role_id'])
+            ->map(fn (User $u) => [
+                'email' => $u->email,
+                'label' => $labels[$u->email]['label'] ?? $u->name,
+                'role' => $u->role?->name,
+            ])
+            ->values()
+            ->all();
+
+        if ($accounts === []) {
+            return null;
+        }
+
+        return [
+            'password' => self::PASSWORD,
+            'accounts' => $accounts,
+        ];
+    }
+
+    /**
      * Create the selected demo accounts. Presets whose email is already taken are skipped.
      */
     public function store(Request $request): RedirectResponse

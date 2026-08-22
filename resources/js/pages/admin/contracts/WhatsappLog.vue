@@ -91,11 +91,11 @@ const nearLimit = computed(() => props.stats.usage_percent >= 80);
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">التاريخ</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الرقم</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الغرض</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">الرسالة</th>
-                                <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">الحالة</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الرقم</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الغرض</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الرسالة</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
                             </tr>
                         </thead>
                         <tbody>

@@ -163,13 +163,13 @@ const show = (v: unknown): string => {
                 <table class="w-full text-sm">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">التاريخ والوقت</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">المستخدم</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">العملية</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">النوع</th>
-                            <th class="px-4 py-3 text-right text-xs font-extrabold text-slate-700">السجل</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700">IP</th>
-                            <th class="px-4 py-3 text-center text-xs font-extrabold text-slate-700"></th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التاريخ والوقت</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المستخدم</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">العملية</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">السجل</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">IP</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -206,7 +206,7 @@ const show = (v: unknown): string => {
                                     </div>
                                     <table class="w-full text-xs">
                                         <thead>
-                                            <tr class="text-slate-500">
+                                            <tr class="text-[#1e3a8a]">
                                                 <th class="px-2 py-1 text-right font-extrabold">الحقل</th>
                                                 <th class="px-2 py-1 text-right font-extrabold">قبل</th>
                                                 <th class="px-2 py-1 text-right font-extrabold">بعد</th>

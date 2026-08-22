@@ -74,11 +74,11 @@ const tabs = [
                 <table class="w-full text-sm">
                     <thead class="bg-slate-50">
                         <tr>
-                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-slate-700">مركز التكلفة</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">الإيراد</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">المصروف</th>
-                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">الربح</th>
-                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">الهامش</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">مركز التكلفة</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">الإيراد</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">المصروف</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">الربح</th>
+                            <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">الهامش</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -160,10 +160,10 @@ const tabs = [
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50">
                             <tr>
-                                <th class="px-4 py-2.5 text-right text-xs font-extrabold text-slate-700">الحساب</th>
-                                <th class="px-4 py-2.5 text-center text-xs font-extrabold text-slate-700">النوع</th>
-                                <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">مدين</th>
-                                <th class="px-4 py-2.5 text-left text-xs font-extrabold text-slate-700">دائن</th>
+                                <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">الحساب</th>
+                                <th class="px-4 py-2.5 text-center text-xs font-extrabold text-[#1e3a8a]">النوع</th>
+                                <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">مدين</th>
+                                <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">دائن</th>
                             </tr>
                         </thead>
                         <tbody>
