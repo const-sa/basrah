@@ -52,11 +52,12 @@ class SuppliersController extends Controller
     }
 
     /**
-     * إضافة مورد سريعة من داخل فاتورة المشتريات.
+     * Quick supplier creation from inside the purchase invoice.
      *
-     * مغادرة الفاتورة إلى شاشة الموردين تُفقد ما عُبّئ فيها، فيُنشأ المورد
-     * بالاسم والجوال فقط ويعود عبر JSON ليُحدَّد فورًا في النموذج. بقية
-     * البيانات (الضريبي والعنوان والبريد) تُستكمل من شاشة الموردين.
+     * Leaving the invoice for the suppliers screen loses whatever was entered
+     * there, so the supplier is created from name and mobile alone and returned
+     * as JSON to be selected on the spot. Tax number, address and email are
+     * filled in later from the suppliers screen.
      */
     public function quickStore(Request $request): JsonResponse
     {

@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ItemOptionResource;
 use App\Models\Department;
 use App\Models\Item;
 use App\Models\ItemCategory;
 use App\Models\MeasureUnit;
 use App\Models\StockMovement;
 use App\Services\InventoryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -89,6 +91,70 @@ class ItemsController extends Controller
         $this->syncComponents($item, $data['components'] ?? []);
 
         return back()->with('success', 'تم إضافة الصنف');
+    }
+
+    /**
+     * Quick item creation from inside the purchase invoice.
+     *
+     * Leaving the invoice for the items screen loses whatever was entered
+     * there, so the item is created from the least an invoice line needs —
+     * name, cost, price, tax — and returned as JSON to be appended on the spot.
+     * Category, barcode and reorder point are filled in later from the items
+     * screen.
+     */
+    public function quickStore(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'code' => ['nullable', 'string', 'max:50', Rule::unique('items', 'code')],
+            'type' => ['required', Rule::in(array_keys(Item::TYPES))],
+            'unit' => ['required', Rule::in(array_keys(Item::UNITS))],
+            'cost' => ['required', 'numeric', 'min:0'],
+            'price' => ['required', 'numeric', 'min:0'],
+            'tax_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+        ]);
+
+        $item = Item::create([
+            'name' => $data['name'],
+            // Absent and empty both mean "number it for me" — a nullable rule
+            // leaves the key out entirely when the field is never sent.
+            'code' => ($data['code'] ?? null) ?: $this->nextCode(),
+            'type' => $data['type'],
+            'unit' => $data['unit'],
+            'cost' => $data['cost'],
+            'price' => $data['price'],
+            'tax_rate' => $data['tax_rate'],
+            'department_id' => $data['department_id'] ?? null,
+            'stock_qty' => 0,
+            'reorder_point' => 0,
+            'is_active' => true,
+        ]);
+
+        // Same shape the pickers are fed elsewhere, so the front end appends the
+        // line without reshaping anything.
+        return response()->json([
+            'item' => new ItemOptionResource($item, withCost: true),
+        ], 201);
+    }
+
+    /**
+     * Sequential code for a quickly created item.
+     *
+     * Soft-deleted rows stay in the table and keep their code under the unique
+     * index, so the loop steps over taken codes rather than trusting max(id)
+     * alone — otherwise the insert hits the constraint.
+     */
+    private function nextCode(): string
+    {
+        $sequence = (int) Item::withTrashed()->max('id') + 1;
+
+        do {
+            $code = 'ITM-'.str_pad((string) $sequence, 5, '0', STR_PAD_LEFT);
+            $sequence++;
+        } while (Item::withTrashed()->where('code', $code)->exists());
+
+        return $code;
     }
 
     public function update(Request $request, Item $item): RedirectResponse

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import AsyncSelect from '@/components/AsyncSelect.vue';
+import ItemQuickAdd from '@/components/ItemQuickAdd.vue';
 import SupplierQuickAdd from '@/components/SupplierQuickAdd.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -22,6 +23,9 @@ const props = defineProps<{
     suppliers: { id: number; name: string }[];
     methods: PaymentMethodOption[];
     items: ItemOption[];
+    itemTypes: { key: string; label: string }[];
+    itemUnits: { key: string; label: string }[];
+    defaultTaxRate: number;
     purchase?: {
         id: number;
         supplier_id: number;
@@ -73,7 +77,7 @@ interface SupplierOption {
     mobile?: string | null;
 }
 
-/** الخيار المعروض في حقل المورد — يُحدَّث بعد الإضافة السريعة كي يظهر الاسم بلا إعادة تحميل. */
+/** Option shown in the supplier field — refreshed after a quick add so the name appears without a reload. */
 const selectedSupplier = ref<SupplierOption | null>(
     props.purchase?.supplier_id
         ? { id: props.purchase.supplier_id, name: props.suppliers.find(s => s.id === props.purchase?.supplier_id)?.name ?? '' }
@@ -94,6 +98,7 @@ const handleItemSelect = (item: any) => {
     }
 };
 
+/** A quick-added item lands on the invoice directly — that is the point of the shortcut. */
 const addItem = (item: ItemOption) => {
     form.items.push({
         item_id: item.id,
@@ -208,13 +213,22 @@ const submit = () => {
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             الأصناف المشتراة
                         </h2>
-                        <div class="relative w-72">
-                            <AsyncSelect
-                                v-model="selectedItemId"
-                                api-url="/admin/api/search?type=items"
-                                placeholder="إضافة صنف بالبحث..."
-                                @change="handleItemSelect"
-                                :clearable="false"
+                        <div class="flex items-center gap-2">
+                            <div class="relative w-72">
+                                <AsyncSelect
+                                    v-model="selectedItemId"
+                                    api-url="/admin/api/search?type=items"
+                                    placeholder="إضافة صنف بالبحث..."
+                                    @change="handleItemSelect"
+                                    :clearable="false"
+                                />
+                            </div>
+                            <ItemQuickAdd
+                                :types="itemTypes"
+                                :units="itemUnits"
+                                :default-tax-rate="defaultTaxRate"
+                                :department-id="form.department_id"
+                                @created="addItem"
                             />
                         </div>
                     </div>

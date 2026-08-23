@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ItemOptionResource;
 use App\Models\Department;
+use App\Models\Item;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
@@ -60,24 +62,35 @@ class PurchaseController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('admin/purchases/Form', [
+        return Inertia::render('admin/purchases/Form', $this->formOptions());
+    }
+
+    /**
+     * Options for the invoice form — shared by create and edit so the two
+     * screens can never drift apart.
+     *
+     * @return array<string, mixed>
+     */
+    private function formOptions(): array
+    {
+        $settings = Setting::current();
+
+        return [
             'departments' => Department::orderBy('sort_order')->get(['id', 'name']),
             'suppliers' => Supplier::get(['id', 'name']),
             'methods' => PaymentMethod::options(),
-            'items' => \App\Models\Item::where('is_active', true)
-                ->with(['category:id,name'])
-                ->orderBy('name')
-                ->get()
-                ->map(fn (\App\Models\Item $i) => [
-                    'id' => $i->id,
-                    'code' => $i->code,
-                    'name' => $i->name,
-                    'category' => $i->category?->name,
-                    'price' => (float) $i->price,
-                    'cost' => (float) $i->cost,
-                    'tax_rate' => (float) $i->tax_rate,
-                ]),
-        ]);
+            'items' => ItemOptionResource::list(
+                Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+                withCost: true,
+            ),
+            // A bundle is assembled from other items and holds no stock of its
+            // own, so it is not something a purchase invoice can bring in.
+            'itemTypes' => collect(Item::TYPES)->except('bundle')
+                ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
+            'itemUnits' => collect(Item::UNITS)
+                ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
+            'defaultTaxRate' => $settings->tax_enabled ? (float) $settings->tax_rate : 0.0,
+        ];
     }
 
     public function store(Request $request, InventoryService $inventory)
@@ -161,25 +174,7 @@ class PurchaseController extends Controller
     {
         $purchase->load(['items.item:id,name,code,price,cost,tax_rate']);
 
-        return Inertia::render('admin/purchases/Form', [
-            'purchase' => $purchase,
-            'departments' => Department::orderBy('sort_order')->get(['id', 'name']),
-            'suppliers' => Supplier::get(['id', 'name']),
-            'methods' => PaymentMethod::options(),
-            'items' => \App\Models\Item::where('is_active', true)
-                ->with(['category:id,name'])
-                ->orderBy('name')
-                ->get()
-                ->map(fn (\App\Models\Item $i) => [
-                    'id' => $i->id,
-                    'code' => $i->code,
-                    'name' => $i->name,
-                    'category' => $i->category?->name,
-                    'price' => (float) $i->price,
-                    'cost' => (float) $i->cost,
-                    'tax_rate' => (float) $i->tax_rate,
-                ]),
-        ]);
+        return Inertia::render('admin/purchases/Form', $this->formOptions() + ['purchase' => $purchase]);
     }
 
     public function update(Request $request, Purchase $purchase, InventoryService $inventory)

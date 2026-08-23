@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
- * إضافة مورد سريعة من داخل فاتورة المشتريات.
+ * Quick supplier creation from inside the purchase invoice.
  *
- * المحاسب أمام الفاتورة بمورد غير مسجَّل: مغادرة النموذج إلى شاشة الموردين
- * تُفقده ما عبّأه من أصناف، فتُفتح نافذة صغيرة بالاسم والجوال فقط، ويعود
- * المورد عبر JSON ليُحدَّد فورًا. بقية بياناته تُستكمل من شاشة الموردين.
+ * The accountant is on the invoice with an unregistered supplier: leaving for
+ * the suppliers screen loses the lines already entered, so a small modal asks
+ * for name and mobile only, and the supplier comes back as JSON to be selected
+ * straight away. The rest of the record is filled in on the suppliers screen.
  */
 import { usePermissions } from '@/composables/usePermissions';
 import { jsonHeaders } from '@/lib/csrf';
@@ -69,7 +70,7 @@ const submit = async () => {
 
         if (response.status === 422) {
             const body = await response.json();
-            // Laravel يرسل مصفوفة رسائل لكل حقل — تكفي أولاها تحت الحقل.
+            // Laravel sends an array of messages per field; the first one is enough.
             errors.value = Object.fromEntries(
                 Object.entries(body.errors ?? {}).map(([key, list]) => [key, (list as string[])[0]]),
             );
@@ -120,8 +121,8 @@ const submit = async () => {
                     </button>
                 </div>
 
-                <!-- النموذج داخل <form> منفصل ممنوع: نموذج الفاتورة يحيط بالمكوّن،
-                     و@keyup.enter تكفي للحفظ بالمفتاح بلا تعشيش نماذج غير صالح. -->
+                <!-- No nested <form>: the invoice form wraps this component, and
+                     @keyup.enter covers saving by keyboard without invalid nesting. -->
                 <div class="space-y-3">
                     <div>
                         <label class="mb-1 block text-sm font-bold text-slate-700">الاسم</label>

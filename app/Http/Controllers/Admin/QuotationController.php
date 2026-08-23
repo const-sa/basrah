@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ItemOptionResource;
 use App\Models\Client;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
@@ -55,18 +56,9 @@ class QuotationController extends Controller
         return Inertia::render('admin/quotations/Form', [
             'departments' => \App\Models\Department::selling()->orderBy('sort_order')->get(['id', 'name']),
             'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')->limit(300)->get(['id', 'name']),
-            'items' => \App\Models\Item::where('is_active', true)
-                ->with(['category:id,name'])
-                ->orderBy('name')
-                ->get()
-                ->map(fn (\App\Models\Item $i) => [
-                    'id' => $i->id,
-                    'code' => $i->code,
-                    'name' => $i->name,
-                    'category' => $i->category?->name,
-                    'price' => (float) $i->price,
-                    'tax_rate' => (float) $i->tax_rate,
-                ]),
+            'items' => ItemOptionResource::list(
+                \App\Models\Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+            ),
         ]);
     }
 
@@ -142,18 +134,9 @@ class QuotationController extends Controller
             'quotation' => $quotation,
             'departments' => \App\Models\Department::selling()->orderBy('sort_order')->get(['id', 'name']),
             'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')->limit(300)->get(['id', 'name']),
-            'items' => \App\Models\Item::where('is_active', true)
-                ->with(['category:id,name'])
-                ->orderBy('name')
-                ->get()
-                ->map(fn (\App\Models\Item $i) => [
-                    'id' => $i->id,
-                    'code' => $i->code,
-                    'name' => $i->name,
-                    'category' => $i->category?->name,
-                    'price' => (float) $i->price,
-                    'tax_rate' => (float) $i->tax_rate,
-                ]),
+            'items' => ItemOptionResource::list(
+                \App\Models\Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+            ),
         ]);
     }
 

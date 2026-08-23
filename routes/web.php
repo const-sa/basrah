@@ -238,6 +238,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
         Route::get('items', [ItemsController::class, 'index'])->middleware('perm:items.view')->name('items.index');
         Route::post('items', [ItemsController::class, 'store'])->middleware('perm:items.create')->name('items.store');
+        // Quick add from the purchase invoice — before the {item} routes so "quick" is not read as an id
+        Route::post('items/quick', [ItemsController::class, 'quickStore'])->middleware('perm:items.create')->name('items.quick');
         Route::put('items/{item}', [ItemsController::class, 'update'])->middleware('perm:items.edit')->name('items.update');
         Route::patch('items/{item}/toggle', [ItemsController::class, 'toggle'])->middleware('perm:items.edit')->name('items.toggle');
         Route::delete('items/{item}', [ItemsController::class, 'destroy'])->middleware('perm:items.delete')->name('items.destroy');
@@ -355,7 +357,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // الموردون
     Route::get('suppliers', [SuppliersController::class, 'index'])->middleware('perm:suppliers.view')->name('suppliers.index');
     Route::post('suppliers', [SuppliersController::class, 'store'])->middleware('perm:suppliers.create')->name('suppliers.store');
-    // إضافة سريعة من فاتورة المشتريات — قبل مسارات {supplier} كي لا تُفسَّر "quick" معرّفًا
+    // Quick add from the purchase invoice — before the {supplier} routes so "quick" is not read as an id
     Route::post('suppliers/quick', [SuppliersController::class, 'quickStore'])->middleware('perm:suppliers.create')->name('suppliers.quick');
     Route::put('suppliers/{supplier}', [SuppliersController::class, 'update'])->middleware('perm:suppliers.edit')->name('suppliers.update');
     Route::patch('suppliers/{supplier}/toggle', [SuppliersController::class, 'toggle'])->middleware('perm:suppliers.edit')->name('suppliers.toggle');
