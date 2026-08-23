@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Supplier;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -48,6 +49,35 @@ class SuppliersController extends Controller
         Supplier::create([...$this->validated($request), 'is_active' => true]);
 
         return back()->with('success', 'تم إضافة المورد');
+    }
+
+    /**
+     * إضافة مورد سريعة من داخل فاتورة المشتريات.
+     *
+     * مغادرة الفاتورة إلى شاشة الموردين تُفقد ما عُبّئ فيها، فيُنشأ المورد
+     * بالاسم والجوال فقط ويعود عبر JSON ليُحدَّد فورًا في النموذج. بقية
+     * البيانات (الضريبي والعنوان والبريد) تُستكمل من شاشة الموردين.
+     */
+    public function quickStore(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'mobile' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        $supplier = Supplier::create([
+            'name' => $data['name'],
+            'mobile' => $data['mobile'] ?? null,
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'supplier' => [
+                'id' => $supplier->id,
+                'name' => $supplier->name,
+                'mobile' => $supplier->mobile,
+            ],
+        ], 201);
     }
 
     public function update(Request $request, Supplier $supplier): RedirectResponse

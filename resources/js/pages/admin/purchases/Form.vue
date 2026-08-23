@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import AsyncSelect from '@/components/AsyncSelect.vue';
+import SupplierQuickAdd from '@/components/SupplierQuickAdd.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Plus, Trash2, Save, X } from 'lucide-vue-next';
@@ -65,6 +66,24 @@ const form = useForm({
         tax_amount: i.tax_amount
     })) : [] as FormLine[],
 });
+
+interface SupplierOption {
+    id: number;
+    name: string;
+    mobile?: string | null;
+}
+
+/** الخيار المعروض في حقل المورد — يُحدَّث بعد الإضافة السريعة كي يظهر الاسم بلا إعادة تحميل. */
+const selectedSupplier = ref<SupplierOption | null>(
+    props.purchase?.supplier_id
+        ? { id: props.purchase.supplier_id, name: props.suppliers.find(s => s.id === props.purchase?.supplier_id)?.name ?? '' }
+        : null,
+);
+
+const onSupplierCreated = (supplier: SupplierOption) => {
+    selectedSupplier.value = supplier;
+    form.supplier_id = supplier.id;
+};
 
 const selectedItemId = ref<number | string | null>(null);
 
@@ -150,19 +169,22 @@ const submit = () => {
                     </div>
                     <div class="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
                         <div>
-                            <label class="mb-1.5 block text-sm font-bold text-slate-700">المورد <span class="text-red-500">*</span></label>
+                            <div class="mb-1.5 flex min-h-[24px] items-center justify-between gap-2">
+                                <label class="block text-sm font-bold text-slate-700">المورد <span class="text-red-500">*</span></label>
+                                <SupplierQuickAdd @created="onSupplierCreated" />
+                            </div>
                             <AsyncSelect
                                 v-model="form.supplier_id"
                                 api-url="/admin/api/search?type=suppliers"
                                 placeholder="ابحث عن مورد..."
-                                :initial-option="purchase?.supplier_id ? { id: purchase.supplier_id, name: suppliers.find(s => s.id === purchase?.supplier_id)?.name } : null"
+                                :initial-option="selectedSupplier"
                                 required
                             />
                             <p v-if="form.errors.supplier_id" class="mt-1.5 text-xs text-red-500 font-medium">{{ form.errors.supplier_id }}</p>
                         </div>
 
                         <div>
-                            <label class="mb-1.5 block text-sm font-bold text-slate-700">القسم الوجهة (المستودع) <span class="text-red-500">*</span></label>
+                            <label class="mb-1.5 flex min-h-[24px] items-center text-sm font-bold text-slate-700">القسم الوجهة (المستودع) <span class="text-red-500">&nbsp;*</span></label>
                             <select v-model="form.department_id" class="w-full rounded-xl border-slate-200 px-4 py-2.5 text-sm shadow-sm focus:border-emerald-600 focus:ring-emerald-600 transition-colors" required>
                                 <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
                             </select>
@@ -170,7 +192,7 @@ const submit = () => {
                         </div>
 
                         <div>
-                            <label class="mb-1.5 block text-sm font-bold text-slate-700">طريقة الدفع</label>
+                            <label class="mb-1.5 flex min-h-[24px] items-center text-sm font-bold text-slate-700">طريقة الدفع</label>
                             <select v-model="form.payment_method_id" class="w-full rounded-xl border-slate-200 px-4 py-2.5 text-sm shadow-sm focus:border-emerald-600 focus:ring-emerald-600 transition-colors">
                                 <option v-for="m in methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                             </select>

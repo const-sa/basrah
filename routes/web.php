@@ -355,6 +355,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // الموردون
     Route::get('suppliers', [SuppliersController::class, 'index'])->middleware('perm:suppliers.view')->name('suppliers.index');
     Route::post('suppliers', [SuppliersController::class, 'store'])->middleware('perm:suppliers.create')->name('suppliers.store');
+    // إضافة سريعة من فاتورة المشتريات — قبل مسارات {supplier} كي لا تُفسَّر "quick" معرّفًا
+    Route::post('suppliers/quick', [SuppliersController::class, 'quickStore'])->middleware('perm:suppliers.create')->name('suppliers.quick');
     Route::put('suppliers/{supplier}', [SuppliersController::class, 'update'])->middleware('perm:suppliers.edit')->name('suppliers.update');
     Route::patch('suppliers/{supplier}/toggle', [SuppliersController::class, 'toggle'])->middleware('perm:suppliers.edit')->name('suppliers.toggle');
     Route::delete('suppliers/{supplier}', [SuppliersController::class, 'destroy'])->middleware('perm:suppliers.delete')->name('suppliers.destroy');
