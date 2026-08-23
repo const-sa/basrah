@@ -23,6 +23,30 @@ export const addDays = (date: string, days: number): string => {
     return toDateString(d);
 };
 
+/** The first day of the month a date falls in. */
+export const startOfMonth = (date: string): string => `${date.slice(0, 7)}-01`;
+
+/** The same day of month, whole months away — clamped by the browser as usual. */
+export const addMonths = (date: string, months: number): string => {
+    const d = new Date(`${date}T00:00:00`);
+    d.setMonth(d.getMonth() + months);
+
+    return toDateString(d);
+};
+
+const monthFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {
+    month: 'long',
+    year: 'numeric',
+});
+
+/**
+ * "أغسطس 2026" — the heading over a month grid.
+ *
+ * Gregorian is asked for by name: ar-SA defaults to the Hijri calendar, and a
+ * grid of Gregorian days under a Hijri month name is a calendar nobody can read.
+ */
+export const monthName = (date: string): string => monthFormatter.format(new Date(`${date}T12:00:00`));
+
 /** Whole days between two calendar dates — negative when they are reversed. */
 export const daysBetween = (from: string, to: string): number => {
     if (!from || !to) return 0;

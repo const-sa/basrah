@@ -120,6 +120,116 @@ class BookingAvailability
     }
 
     /**
+     * Many candidate ranges answered at once, from a single read of the unit's
+     * diary.
+     *
+     * The booking form's calendar asks about a whole month before a date is
+     * picked — a night per day, and each day period beside it. Calling
+     * checkRange() for every one of those would be a hundred queries for one
+     * month, so the diary is read once and the same conflict rules are applied
+     * in memory.
+     *
+     * This answers "is it free" and nothing else. The reason a range fails
+     * still comes from checkRange() on the single range being saved, which
+     * stays the authority — a day the map shows free is checked again when it
+     * is chosen.
+     *
+     * @param  list<array{key: string, starts_at: CarbonInterface, ends_at: CarbonInterface}>  $ranges
+     * @param  list<int>  $sectionIds
+     * @return array<string, bool> range key → is it free
+     */
+    public function freeRanges(
+        Unit $unit,
+        string $scope,
+        array $ranges,
+        array $sectionIds = [],
+        ?int $clientId = null,
+        ?int $ignoreBookingId = null,
+    ): array {
+        if (empty($ranges)) {
+            return [];
+        }
+
+        $keys = array_column($ranges, 'key');
+
+        // A stopped unit, or a scope it does not accept, closes every range at
+        // once — answered before the diary is read, so no query goes out for a
+        // question whose answer is already settled.
+        if (! $unit->is_active
+            || ($scope === 'whole' && ! $unit->allowsWholeBooking())
+            || ($scope === 'sections' && (! $unit->allowsSectionBooking() || empty($sectionIds)))
+        ) {
+            return array_fill_keys($keys, false);
+        }
+
+        $from = $this->edge(array_column($ranges, 'starts_at'), earliest: true);
+        $to = $this->edge(array_column($ranges, 'ends_at'), earliest: false);
+
+        $existing = $this->blockingBookings($unit, $from, $to, $ignoreBookingId);
+        $earliest = $this->earliestBookableDay($ignoreBookingId);
+
+        $free = [];
+
+        foreach ($ranges as $range) {
+            ['key' => $key, 'starts_at' => $startsAt, 'ends_at' => $endsAt] = $range;
+
+            if ($endsAt->lessThanOrEqualTo($startsAt) || $startsAt->lessThan($earliest)) {
+                $free[$key] = false;
+
+                continue;
+            }
+
+            // The same strict overlap scopeOverlapping() applies, run over the
+            // rows already in memory rather than as another query per range.
+            $clash = $existing->filter(
+                fn (Booking $b) => $b->starts_at->lessThan($endsAt) && $b->ends_at->greaterThan($startsAt),
+            );
+
+            $free[$key] = $clash->isEmpty() || ($scope === 'whole'
+                ? $this->checkWhole($clash)
+                : $this->checkSections($unit, $clash, $sectionIds, $clientId))['ok'];
+        }
+
+        return $free;
+    }
+
+    /**
+     * The earliest day that still accepts a booking — today, unless an
+     * existing booking whose date has passed is the one being edited.
+     *
+     * Same rule as startsInThePast(), read once for a whole month: a booking
+     * being edited must not find its own day struck out of the calendar it is
+     * shown in.
+     */
+    private function earliestBookableDay(?int $ignoreBookingId): CarbonInterface
+    {
+        $today = now()->startOfDay();
+
+        if ($ignoreBookingId === null) {
+            return $today;
+        }
+
+        $own = Booking::whereKey($ignoreBookingId)->value('starts_at');
+
+        return $own && $own->lessThan($today) ? $own->startOfDay() : $today;
+    }
+
+    /**
+     * @param  list<CarbonInterface>  $dates
+     */
+    private function edge(array $dates, bool $earliest): CarbonInterface
+    {
+        return array_reduce(
+            $dates,
+            fn (?CarbonInterface $carry, CarbonInterface $date) => $carry === null
+                || ($earliest ? $date->lessThan($carry) : $date->greaterThan($carry))
+                    ? $date
+                    : $carry,
+            null,
+        );
+    }
+
+    /**
      * القاعدة 2: أي حجز قائم — كاملًا كان أو قسمًا — يمنع حجز الوحدة كاملة.
      *
      * @param  Collection<int, Booking>  $existing

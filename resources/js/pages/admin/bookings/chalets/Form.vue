@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import AvailabilityDatePicker from '@/components/AvailabilityDatePicker.vue';
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfToken } from '@/lib/csrf';
-import { addDays, daysBetween, formatTime12, todayString } from '@/lib/dates';
+import { addDays, daysBetween, formatTime12, startOfMonth, todayString } from '@/lib/dates';
 import { toHijri, weekdayName } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -302,6 +303,169 @@ onMounted(refreshQuote);
 const blocked = computed(() => quote.value !== null && !quote.value.availability.ok);
 const pricing = computed(() => quote.value?.pricing ?? null);
 
+// ── The chalet's diary: what is taken, known before a date is picked ──
+
+interface DayAvailability {
+    /** Is the night that starts on this day still free? */
+    stay: boolean;
+    /** Each day period this chalet is priced for, and whether it is free. */
+    periods: Record<string, boolean>;
+}
+
+/**
+ * The chosen chalet's diary for the days the calendar is showing.
+ *
+ * The quote is still what decides a save; this exists so a taken day can be
+ * refused where it is picked rather than after the fact. An empty map — no
+ * chalet chosen yet, or the request failed — marks nothing, so the form
+ * behaves exactly as it did before.
+ */
+const availability = ref<Record<string, DayAvailability>>({});
+const loadingDiary = ref(false);
+
+/**
+ * The stretch of days already loaded. It is deliberately wider than one month
+ * grid, so paging a month either way costs no round trip.
+ */
+const diaryWindow = ref({ from: '', to: '' });
+
+const setDiaryWindow = (anchor: string) => {
+    const from = addDays(startOfMonth(anchor), -10);
+
+    diaryWindow.value = { from, to: addDays(from, 91) };
+};
+
+setDiaryWindow(form.booking_date);
+
+/** A grid a picker is about to draw — reloaded only when it falls outside. */
+const onCalendarView = ({ from, to }: { from: string; to: string }) => {
+    if (from >= diaryWindow.value.from && to <= diaryWindow.value.to) return;
+
+    setDiaryWindow(from);
+};
+
+let diaryTimer: ReturnType<typeof setTimeout> | undefined;
+const refreshAvailability = () => {
+    const ready = form.unit_id && diaryWindow.value.from
+        && (form.scope !== 'sections' || form.section_ids.length > 0);
+
+    if (!ready) {
+        availability.value = {};
+
+        return;
+    }
+
+    clearTimeout(diaryTimer);
+    diaryTimer = setTimeout(async () => {
+        loadingDiary.value = true;
+        try {
+            const res = await fetch('/admin/bookings/chalets/availability', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({
+                    unit_id: form.unit_id,
+                    scope: form.scope,
+                    section_ids: form.section_ids,
+                    from: diaryWindow.value.from,
+                    to: diaryWindow.value.to,
+                    client_id: form.client_id,
+                    ignore_booking_id: props.booking?.id ?? null,
+                }),
+            });
+            availability.value = res.ok ? ((await res.json()).days ?? {}) : {};
+        } finally {
+            loadingDiary.value = false;
+        }
+    }, 250);
+};
+
+watch(
+    () => [form.unit_id, form.scope, [...form.section_ids], form.client_id, diaryWindow.value.from, diaryWindow.value.to],
+    refreshAvailability,
+    { deep: true },
+);
+
+onMounted(refreshAvailability);
+
+/** Nights already taken — a stay may not begin on one of them. */
+const takenNights = computed(() =>
+    Object.entries(availability.value)
+        .filter(([, day]) => !day.stay)
+        .map(([date]) => date),
+);
+
+/**
+ * Day-use days, split by how much of them is gone. A day is closed only when
+ * every period this chalet sells is taken; one taken period out of three still
+ * leaves a day worth opening, marked so nobody picks it expecting all three.
+ */
+const dayUseDays = computed(() => {
+    const keys = dayPeriods.value.map((p) => p.key);
+    const closed: string[] = [];
+    const partial: string[] = [];
+
+    if (keys.length) {
+        for (const [date, day] of Object.entries(availability.value)) {
+            const taken = keys.filter((key) => day.periods[key] === false).length;
+
+            if (taken === keys.length) {
+                closed.push(date);
+            } else if (taken > 0) {
+                partial.push(date);
+            }
+        }
+    }
+
+    return { closed, partial };
+});
+
+/** The nights the chosen stay occupies — drawn as a band in both calendars. */
+const stayNights = computed(() =>
+    Array.from({ length: Math.max(0, Math.min(nights.value, 120)) }, (_, i) => addDays(form.booking_date, i)),
+);
+
+/** The days the chosen day-use booking repeats over. */
+const dayUseSpan = computed(() =>
+    Array.from({ length: days.value }, (_, i) => addDays(form.booking_date, i)),
+);
+
+const minCheckOut = computed(() => addDays(form.booking_date, 1));
+
+/**
+ * The latest departure the chosen arrival allows: a stay may not run through a
+ * night that is already taken, so it ends on the morning that night begins.
+ */
+const maxCheckOut = computed(() => {
+    for (let i = 0; i < props.meta.stay.max_nights; i++) {
+        const night = addDays(form.booking_date, i);
+
+        if (availability.value[night]?.stay === false) return night;
+    }
+
+    return addDays(form.booking_date, props.meta.stay.max_nights);
+});
+
+// Moving the arrival can push the departure past a night someone else has.
+// Pulling it back is kinder than leaving a range the server will refuse — and
+// a stay of no nights is never the answer, so an arrival with nothing free
+// after it is left alone for the check-in calendar to explain.
+watch(maxCheckOut, (max) => {
+    if (hydrating.value || !isStay.value) return;
+
+    if (max > form.booking_date && form.check_out_date > max) {
+        form.check_out_date = max;
+    }
+});
+
+/** Whether a period is still free on every day this booking would span. */
+const periodFree = (key: string): boolean =>
+    dayUseSpan.value.every((date) => availability.value[date]?.periods[key] !== false);
+
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
 const suggestedDeposit = computed(() => pricing.value?.deposit_amount ?? 0);
 const suggestedTotal = computed(() => pricing.value?.total_amount ?? 0);
@@ -440,7 +604,15 @@ const submit = () => {
                                     <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
                                         <LogIn class="h-3.5 w-3.5 text-emerald-500" /> التاريخ
                                     </label>
-                                    <input v-model="form.booking_date" type="date" :min="minDate" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                                    <AvailabilityDatePicker
+                                        v-model="form.booking_date"
+                                        :min="minDate"
+                                        :blocked="dayUseDays.closed"
+                                        :partial="dayUseDays.partial"
+                                        :in-range="dayUseSpan"
+                                        :loading="loadingDiary"
+                                        @view="onCalendarView"
+                                    />
                                     <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
                                         <span class="rounded bg-emerald-50 px-1.5 py-0.5">{{ checkInHijri }}</span>
                                         <span class="text-slate-500">{{ checkInDay }}</span>
@@ -458,11 +630,27 @@ const submit = () => {
                             <div>
                                 <label class="mb-1.5 block text-xs font-bold text-slate-700">اختر الفترة</label>
                                 <div class="flex flex-wrap gap-1.5">
-                                    <button v-for="p in dayPeriods" :key="p.key" type="button" @click="form.period = p.key"
-                                        class="rounded-lg px-3 py-1.5 text-xs font-bold transition"
-                                        :class="form.period === p.key ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
-                                    >{{ p.label }} <span class="text-[10px] opacity-70" dir="ltr">{{ formatTime12(p.start) }} – {{ formatTime12(p.end) }}</span></button>
+                                    <!--
+                                        Each hour is its own <bdi>, not one span forced to dir="ltr":
+                                        ص and م are Arabic letters, and making the run latin pushed
+                                        them to the wrong end of their own times.
+                                    -->
+                                    <button v-for="p in dayPeriods" :key="p.key" type="button"
+                                        :disabled="!periodFree(p.key)"
+                                        @click="form.period = p.key"
+                                        class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed"
+                                        :class="form.period === p.key
+                                            ? (periodFree(p.key) ? 'bg-teal-600 text-white' : 'bg-red-100 text-red-700 ring-1 ring-red-300')
+                                            : (periodFree(p.key) ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-red-50 text-red-300')"
+                                    >
+                                        <span>{{ p.label }}</span>
+                                        <span class="text-[10px] opacity-70"><bdi>{{ formatTime12(p.start) }}</bdi> – <bdi>{{ formatTime12(p.end) }}</bdi></span>
+                                        <span v-if="!periodFree(p.key)" class="rounded bg-red-100 px-1 py-0.5 text-[9px] font-extrabold text-red-600">محجوزة</span>
+                                    </button>
                                 </div>
+                                <p v-if="!periodFree(form.period)" class="mt-1.5 text-[11px] font-bold text-red-600">
+                                    الفترة المختارة محجوزة في هذا التاريخ — اختر فترة أخرى أو تاريخًا آخر.
+                                </p>
                                 <p v-if="form.errors.period" class="mt-1 text-xs text-red-500">{{ form.errors.period }}</p>
                             </div>
                         </div>
@@ -470,9 +658,16 @@ const submit = () => {
                         <div v-else class="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول ({{ formatTime12(meta.stay.check_in_time) }})
+                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول (<bdi>{{ formatTime12(meta.stay.check_in_time) }}</bdi>)
                                 </label>
-                                <input v-model="form.booking_date" type="date" :min="minDate" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                                <AvailabilityDatePicker
+                                    v-model="form.booking_date"
+                                    :min="minDate"
+                                    :blocked="takenNights"
+                                    :in-range="stayNights"
+                                    :loading="loadingDiary"
+                                    @view="onCalendarView"
+                                />
                                 <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
                                     <span class="rounded bg-emerald-50 px-1.5 py-0.5">{{ checkInHijri }}</span>
                                     <span class="text-slate-500">{{ checkInDay }}</span>
@@ -481,9 +676,17 @@ const submit = () => {
                             </div>
                             <div>
                                 <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                    <LogOut class="h-3.5 w-3.5 text-rose-500" /> الخروج ({{ formatTime12(meta.stay.check_out_time) }})
+                                    <LogOut class="h-3.5 w-3.5 text-rose-500" /> الخروج (<bdi>{{ formatTime12(meta.stay.check_out_time) }}</bdi>)
                                 </label>
-                                <input v-model="form.check_out_date" type="date" :min="form.booking_date" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                                <!-- Capped at the first taken night after arrival: a stay cannot run through someone else's night -->
+                                <AvailabilityDatePicker
+                                    v-model="form.check_out_date"
+                                    :min="minCheckOut"
+                                    :max="maxCheckOut"
+                                    :in-range="stayNights"
+                                    :loading="loadingDiary"
+                                    @view="onCalendarView"
+                                />
                                 <p v-if="checkOutHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-rose-700">
                                     <span class="rounded bg-rose-50 px-1.5 py-0.5">{{ checkOutHijri }}</span>
                                     <span class="text-slate-500">{{ checkOutDay }}</span>
@@ -495,8 +698,10 @@ const submit = () => {
                         <!-- مدد سريعة: أغلب الإقامات ليلة أو ليلتان أو نهاية أسبوع -->
                         <div v-if="isStay" class="mt-3 flex flex-wrap items-center gap-1.5">
                             <span class="text-[11px] font-bold text-slate-500">مدد سريعة:</span>
+                            <!-- A shortcut that would land past a taken night is offered struck out, not silently refused -->
                             <button v-for="n in [1, 2, 3, 7]" :key="n" type="button" @click="setNights(n)"
-                                class="rounded-lg px-2.5 py-1 text-[11px] font-bold transition"
+                                :disabled="addDays(form.booking_date, n) > maxCheckOut"
+                                class="rounded-lg px-2.5 py-1 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:bg-red-50 disabled:text-red-300 disabled:line-through"
                                 :class="nights === n ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
                             >{{ n }} {{ n === 1 ? 'ليلة' : 'ليالٍ' }}</button>
                         </div>

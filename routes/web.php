@@ -174,6 +174,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('bookings/chalets/create', [ChaletBookingsController::class, 'create'])->middleware('perm:chalet_bookings.create')->name('bookings.chalets.create');
         Route::get('bookings/chalets/{booking}/edit', [ChaletBookingsController::class, 'edit'])->middleware('perm:chalet_bookings.edit')->name('bookings.chalets.edit');
         Route::post('bookings/chalets/quote', [ChaletBookingsController::class, 'quote'])->middleware('perm:chalet_bookings.view')->name('bookings.chalets.quote');
+        Route::post('bookings/chalets/availability', [ChaletBookingsController::class, 'availability'])->middleware('perm:chalet_bookings.view')->name('bookings.chalets.availability');
         Route::post('bookings/chalets', [ChaletBookingsController::class, 'store'])->middleware('perm:chalet_bookings.create')->name('bookings.chalets.store');
         Route::put('bookings/chalets/{booking}', [ChaletBookingsController::class, 'update'])->middleware('perm:chalet_bookings.edit')->name('bookings.chalets.update');
 

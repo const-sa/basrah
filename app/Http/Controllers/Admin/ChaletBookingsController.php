@@ -12,6 +12,7 @@ use App\Services\ChaletBookingService;
 use App\Services\WhatsappNotifier;
 use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -293,6 +294,100 @@ class ChaletBookingsController extends BaseBookingsController
                 $days,
             ),
         ]);
+    }
+
+    /**
+     * How far ahead one availability request may look. The form asks for the
+     * grid it is about to draw — a month and its spill days — and the cap
+     * keeps a hand-made request from sweeping years of diary in one go.
+     */
+    private const CALENDAR_MAX_DAYS = 92;
+
+    /**
+     * Which days of a window this chalet is free on — the night of each day,
+     * and each day period beside it.
+     *
+     * The calendar in the form has to know before a date is picked, while the
+     * quote answers one chosen range at a time. This is for display only: a
+     * day shown as free is still quoted when it is picked, so the calendar can
+     * never let through what the quote would refuse.
+     */
+    public function availability(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'unit_id' => ['required', 'exists:units,id'],
+            'scope' => ['required', Rule::in(['whole', 'sections'])],
+            'section_ids' => ['array'],
+            'section_ids.*' => ['integer', 'exists:unit_sections,id'],
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date', 'after_or_equal:from'],
+            'client_id' => ['nullable', 'exists:clients,id'],
+            'ignore_booking_id' => ['nullable', 'integer'],
+        ]);
+
+        $unit = Unit::with(['sections', 'prices'])->findOrFail($data['unit_id']);
+        $this->authorizeUnit($request, $unit->id);
+
+        $from = CarbonImmutable::parse($data['from'])->startOfDay();
+        $to = CarbonImmutable::parse($data['to'])->startOfDay()
+            ->min($from->addDays(self::CALENDAR_MAX_DAYS - 1));
+
+        $sectionIds = $data['scope'] === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
+        $periods = $unit->dayUsePeriods();
+
+        $free = $this->availability->freeRanges(
+            $unit,
+            $data['scope'],
+            $this->calendarRanges($from, $to, $periods),
+            $sectionIds,
+            isset($data['client_id']) ? (int) $data['client_id'] : null,
+            $data['ignore_booking_id'] ?? null,
+        );
+
+        $days = [];
+
+        for ($day = $from; $day->lessThanOrEqualTo($to); $day = $day->addDay()) {
+            $date = $day->toDateString();
+
+            $days[$date] = [
+                'stay' => $free[StayPeriod::PERIOD."|{$date}"] ?? true,
+                'periods' => collect($periods)
+                    ->mapWithKeys(fn (string $period) => [$period => $free["{$period}|{$date}"] ?? true])
+                    ->all(),
+            ];
+        }
+
+        return response()->json(['days' => $days]);
+    }
+
+    /**
+     * One range per thing the calendar draws: a night per day, plus every day
+     * period the chalet is priced for.
+     *
+     * The night is keyed to the day it starts on, not the day it ends — a stay
+     * from the 5th to the 7th takes the nights of the 5th and 6th, and the 7th
+     * is free again for someone arriving that afternoon.
+     *
+     * @param  list<string>  $periods
+     * @return list<array{key: string, starts_at: CarbonImmutable, ends_at: CarbonImmutable}>
+     */
+    private function calendarRanges(CarbonImmutable $from, CarbonImmutable $to, array $periods): array
+    {
+        $ranges = [];
+
+        for ($day = $from; $day->lessThanOrEqualTo($to); $day = $day->addDay()) {
+            $date = $day->toDateString();
+
+            [$starts, $ends] = StayPeriod::range($date, $day->addDay()->toDateString());
+            $ranges[] = ['key' => StayPeriod::PERIOD."|{$date}", 'starts_at' => $starts, 'ends_at' => $ends];
+
+            foreach ($periods as $period) {
+                [$starts, $ends] = BookingPeriod::range($date, $period);
+                $ranges[] = ['key' => "{$period}|{$date}", 'starts_at' => $starts, 'ends_at' => $ends];
+            }
+        }
+
+        return $ranges;
     }
 
     /**
