@@ -5,6 +5,7 @@
         "build": "vite build",
         "build:ssr": "vite build && vite build --ssr",
         "dev": "vite",
+        "type-check": "vue-tsc --noEmit",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix"
@@ -34,7 +35,6 @@
         "clsx": "^2.1.1",
         "concurrently": "^9.0.1",
         "laravel-vite-plugin": "^1.0",
-        "lucide": "^0.468.0",
         "lucide-vue-next": "^0.468.0",
         "radix-vue": "^1.9.11",
         "tailwind-merge": "^2.5.5",

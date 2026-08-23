@@ -28,7 +28,9 @@ class PricingController extends Controller
 
     /**
      * حفظ تسعيرة وحدة: صف لكل (قسم أو الوحدة كاملة) × فترة.
-     * العربون لا يُمَس هنا — يُحفظ من مكانه فلا تُصفّره شاشة الأسعار.
+     *
+     * The deposit is edited here too, alongside the price it is charged on —
+     * it was previously reachable only from seeders.
      */
     public function updatePrices(Request $request, Unit $unit): RedirectResponse
     {
@@ -37,8 +39,10 @@ class PricingController extends Controller
 
         // فترات الشاليه تختلف عن فترات القاعة، فيُقبَل من كل نوع ما يخصّه:
         // قبول «الليلة» على قاعة يخزّن صفًا لا يقرؤه أحد.
+        // A chalet carries the night plus the three day periods, so the same
+        // unit can be sold as a stay or for a morning/evening/full day.
         $periods = $unit->type === 'chalet'
-            ? [StayPeriod::PERIOD]
+            ? StayPeriod::pricingKeys()
             : BookingPeriod::keys();
 
         $data = $request->validate([
@@ -53,6 +57,10 @@ class PricingController extends Controller
             'prices.*.weekend_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'prices.*.day_prices' => ['nullable', 'array'],
             'prices.*.day_prices.*' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            // Deposit is per (section, period) like the price it belongs to.
+            // Both may be blank, meaning this row asks for no deposit.
+            'prices.*.deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            'prices.*.deposit_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         foreach ($data['prices'] ?? [] as $row) {
@@ -68,12 +76,27 @@ class PricingController extends Controller
                     'weekday_price' => $row['weekday_price'] ?? 0,
                     'weekend_price' => $row['weekend_price'] ?? 0,
                     'day_prices' => $dayPrices,
+                    // A blank box means "no deposit of this kind", which is
+                    // null rather than zero: UnitPrice::depositFor() treats a
+                    // set-but-zero amount as a deliberate "no deposit asked"
+                    // and would stop falling through to the percentage.
+                    'deposit_amount' => $this->nullableDecimal($row['deposit_amount'] ?? null),
+                    'deposit_percent' => $this->nullableDecimal($row['deposit_percent'] ?? null),
                     'is_active' => true,
                 ],
             );
         }
 
         return back()->with('success', 'تم حفظ أسعار الوحدة');
+    }
+
+    /**
+     * An empty box is "not set" (null), not zero. Kept separate from the
+     * price columns, which default to 0 because a price always exists.
+     */
+    private function nullableDecimal(mixed $value): ?float
+    {
+        return ($value === null || $value === '') ? null : round((float) $value, 2);
     }
 
     /**

@@ -5,7 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { BadgeDollarSign, Building2, Home, ImagePlus, Lock, Pencil, Plus, Power, Settings2, Trash2, Unlock, UserCog, Users, X } from 'lucide-vue-next';
+import { BadgeDollarSign, Building2, ChevronDown, Home, ImagePlus, Lock, Pencil, Plus, Power, Search, Settings2, Trash2, Unlock, UserCog, Users, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Section {
@@ -33,8 +33,24 @@ interface Unit {
     notes: string | null;
     is_active: boolean;
     bookings_count: number;
+    staff_ids: number[];
+    staff_names: string[];
     sections: Section[];
     prices: PriceRow[];
+}
+
+/**
+ * A staff candidate — a login account, since only an account can open a unit.
+ * The role is read-only here; it is edited on the users screen.
+ */
+interface TeamMember {
+    id: number;
+    name: string;
+    email: string;
+    role_name: string | null;
+    is_active: boolean;
+    is_demo: boolean;
+    sees_all_units: boolean;
 }
 
 /** unit_section_id = null يعني سعر الوحدة كاملة. */
@@ -45,6 +61,9 @@ interface PriceRow {
     weekend_price: number | null;
     /** {رقم اليوم: السعر} — 0 الأحد … 6 السبت، وnull يعني «ارجع إلى سعر الأسبوع». */
     day_prices: Record<number, number | null>;
+    /** Deposit charged on this row. A fixed amount wins over the percentage. */
+    deposit_amount: number | null;
+    deposit_percent: number | null;
 }
 
 interface Option { key: string; label: string; hint?: string }
@@ -61,6 +80,7 @@ const props = defineProps<{
         genders: Option[];
         facilities: Facility[];
         managers: { id: number; name: string }[];
+        staff: TeamMember[];
         periods: Period[];
         /** فترة الشاليه الوحيدة: الليلة. */
         stay_periods: Period[];
@@ -71,14 +91,14 @@ const props = defineProps<{
     type: Unit['type'] | null;
 }>();
 
-const { canAny, canUnit } = usePermissions();
+const { can, canAny, canUnit } = usePermissions();
 
 // نصوص الشاشة تتبع النوع المعروض — نفس المكوّن يخدم القاعات والشاليهات والكل.
 const screen = computed(() => {
     if (props.type === 'hall') {
         return {
             title: 'القاعات',
-            subtitle: 'قاعات المناسبات وأقسامها، ونمط الحجز وقاعدة الخصوصية ومرافق كل قسم',
+            subtitle: 'قاعات المناسبات وأقسامها وأسعارها',
             createLabel: 'قاعة جديدة', editLabel: 'تعديل قاعة', emptyLabel: 'لا توجد قاعات بعد',
             href: '/admin/units/halls',
         };
@@ -86,14 +106,14 @@ const screen = computed(() => {
     if (props.type === 'chalet') {
         return {
             title: 'الشاليهات',
-            subtitle: 'الشاليهات وأقسامها، ونمط الحجز وقاعدة الخصوصية ومرافق كل قسم',
+            subtitle: 'الشاليهات وأقسامها وأسعارها',
             createLabel: 'شاليه جديد', editLabel: 'تعديل شاليه', emptyLabel: 'لا توجد شاليهات بعد',
             href: '/admin/units/chalets',
         };
     }
     return {
         title: 'الوحدات والأقسام',
-        subtitle: 'القاعات والشاليهات، ونمط الحجز وقاعدة الخصوصية ومرافق كل قسم',
+        subtitle: 'القاعات والشاليهات وأقسامها وأسعارها',
         createLabel: 'وحدة جديدة', editLabel: 'تعديل وحدة', emptyLabel: 'لا توجد وحدات بعد',
         href: '/admin/units',
     };
@@ -105,14 +125,22 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 ]);
 
 const labelOf = (list: Option[], key: string) => list.find((o) => o.key === key)?.label ?? key;
-const facilityName = (id: number) => props.options.facilities.find((f) => f.id === id)?.name ?? '';
 
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
 const logoPreview = ref<string | null>(null);
 
-// النوع يُختار في شاشة «الكل» دائمًا، وفي الشاشة المقصورة عند التعديل فقط — لنقل الوحدة بين القائمتين.
-const showTypeField = computed(() => !props.type || editingId.value !== null);
+// Staff search — account lists get long, and scrolling alone doesn't find a name.
+const teamQuery = ref('');
+
+const teamMatches = computed(() => {
+    const q = teamQuery.value.trim().toLowerCase();
+    if (!q) return props.options.staff;
+
+    return props.options.staff.filter((e) =>
+        [e.name, e.email, e.role_name].filter(Boolean).join(' ').toLowerCase().includes(q),
+    );
+});
 
 const form = useForm({
     code: '',
@@ -120,8 +148,12 @@ const form = useForm({
     logo: null as File | null,
     remove_logo: false,
     manager_id: null as number | null,
-    // شاشة نوع واحد تفرض نوعها على الوحدة الجديدة، وشاشة «الكل» تبدأ بالشاليه.
-    type: (props.type ?? 'chalet') as Unit['type'],
+    // Type is not picked in the form: the screen dictates it, and the combined
+    // screen starts new units as halls.
+    type: (props.type ?? 'hall') as Unit['type'],
+    // Booking mode, privacy rule and capacity were dropped from the form. New
+    // units take the widest and safest defaults, existing ones keep what they
+    // have — all three stay in the payload because the server requires them.
     bookable_mode: 'both' as Unit['bookable_mode'],
     privacy_mode: 'exclusive' as Unit['privacy_mode'],
     capacity: null as number | null,
@@ -129,15 +161,36 @@ const form = useForm({
     notes: '',
     is_active: true,
     sections: [] as Section[],
+    /** Unit staff, by account id. Roles and permissions stay on the users screen. */
+    staff_ids: [] as number[],
 });
 
 const emptySection = (name = '', gender: Section['gender'] = 'mixed'): Section => ({
     id: null, name, gender, is_active: true, facility_ids: [], shared_facility_ids: [],
 });
 
+/* useForm widens every array field to FormDataConvertible[], which drops
+ * .length/.includes. Same array by reference, so mutating it edits the form. */
+const memberIds = computed(() => form.staff_ids as unknown as number[]);
+const sectionRows = computed(() => form.sections as unknown as Section[]);
+
+const teamCount = computed(() => memberIds.value.length);
+const isMember = (id: number) => memberIds.value.includes(id);
+
+const toggleMember = (id: number) => {
+    const i = memberIds.value.indexOf(id);
+
+    if (i === -1) {
+        memberIds.value.push(id);
+    } else {
+        memberIds.value.splice(i, 1);
+    }
+};
+
 const openCreate = () => {
     editingId.value = null;
     logoPreview.value = null;
+    teamQuery.value = '';
     form.reset();
     form.clearErrors();
     form.sections = [emptySection('قسم الرجال', 'men'), emptySection('قسم النساء', 'women')];
@@ -147,6 +200,7 @@ const openCreate = () => {
 const openEdit = (u: Unit) => {
     editingId.value = u.id;
     logoPreview.value = u.logo_url;
+    teamQuery.value = '';
     form.clearErrors();
     form.code = u.code;
     form.name = u.name;
@@ -160,6 +214,7 @@ const openEdit = (u: Unit) => {
     form.description = u.description ?? '';
     form.notes = u.notes ?? '';
     form.is_active = u.is_active;
+    form.staff_ids = [...u.staff_ids];
     form.sections = u.sections.map((s) => ({
         ...s,
         facility_ids: [...s.facility_ids],
@@ -184,27 +239,6 @@ const clearLogo = () => {
 const addSection = () => form.sections.push(emptySection());
 const removeSection = (i: number) => form.sections.splice(i, 1);
 
-/** إسناد المرفق للقسم؛ ورفعه يرفع معه علامة «مشترك». */
-const toggleFacility = (section: Section, id: number) => {
-    const i = section.facility_ids.indexOf(id);
-    if (i === -1) {
-        section.facility_ids.push(id);
-    } else {
-        section.facility_ids.splice(i, 1);
-        const s = section.shared_facility_ids.indexOf(id);
-        if (s !== -1) section.shared_facility_ids.splice(s, 1);
-    }
-};
-
-/** المرفق المشترك يجعل خصوصية الأقسام مسألة تشغيلية لا شكلية. */
-const toggleShared = (section: Section, id: number) => {
-    if (!section.facility_ids.includes(id)) return;
-    const i = section.shared_facility_ids.indexOf(id);
-    i === -1 ? section.shared_facility_ids.push(id) : section.shared_facility_ids.splice(i, 1);
-};
-
-const sectionsRelevant = computed(() => form.bookable_mode !== 'whole');
-
 const submit = () => {
     const opts = {
         preserveScroll: true,
@@ -228,8 +262,6 @@ const toggle = (u: Unit) => router.patch(`/admin/units/${u.id}/toggle`, {}, { pr
  * يتدرّج من الأحد إلى الجمعة ولا تحتمله ثنائية «أسبوع/نهاية أسبوع».
  * لا نِسَب مواسم فوق ذلك — فرق الأعياد يُدخَل في السعر مباشرة.
  */
-const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
-
 const showPrices = ref(false);
 const pricedUnit = ref<Unit | null>(null);
 
@@ -263,15 +295,63 @@ const buildPriceRows = (u: Unit): PriceRow[] => {
                 weekday_price: saved ? Number(saved.weekday_price) : null,
                 weekend_price: saved ? Number(saved.weekend_price) : null,
                 day_prices: { ...emptyDayPrices(), ...(saved?.day_prices ?? {}) },
+                deposit_amount: saved?.deposit_amount ?? null,
+                deposit_percent: saved?.deposit_percent ?? null,
             };
         }),
     );
 };
 
+const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
+
+/* useForm widens array fields; read the rows back through their real type. */
+const priceRows = computed(() => priceForm.prices as unknown as PriceRow[]);
+
+/** One key per (section, period) — the unit of work in this modal. */
+const rowKey = (r: PriceRow) => `${r.unit_section_id ?? 'whole'}:${r.period}`;
+
+/**
+ * Mirrors UnitPrice::hasAnyPrice() on the server: a row that exists but holds
+ * no number is not a price, and the booking screens will not offer its period.
+ */
+const hasAnyPrice = (r: PriceRow) =>
+    weekdays.value.some((d) => Number(r.day_prices[d.key]) > 0)
+    || Number(r.weekday_price) > 0
+    || Number(r.weekend_price) > 0;
+
+/* Which section is on screen, which periods are expanded, and which of them
+ * the operator marked as sold. Kept out of the payload — «sold» is derived
+ * from the numbers on the server, and this only decides what is shown. */
+const activeGroup = ref<number | null>(null);
+const expanded = ref<Record<string, boolean>>({});
+const dayGridOpen = ref<Record<string, boolean>>({});
+const enabled = ref<Record<string, boolean>>({});
+
 const openPrices = (u: Unit) => {
     pricedUnit.value = u;
     priceForm.clearErrors();
     priceForm.prices = buildPriceRows(u);
+
+    enabled.value = {};
+    expanded.value = {};
+    dayGridOpen.value = {};
+
+    priceRows.value.forEach((r) => {
+        enabled.value[rowKey(r)] = hasAnyPrice(r);
+        // A period priced on specific days opens with that grid already
+        // showing, so the exceptions are not hidden behind another click.
+        dayGridOpen.value[rowKey(r)] = weekdays.value.some((d) => isSet(r.day_prices[d.key]));
+    });
+
+    activeGroup.value = priceGroups.value[0]?.sectionId ?? null;
+
+    // Open the first unpriced period — that is the one still needing work.
+    // Everything already priced stays collapsed behind its summary line.
+    const rows = priceGroups.value[0]?.rows ?? [];
+    const first = rows.find((r) => !enabled.value[rowKey(r)]) ?? rows[0];
+
+    if (first) expanded.value[rowKey(first)] = true;
+
     showPrices.value = true;
 };
 
@@ -292,27 +372,133 @@ const priceGroups = computed(() => {
 const periodLabel = (key: string) =>
     [...props.options.periods, ...props.options.stay_periods].find((p) => p.key === key)?.label ?? key;
 
+const activeRows = computed(() => priceGroups.value.find((g) => g.sectionId === activeGroup.value)?.rows ?? []);
+
+/** How many of a section's periods are actually on sale — shown on its tab. */
+const groupPriced = (rows: PriceRow[]) => rows.filter((r) => enabled.value[rowKey(r)] && hasAnyPrice(r)).length;
+
+const pricedCount = computed(() => groupPriced(priceRows.value));
+
+/** Marked as sold but left blank — the one state that silently does nothing. */
+const blankCount = computed(
+    () => priceRows.value.filter((r) => enabled.value[rowKey(r)] && !hasAnyPrice(r)).length,
+);
+
+/**
+ * Turning a period off clears its numbers rather than just hiding them: the
+ * server reads «no price» as «not offered when booking», so numbers left
+ * behind would quietly put the period back on sale on the next save.
+ */
+const togglePeriod = (r: PriceRow) => {
+    const key = rowKey(r);
+    const next = !enabled.value[key];
+
+    enabled.value[key] = next;
+    expanded.value[key] = next;
+
+    if (next) return;
+
+    weekdays.value.forEach((d) => (r.day_prices[d.key] = null));
+    r.weekday_price = null;
+    r.weekend_price = null;
+    r.deposit_amount = null;
+    r.deposit_percent = null;
+    dayGridOpen.value[key] = false;
+};
+
 /** نسخ سعر أيام الأسبوع إلى الجمعة والسبت — يختصر الإدخال ثم يُعدَّل يدويًا. */
-const copyWeekdayToWeekend = (sectionId: number | null) => {
-    priceForm.prices
-        .filter((r) => r.unit_section_id === sectionId)
-        .forEach((r) => (r.weekend_price = r.weekday_price));
+const copyWeekdayToWeekend = (r: PriceRow) => (r.weekend_price = r.weekday_price);
+
+/** تعميم السعر الافتراضي على أيام الأسبوع السبعة، ليُعدَّل منها ما يُستثنى. */
+const spreadDefaultsToDays = (r: PriceRow) => {
+    weekdays.value.forEach((d) => (r.day_prices[d.key] = d.is_weekend ? r.weekend_price : r.weekday_price));
+};
+
+const clearDayPrices = (r: PriceRow) => weekdays.value.forEach((d) => (r.day_prices[d.key] = null));
+
+/**
+ * تعميم تسعيرة فترة على بقية فترات القسم — أكثر الوحدات تبدأ بسعر واحد
+ * لكل الفترات ثم يُرفع في واحدة أو اثنتين.
+ */
+const spreadPeriodToOthers = (source: PriceRow) => {
+    activeRows.value
+        .filter((r) => r.period !== source.period)
+        .forEach((r) => {
+            r.weekday_price = source.weekday_price;
+            r.weekend_price = source.weekend_price;
+            r.deposit_amount = source.deposit_amount;
+            r.deposit_percent = source.deposit_percent;
+            weekdays.value.forEach((d) => (r.day_prices[d.key] = source.day_prices[d.key]));
+
+            enabled.value[rowKey(r)] = enabled.value[rowKey(source)];
+        });
+};
+
+/** تعميم تسعيرة القسم المعروض على بقية الأقسام — يختصر وحدةً متماثلة الأقسام. */
+const spreadGroupToOthers = () => {
+    priceGroups.value
+        .filter((g) => g.sectionId !== activeGroup.value)
+        .forEach((g) => g.rows.forEach((r) => {
+            const source = activeRows.value.find((s) => s.period === r.period);
+            if (!source) return;
+
+            r.weekday_price = source.weekday_price;
+            r.weekend_price = source.weekend_price;
+            r.deposit_amount = source.deposit_amount;
+            r.deposit_percent = source.deposit_percent;
+            weekdays.value.forEach((d) => (r.day_prices[d.key] = source.day_prices[d.key]));
+
+            enabled.value[rowKey(r)] = enabled.value[rowKey(source)];
+        }));
+};
+
+/** An emptied number input yields '' rather than null, so test for both. */
+const isSet = (v: number | null | undefined | string) => v !== null && v !== undefined && v !== '';
+
+/** ما يُطلب عربونًا على هذه الفترة، مقروءًا كما سيُحتسب. */
+const depositLabel = (r: PriceRow) => {
+    if (isSet(r.deposit_amount)) return money(Number(r.deposit_amount));
+    if (isSet(r.deposit_percent)) return `${r.deposit_percent}٪`;
+
+    return '';
 };
 
 /**
- * تعبئة بقية أيام الأسبوع بسعر أول يوم مُدخَل — سبعة حقول لكل قسم إدخالٌ طويل،
- * وأكثر الشاليهات تبدأ بسعر واحد ثم تُرفع فيه ليلتان أو ثلاث.
+ * The collapsed line for a period, so the operator reads its terms without
+ * opening it — the whole point of collapsing the card in the first place.
  */
-const fillDaysFromFirst = (sectionId: number | null) => {
-    priceForm.prices
-        .filter((r) => r.unit_section_id === sectionId)
-        .forEach((r) => {
-            const source = weekdays.value.map((d) => r.day_prices[d.key]).find((v) => v !== null && v !== undefined);
-            if (source === undefined) return;
+const rowSummary = (r: PriceRow) => {
+    if (!enabled.value[rowKey(r)]) return 'لا تُعرض في الحجز';
+    if (!hasAnyPrice(r)) return 'مفعّلة بلا سعر — لن تُعرض حتى يُدخَل سعر';
 
-            weekdays.value.forEach((d) => (r.day_prices[d.key] = source as number));
-        });
+    const parts: string[] = [];
+
+    if (isSet(r.weekday_price)) parts.push(`أيام الأسبوع ${money(Number(r.weekday_price))}`);
+    if (isSet(r.weekend_price)) parts.push(`الجمعة والسبت ${money(Number(r.weekend_price))}`);
+
+    const overrides = weekdays.value.filter((d) => isSet(r.day_prices[d.key])).length;
+
+    if (overrides) parts.push(`${overrides} يوم بسعر خاص`);
+
+    const deposit = depositLabel(r);
+
+    if (deposit) parts.push(`عربون ${deposit}`);
+
+    return parts.join(' · ');
 };
+
+/** ما يرثه يوم تُرك فارغًا — يُعرض في مكان الكتابة فلا يُخمَّن. */
+const dayFallback = (r: PriceRow, isWeekend: boolean) => {
+    const value = isWeekend ? r.weekend_price : r.weekday_price;
+
+    return isSet(value) ? money(Number(value)) : '—';
+};
+
+/**
+ * Both deposit boxes filled — the fixed amount silently wins in
+ * UnitPrice::depositFor(), so say so instead of letting it surprise.
+ */
+const depositClash = (r: PriceRow) => isSet(r.deposit_amount) && isSet(r.deposit_percent);
 
 const submitPrices = () => {
     if (!pricedUnit.value) return;
@@ -396,6 +582,11 @@ const destroy = (u: Unit) => {
 
                         <div v-if="u.manager_name" class="mb-2 inline-flex items-center gap-1.5 self-start rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700">
                             <UserCog class="h-3 w-3" /> المدير: {{ u.manager_name }}
+                        </div>
+
+                        <div v-if="u.staff_names.length" class="mb-2 flex flex-wrap items-center gap-1">
+                            <span class="text-[10px] font-extrabold text-slate-400">الطاقم</span>
+                            <span v-for="n in u.staff_names" :key="n" class="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{{ n }}</span>
                         </div>
 
                         <div class="mb-3 flex flex-wrap gap-1.5 text-[11px] font-bold">
@@ -492,18 +683,7 @@ const destroy = (u: Unit) => {
                                     </div>
                                 </div>
 
-                                <div class="grid gap-3" :class="showTypeField ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
-                                    <!-- شاشة نوع واحد تفرض نوعها عند الإضافة، ويبقى التغيير متاحًا عند التعديل لنقل الوحدة بين القائمتين. -->
-                                    <div v-if="showTypeField">
-                                        <label class="mb-1 block text-sm font-bold text-slate-700">النوع</label>
-                                        <select v-model="form.type" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                                            <option v-for="o in options.types" :key="o.key" :value="o.key">{{ o.label }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-bold text-slate-700">السعة</label>
-                                        <input v-model.number="form.capacity" type="number" min="1" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-                                    </div>
+                                <div class="grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <label class="mb-1 block text-sm font-bold text-slate-700">مدير الوحدة</label>
                                         <SearchableSelect v-model="form.manager_id" :options="options.managers" placeholder="— بلا مدير —" />
@@ -523,30 +703,61 @@ const destroy = (u: Unit) => {
                             </span>
                         </label>
 
+                        <!-- طاقم الوحدة -->
                         <div>
-                            <label class="mb-1.5 block text-sm font-bold text-slate-700">نمط الحجز</label>
-                            <div class="grid gap-2 sm:grid-cols-3">
-                                <label v-for="o in options.bookable_modes" :key="o.key" class="cursor-pointer rounded-xl border-2 p-3 transition" :class="form.bookable_mode === o.key ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'">
-                                    <input v-model="form.bookable_mode" type="radio" :value="o.key" class="sr-only" />
-                                    <div class="text-sm font-extrabold text-slate-800">{{ o.label }}</div>
-                                    <div class="mt-0.5 text-[11px] font-medium text-slate-500">{{ o.hint }}</div>
+                            <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                                <label class="flex items-center gap-1.5 text-sm font-bold text-slate-700">
+                                    موظفو الوحدة
+                                    <span v-if="teamCount" class="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[11px] font-extrabold text-emerald-700">
+                                        {{ teamCount }}
+                                    </span>
                                 </label>
+                                <Link v-if="can('employees.view')" href="/admin/employees" class="text-[11px] font-bold text-blue-600 hover:underline">
+                                    إدارة الأدوار والصلاحيات
+                                </Link>
                             </div>
-                        </div>
+                            <p class="mb-2 text-[11px] font-medium text-slate-500">
+                                الإسناد يفتح هذه الوحدة لحساب الموظف ويقصره على وحداته المسندة — والمدير العام وحده يرى كل الوحدات، فلا يظهر هنا. أما <b>ما</b> يفعله فيها فمن دوره في شاشة المستخدمين.
+                            </p>
 
-                        <div>
-                            <label class="mb-1.5 block text-sm font-bold text-slate-700">قاعدة الخصوصية بين الأقسام</label>
-                            <div class="grid gap-2 sm:grid-cols-2">
-                                <label v-for="o in options.privacy_modes" :key="o.key" class="cursor-pointer rounded-xl border-2 p-3 transition" :class="form.privacy_mode === o.key ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:border-slate-300'">
-                                    <input v-model="form.privacy_mode" type="radio" :value="o.key" class="sr-only" />
-                                    <div class="text-sm font-extrabold text-slate-800">{{ o.label }}</div>
-                                    <div class="mt-0.5 text-[11px] font-medium text-slate-500">{{ o.hint }}</div>
-                                </label>
+                            <div class="rounded-xl border border-slate-200">
+                                <div class="relative border-b border-slate-200">
+                                    <Search class="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ltr:left-2.5 rtl:right-2.5" />
+                                    <input
+                                        v-model="teamQuery" type="text" placeholder="بحث بالاسم أو البريد أو الدور…"
+                                        class="w-full border-0 bg-transparent py-2 text-sm focus:outline-none focus:ring-0 ltr:pl-8 ltr:pr-2 rtl:pl-2 rtl:pr-8"
+                                    />
+                                </div>
+
+                                <ul class="max-h-56 overflow-y-auto p-1.5">
+                                    <li v-for="e in teamMatches" :key="e.id">
+                                        <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-slate-50">
+                                            <input
+                                                type="checkbox" :checked="isMember(e.id)" @change="toggleMember(e.id)"
+                                                class="h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
+                                            />
+                                            <span class="min-w-0 flex-1 truncate text-sm font-bold text-slate-800">{{ e.name }}</span>
+                                            <span class="hidden shrink-0 truncate text-[11px] font-medium text-slate-400 sm:block" dir="ltr">{{ e.email }}</span>
+
+                                            <span v-if="!e.is_active" class="shrink-0 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600" title="حساب موقوف — لا يدخل النظام أصلًا">موقوف</span>
+                                            <span v-if="e.is_demo" class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">تجريبي</span>
+                                            <span v-if="e.sees_all_units" class="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600" title="يرى كل الوحدات الآن — والإسناد يقصره على وحداته">كل الوحدات</span>
+
+                                            <!-- No role means no permission anywhere, so the posting opens an empty unit -->
+                                            <span v-if="e.role_name" class="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">{{ e.role_name }}</span>
+                                            <span v-else class="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700" title="حساب بلا دور — لا يملك أي صلاحية">بلا دور</span>
+                                        </label>
+                                    </li>
+
+                                    <li v-if="!teamMatches.length" class="px-2 py-4 text-center text-[11px] font-medium text-slate-400">
+                                        {{ options.staff.length ? 'لا حساب مطابق' : 'لا حسابات — أضفها من شاشة المستخدمين.' }}
+                                    </li>
+                                </ul>
                             </div>
                         </div>
 
                         <!-- الأقسام -->
-                        <div v-if="sectionsRelevant">
+                        <div>
                             <div class="mb-2 flex items-center justify-between">
                                 <label class="text-sm font-bold text-slate-700">الأقسام</label>
                                 <button type="button" @click="addSection" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-600">
@@ -555,7 +766,7 @@ const destroy = (u: Unit) => {
                             </div>
 
                             <div class="space-y-2">
-                                <div v-for="(s, i) in form.sections" :key="i" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                <div v-for="(s, i) in sectionRows" :key="i" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
                                     <div class="grid items-end gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
                                         <div>
                                             <label class="mb-1 block text-[11px] font-bold text-slate-600">اسم القسم</label>
@@ -575,38 +786,8 @@ const destroy = (u: Unit) => {
                                             <Trash2 class="h-4 w-4" />
                                         </button>
                                     </div>
-
-                                    <div class="mt-2">
-                                        <div class="mb-1 flex items-center gap-2 text-[11px] font-bold text-slate-600">
-                                            <span>مرافق القسم</span>
-                                            <span class="text-[10px] font-medium text-slate-400">اضغط المرفق لإسناده · اضغط «مشترك» إن كان يُشارك بقية الأقسام</span>
-                                        </div>
-                                        <div class="flex flex-wrap gap-1">
-                                            <span
-                                                v-for="f in options.facilities" :key="f.id"
-                                                class="inline-flex items-center overflow-hidden rounded-md text-[11px] font-bold ring-1"
-                                                :class="s.facility_ids.includes(f.id) ? 'ring-emerald-300' : 'ring-slate-200'"
-                                            >
-                                                <button
-                                                    type="button" @click="toggleFacility(s, f.id)"
-                                                    class="px-2 py-0.5 transition"
-                                                    :class="s.facility_ids.includes(f.id) ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'"
-                                                >{{ f.name }}</button>
-                                                <button
-                                                    v-if="s.facility_ids.includes(f.id)"
-                                                    type="button" @click="toggleShared(s, f.id)"
-                                                    class="px-1.5 py-0.5 text-[10px] transition"
-                                                    :class="s.shared_facility_ids.includes(f.id) ? 'bg-amber-500 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-amber-100'"
-                                                    :title="s.shared_facility_ids.includes(f.id) ? 'مشترك مع بقية الأقسام' : 'خاص بهذا القسم'"
-                                                >{{ s.shared_facility_ids.includes(f.id) ? 'مشترك' : 'خاص' }}</button>
-                                            </span>
-                                            <span v-if="!options.facilities.length" class="text-[11px] font-medium text-slate-400">
-                                                لا مرافق معرّفة — أضفها من «إدارة المرافق».
-                                            </span>
-                                        </div>
-                                    </div>
                                 </div>
-                                <p v-if="!form.sections.length" class="rounded-xl bg-slate-50 py-4 text-center text-xs font-medium text-slate-500">لا أقسام — أضف قسمًا أو غيّر نمط الحجز إلى «الوحدة كاملة فقط».</p>
+                                <p v-if="!sectionRows.length" class="rounded-xl bg-slate-50 py-4 text-center text-xs font-medium text-slate-500">لا أقسام — أضف قسمًا من زر «إضافة قسم».</p>
                             </div>
                         </div>
 
@@ -627,87 +808,200 @@ const destroy = (u: Unit) => {
         <!-- الأسعار: تسعيرة الوحدة والأقسام -->
         <div v-if="showPrices && pricedUnit" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="showPrices = false">
             <div class="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
-                <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-6 py-4">
                     <div>
-                        <h2 class="text-lg font-extrabold text-slate-900">الأسعار — {{ pricedUnit.name }}</h2>
-                        <p v-if="pricedByDay" class="text-[11px] font-medium text-slate-500">سعر الليلة بالريال لكل يوم من أيام الأسبوع — اليوم المتروك فارغًا يأخذ سعر أيام الأسبوع.</p>
-                        <p v-else class="text-[11px] font-medium text-slate-500">السعر بالريال لكل فترة. «الجمعة والسبت» هي نهاية الأسبوع المعتمدة.</p>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h2 class="text-lg font-extrabold text-slate-900">الأسعار — {{ pricedUnit.name }}</h2>
+                            <span class="rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-700">
+                                {{ pricedCount }} فترة معروضة للحجز
+                            </span>
+                            <span v-if="blankCount" class="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-extrabold text-amber-700">
+                                {{ blankCount }} بلا سعر
+                            </span>
+                        </div>
+                        <p class="mt-1 text-[11px] font-medium text-slate-500">
+                            الفترة المطفأة لا تُعرض في الحجز. «الجمعة والسبت» هي نهاية الأسبوع المعتمدة.
+                        </p>
                     </div>
-                    <button type="button" @click="showPrices = false" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X class="h-5 w-5" /></button>
+                    <button type="button" @click="showPrices = false" class="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X class="h-5 w-5" /></button>
                 </div>
 
-                <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
-                    <!-- تسعيرة الوحدة والأقسام -->
-                    <div v-for="g in priceGroups" :key="g.sectionId ?? 'whole'" class="overflow-hidden rounded-xl border border-slate-200">
-                        <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2">
-                            <span class="text-sm font-extrabold text-slate-800">{{ g.label }}</span>
-                            <button v-if="pricedByDay" type="button" @click="fillDaysFromFirst(g.sectionId)" class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-600">
-                                تعميم أول سعر على بقية الأيام
+                <!-- الأقسام كتبويبات: عرضها مكدّسةً يجعل النافذة شريطًا لا ينتهي -->
+                <div v-if="priceGroups.length > 1" class="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-6 py-2.5">
+                    <button
+                        v-for="g in priceGroups" :key="g.sectionId ?? 'whole'"
+                        type="button" @click="activeGroup = g.sectionId"
+                        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition"
+                        :class="activeGroup === g.sectionId ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100'"
+                    >
+                        {{ g.label }}
+                        <span
+                            class="rounded px-1.5 text-[10px] font-extrabold"
+                            :class="activeGroup === g.sectionId ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'"
+                        >{{ groupPriced(g.rows) }}/{{ g.rows.length }}</span>
+                    </button>
+
+                    <button
+                        type="button" @click="spreadGroupToOthers"
+                        class="ms-auto rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-600"
+                        title="نسخ تسعيرة هذا القسم إلى بقية الأقسام"
+                    >
+                        تعميم على بقية الأقسام
+                    </button>
+                </div>
+
+                <div class="min-h-0 flex-1 space-y-2 overflow-y-auto bg-slate-50/60 px-6 py-4">
+                    <!-- بطاقة لكل فترة: مطويّة على ملخّصها، تُفتح للتحرير وحدها -->
+                    <div
+                        v-for="r in activeRows" :key="r.period"
+                        class="overflow-hidden rounded-xl border bg-white transition"
+                        :class="enabled[rowKey(r)] ? 'border-slate-200' : 'border-slate-200 bg-slate-50'"
+                    >
+                        <div class="flex items-center gap-3 px-3 py-2.5">
+                            <!-- المفتاح يقول ما يفعله الحفظ: المطفأة تُمسح أسعارها -->
+                            <button
+                                type="button" @click="togglePeriod(r)"
+                                class="relative h-5 w-9 shrink-0 rounded-full transition"
+                                :class="enabled[rowKey(r)] ? 'bg-emerald-500' : 'bg-slate-300'"
+                                :title="enabled[rowKey(r)] ? 'إطفاء الفترة — تُمسح أسعارها ولا تُعرض في الحجز' : 'تفعيل الفترة'"
+                            >
+                                <span
+                                    class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all"
+                                    :class="enabled[rowKey(r)] ? 'right-0.5' : 'right-4.5'"
+                                ></span>
                             </button>
-                            <button v-else type="button" @click="copyWeekdayToWeekend(g.sectionId)" class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-600">
-                                نسخ سعر الأسبوع إلى الجمعة والسبت
+
+                            <button type="button" @click="expanded[rowKey(r)] = !expanded[rowKey(r)]" class="flex min-w-0 flex-1 items-center gap-2 text-start">
+                                <span class="shrink-0 text-sm font-extrabold" :class="enabled[rowKey(r)] ? 'text-slate-900' : 'text-slate-400'">
+                                    {{ periodLabel(r.period) }}
+                                </span>
+                                <span
+                                    class="min-w-0 flex-1 truncate text-[11px] font-bold"
+                                    :class="!enabled[rowKey(r)] ? 'text-slate-400' : hasAnyPrice(r) ? 'text-slate-500' : 'text-amber-600'"
+                                >{{ rowSummary(r) }}</span>
+                                <ChevronDown class="h-4 w-4 shrink-0 text-slate-400 transition" :class="expanded[rowKey(r)] && 'rotate-180'" />
                             </button>
                         </div>
 
-                        <!-- الشاليه: سعر لكل يوم من أيام الأسبوع -->
-                        <div v-if="pricedByDay" class="space-y-3 px-3 py-3">
-                            <div v-for="r in g.rows" :key="r.period" class="space-y-2">
-                                <div class="text-[11px] font-extrabold text-slate-500">{{ periodLabel(r.period) }}</div>
-                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-                                    <label v-for="d in weekdays" :key="d.key" class="block">
-                                        <span class="mb-1 block text-[11px] font-bold" :class="d.is_weekend ? 'text-amber-600' : 'text-slate-500'">{{ d.label }}</span>
-                                        <input
-                                            v-model.number="r.day_prices[d.key]"
-                                            type="number" min="0" step="any" dir="ltr" placeholder="0"
-                                            class="w-full rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
-                                            :class="d.is_weekend
-                                                ? 'border-amber-200 bg-amber-50/40 focus:border-amber-400 focus:ring-amber-100'
-                                                : 'border-slate-200 focus:border-emerald-400 focus:ring-emerald-100'"
-                                        />
-                                    </label>
-                                </div>
+                        <div v-if="enabled[rowKey(r)] && expanded[rowKey(r)]" class="space-y-3 border-t border-slate-100 px-3 py-3">
+                            <!-- السعر الافتراضي أولًا: هو الأساس، وأسعار الأيام استثناءات عليه -->
+                            <div class="flex flex-wrap items-end gap-3">
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-bold text-slate-600">أيام الأسبوع</span>
+                                    <input
+                                        v-model.number="r.weekday_price"
+                                        type="number" min="0" step="any" dir="ltr" placeholder="0"
+                                        class="w-28 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                    />
+                                </label>
 
-                                <!-- السعر الافتراضي لأي يوم يُترك فارغًا -->
-                                <div class="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
-                                    <span class="text-[11px] font-bold text-slate-500">سعر افتراضي — أيام الأسبوع</span>
-                                    <input v-model.number="r.weekday_price" type="number" min="0" step="any" dir="ltr" placeholder="0" class="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
-                                    <span class="text-[11px] font-bold text-slate-500">الجمعة والسبت</span>
-                                    <input v-model.number="r.weekend_price" type="number" min="0" step="any" dir="ltr" placeholder="0" class="w-24 rounded-lg border border-amber-200 bg-white px-2 py-1 text-xs focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
+                                <button
+                                    type="button" @click="copyWeekdayToWeekend(r)"
+                                    class="mb-1 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-500 hover:border-emerald-300 hover:text-emerald-600"
+                                    title="نسخ سعر أيام الأسبوع إلى الجمعة والسبت"
+                                >←</button>
+
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-bold text-amber-700">الجمعة والسبت</span>
+                                    <input
+                                        v-model.number="r.weekend_price"
+                                        type="number" min="0" step="any" dir="ltr" placeholder="0"
+                                        class="w-28 rounded-lg border border-amber-300 bg-amber-50/40 px-2.5 py-1.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                                    />
+                                </label>
+
+                                <div class="mb-1 h-6 w-px bg-slate-200"></div>
+
+                                <!-- العربون بجوار السعر الذي يُحتسب عليه -->
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-bold text-indigo-700">عربون ثابت</span>
+                                    <input
+                                        v-model.number="r.deposit_amount"
+                                        type="number" min="0" step="any" dir="ltr" placeholder="—"
+                                        class="w-24 rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+                                        :class="depositClash(r) ? 'border-amber-300 bg-amber-50 focus:ring-amber-100' : 'border-indigo-200 focus:border-indigo-400 focus:ring-indigo-100'"
+                                    />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-bold" :class="depositClash(r) ? 'text-slate-400' : 'text-indigo-700'">أو ٪</span>
+                                    <input
+                                        v-model.number="r.deposit_percent"
+                                        type="number" min="0" max="100" step="any" dir="ltr" placeholder="—"
+                                        class="w-20 rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+                                        :class="depositClash(r) ? 'border-amber-300 bg-amber-50 text-slate-400 focus:ring-amber-100' : 'border-indigo-200 focus:border-indigo-400 focus:ring-indigo-100'"
+                                    />
+                                </label>
+                            </div>
+
+                            <p v-if="depositClash(r)" class="text-[11px] font-bold text-amber-600">
+                                المبلغ الثابت يتقدّم على النسبة — امسح أحدهما ليكون العربون واضحًا.
+                            </p>
+
+                            <!-- أسعار أيام بعينها: استثناءٌ لا يحتاجه أكثر الوحدات، فيُطوى -->
+                            <div v-if="pricedByDay" class="rounded-lg border border-slate-200">
+                                <button
+                                    type="button" @click="dayGridOpen[rowKey(r)] = !dayGridOpen[rowKey(r)]"
+                                    class="flex w-full items-center gap-2 px-2.5 py-2 text-start"
+                                >
+                                    <ChevronDown class="h-3.5 w-3.5 shrink-0 text-slate-400 transition" :class="dayGridOpen[rowKey(r)] && 'rotate-180'" />
+                                    <span class="text-[11px] font-bold text-slate-600">أسعار أيام بعينها</span>
+                                    <span class="text-[11px] font-medium text-slate-400">
+                                        اليوم المتروك فارغًا يأخذ السعر الافتراضي أعلاه
+                                    </span>
+                                </button>
+
+                                <div v-if="dayGridOpen[rowKey(r)]" class="border-t border-slate-100 px-2.5 py-2.5">
+                                    <div class="mb-2 flex flex-wrap gap-1.5">
+                                        <button type="button" @click="spreadDefaultsToDays(r)" class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-600">
+                                            تعبئة من السعر الافتراضي
+                                        </button>
+                                        <button type="button" @click="clearDayPrices(r)" class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600 hover:border-red-300 hover:text-red-600">
+                                            تفريغ الأيام
+                                        </button>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                                        <label v-for="d in weekdays" :key="d.key" class="block">
+                                            <span class="mb-1 block text-[11px] font-bold" :class="d.is_weekend ? 'text-amber-600' : 'text-slate-500'">{{ d.label }}</span>
+                                            <input
+                                                v-model.number="r.day_prices[d.key]"
+                                                type="number" min="0" step="any" dir="ltr"
+                                                :placeholder="dayFallback(r, d.is_weekend)"
+                                                class="w-full rounded-lg border px-2.5 py-1.5 text-sm placeholder:text-slate-300 focus:outline-none focus:ring-2"
+                                                :class="d.is_weekend
+                                                    ? 'border-amber-200 bg-amber-50/40 focus:border-amber-400 focus:ring-amber-100'
+                                                    : 'border-slate-200 focus:border-emerald-400 focus:ring-emerald-100'"
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- القاعة: صفّان لكل فترة -->
-                        <table v-else class="w-full text-sm">
-                            <thead>
-                                <tr class="border-y border-slate-100 text-[11px] font-extrabold text-[#1e3a8a]">
-                                    <th class="px-3 py-2 text-start">الفترة</th>
-                                    <th class="px-3 py-2 text-start">أيام الأسبوع</th>
-                                    <th class="px-3 py-2 text-start">الجمعة والسبت</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="r in g.rows" :key="r.period" class="border-b border-slate-50 last:border-0">
-                                    <td class="px-3 py-2 font-bold text-slate-700">{{ periodLabel(r.period) }}</td>
-                                    <td class="px-3 py-2">
-                                        <input v-model.number="r.weekday_price" type="number" min="0" step="any" dir="ltr" placeholder="0" class="w-28 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
-                                    </td>
-                                    <td class="px-3 py-2">
-                                        <input v-model.number="r.weekend_price" type="number" min="0" step="any" dir="ltr" placeholder="0" class="w-28 rounded-lg border border-amber-200 bg-amber-50/40 px-2.5 py-1.5 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" />
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                            <button
+                                v-if="activeRows.length > 1"
+                                type="button" @click="spreadPeriodToOthers(r)"
+                                class="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-600"
+                            >
+                                تعميم هذه التسعيرة على بقية الفترات
+                            </button>
+                        </div>
                     </div>
 
-                    <p v-if="!priceGroups.length" class="rounded-xl bg-slate-50 py-4 text-center text-xs font-medium text-slate-500">
+                    <p v-if="!priceGroups.length" class="rounded-xl bg-white py-4 text-center text-xs font-medium text-slate-500">
                         لا يوجد ما يُسعَّر — أضف أقسامًا أو غيّر نمط الحجز.
                     </p>
                 </div>
 
-                <div class="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                    <button type="button" @click="showPrices = false" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">إغلاق</button>
-                    <button type="button" @click="submitPrices" :disabled="priceForm.processing || !priceGroups.length" class="rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">حفظ الأسعار</button>
+                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-6 py-4">
+                    <p v-if="blankCount" class="text-[11px] font-bold text-amber-600">
+                        {{ blankCount }} فترة مفعّلة بلا سعر — أطفئها أو أدخل سعرها، وإلا لن تُعرض في الحجز.
+                    </p>
+                    <span v-else></span>
+
+                    <div class="flex gap-2">
+                        <button type="button" @click="showPrices = false" class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">إغلاق</button>
+                        <button type="button" @click="submitPrices" :disabled="priceForm.processing || !priceGroups.length" class="rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">حفظ الأسعار</button>
+                    </div>
                 </div>
             </div>
         </div>

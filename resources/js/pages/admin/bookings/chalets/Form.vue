@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfToken } from '@/lib/csrf';
 import { toHijri, weekdayName } from '@/lib/hijri';
@@ -14,6 +15,8 @@ interface UnitOption {
     id: number; name: string; code: string; type: string;
     bookable_mode: 'whole' | 'sections' | 'both';
     privacy_mode: 'open' | 'exclusive';
+    /** Day periods this chalet is priced for — empty means stays only. */
+    day_use_periods: string[];
     sections: SectionOption[];
 }
 interface AddonOption { id: number; name: string; price: number; pricing: string }
@@ -27,6 +30,9 @@ interface ExistingBooking {
     section_ids: number[];
     booking_date: string;
     check_out_date: string | null;
+    /** 'overnight' is a stay; any other period is a day-use booking. */
+    period: string;
+    days_count: number | null;
     status: string;
     discount_amount: number;
     addons: Record<number, number>;
@@ -40,7 +46,9 @@ interface Quote {
     pricing: {
         base_amount: number; addons_amount: number; discount_amount: number;
         total_amount: number; deposit_amount: number; is_weekend: boolean;
-        nights: number; weekend_nights: number; average_night: number;
+        /** Stay quotes carry nights; day-use quotes carry days instead. */
+        nights?: number; weekend_nights?: number; average_night?: number;
+        days?: number;
         lines: QuoteLine[];
     } | null;
 }
@@ -57,13 +65,15 @@ const props = defineProps<{
     };
 }>();
 
+const { can } = usePermissions();
+
 const isEdit = computed(() => props.booking !== null);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
     { title: 'حجوزات الشاليهات', href: '/admin/bookings/chalets' },
     {
-        title: isEdit.value ? `تعديل ${props.booking?.reference}` : 'إقامة جديدة',
+        title: isEdit.value ? `تعديل ${props.booking?.reference}` : 'حجز جديد',
         href: isEdit.value ? `/admin/bookings/chalets/${props.booking?.id}/edit` : '/admin/bookings/chalets/create',
     },
 ]);
@@ -87,6 +97,9 @@ const nightsBetween = (checkIn: string, checkOut: string) => {
 
 const today = new Date().toISOString().slice(0, 10);
 
+/** The period value that means "an overnight stay" rather than day use. */
+const STAY = 'overnight';
+
 /**
  * أقدم تاريخ دخول يقبله الحقل — اليوم، فالشاليه لا يُحجز بأثر رجعي.
  * ويُستثنى حجز قائم مضى تاريخه ليبقى قابلًا للفتح والتصحيح.
@@ -108,11 +121,14 @@ const form = useForm({
     // booking_date هو تاريخ الدخول — سُمّي كذلك ليبقى عمودًا واحدًا في النوعين
     booking_date: props.booking?.booking_date ?? today,
     check_out_date: props.booking?.check_out_date ?? addDays(today, 1),
+    // A chalet is a stay unless a day period is chosen — the same column the
+    // server reads to decide which shape it is.
+    period: props.booking?.period ?? STAY,
+    days_count: props.booking?.days_count ?? 1,
     // الإقامة الجديدة مؤكدة افتراضيًا — و«مبدئي» يُختار من القائمة عند الحاجة.
     status: props.booking?.status ?? 'confirmed',
     addons: { ...(props.booking?.addons ?? {}) } as Record<number, number>,
     discount_amount: props.booking?.discount_amount ?? 0,
-    guests_count: props.booking?.guests_count ?? null as number | null,
     notes: props.booking?.notes ?? '',
 
     payment_amount: 0,
@@ -150,6 +166,43 @@ const overMaxNights = computed(() => nights.value > props.meta.stay.max_nights);
 const canBookWhole = computed(() => ['whole', 'both'].includes(selectedUnit.value?.bookable_mode ?? 'both'));
 const canBookSections = computed(() => ['sections', 'both'].includes(selectedUnit.value?.bookable_mode ?? 'both'));
 
+// ── إقامة بليالٍ أم حجز نهاري ───────────────────────────────
+
+const isStay = computed(() => form.period === STAY);
+
+/**
+ * Day periods the selected chalet may be sold for. Pricing is what opens a
+ * period, so a chalet nobody priced for day use offers none and the mode
+ * toggle stays hidden rather than leading to a refusal on save.
+ */
+const dayPeriods = computed(() => {
+    const allowed = selectedUnit.value?.day_use_periods ?? [];
+
+    return props.meta.periods.filter((p) => allowed.includes(p.key));
+});
+
+const canBookByDay = computed(() => dayPeriods.value.length > 0);
+
+const periodLabel = (key: string) => props.meta.periods.find((p) => p.key === key)?.label ?? key;
+
+/** عدد أيام الحجز النهاري — يوم واحد على الأقل. */
+const days = computed(() => Math.max(1, Number(form.days_count) || 1));
+
+const setMode = (stay: boolean) => {
+    if (stay) {
+        form.period = STAY;
+        // Restore a valid range: a day-use booking left check_out_date empty.
+        if (nightsBetween(form.booking_date, form.check_out_date ?? '') < 1) {
+            form.check_out_date = addDays(form.booking_date, 1);
+        }
+
+        return;
+    }
+
+    form.period = dayPeriods.value[0]?.key ?? STAY;
+    form.days_count = 1;
+};
+
 const hydrating = ref(true);
 
 onMounted(() => nextTick(() => (hydrating.value = false)));
@@ -159,6 +212,16 @@ watch(() => form.unit_id, () => {
 
     form.section_ids = [];
     form.scope = canBookWhole.value ? 'whole' : 'sections';
+});
+
+// A unit change can drop the period that was picked — fall back to a stay
+// rather than posting a period this chalet has no price for.
+watch(dayPeriods, (periods) => {
+    if (hydrating.value || isStay.value) return;
+
+    if (!periods.some((p) => p.key === form.period)) {
+        setMode(true);
+    }
 });
 
 // تاريخ الخروج يتبع الدخول: تقديم الدخول إلى ما بعد الخروج يترك مدى فارغًا
@@ -194,7 +257,11 @@ const toggleAddon = (id: number) => {
  */
 let timer: ReturnType<typeof setTimeout> | undefined;
 const refreshQuote = () => {
-    if (!form.unit_id || nights.value < 1 || (form.scope === 'sections' && !form.section_ids.length)) {
+    // A stay needs a night between its dates; a day-use booking only needs
+    // its period, which the date and days count already imply.
+    const rangeReady = isStay.value ? nights.value >= 1 : form.period !== STAY;
+
+    if (!form.unit_id || !rangeReady || (form.scope === 'sections' && !form.section_ids.length)) {
         quote.value = null;
 
         return;
@@ -217,7 +284,9 @@ const refreshQuote = () => {
                     scope: form.scope,
                     section_ids: form.section_ids,
                     booking_date: form.booking_date,
-                    check_out_date: form.check_out_date,
+                    period: form.period,
+                    check_out_date: isStay.value ? form.check_out_date : null,
+                    days_count: isStay.value ? null : days.value,
                     client_id: form.client_id,
                     addons: form.addons,
                     discount_amount: form.discount_amount,
@@ -232,7 +301,7 @@ const refreshQuote = () => {
 };
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.client_id, JSON.stringify(form.addons), form.discount_amount],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.client_id, JSON.stringify(form.addons), form.discount_amount],
     refreshQuote,
     { deep: true },
 );
@@ -265,7 +334,34 @@ const setPayChoice = (choice: 'none' | 'deposit' | 'full') => {
     form.payment_type = choice === 'deposit' ? 'deposit' : 'payment';
 };
 
+/**
+ * Errors whose field is on screen right now. Anything else is listed in the
+ * summary below the form — a hidden field failing validation used to leave
+ * the page looking as if the save button did nothing.
+ */
+const inlineErrorKeys = computed(() => [
+    'unit_id', 'client_id', 'booking_date', 'period', 'days_count',
+    'availability', 'payment_amount', 'discount_amount', 'notes',
+    ...(isStay.value ? ['check_out_date'] : []),
+]);
+
+const otherErrors = computed(() =>
+    Object.entries(form.errors)
+        .filter(([key]) => !inlineErrorKeys.value.includes(key))
+        .map(([, message]) => message as string),
+);
+
 const submit = () => {
+    // The two shapes carry different fields, and the one that does not apply
+    // is sent as null rather than left at whatever the hidden input still
+    // holds — a stale check-out date would otherwise fail a rule for a field
+    // the day-use form never renders.
+    form.transform((data) => ({
+        ...data,
+        check_out_date: isStay.value ? data.check_out_date : null,
+        days_count: isStay.value ? null : days.value,
+    }));
+
     isEdit.value
         ? form.put(`/admin/bookings/chalets/${props.booking?.id}`)
         : form.post('/admin/bookings/chalets');
@@ -273,14 +369,14 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="isEdit ? 'تعديل الإقامة' : 'إقامة جديدة'" />
+    <Head :title="isEdit ? 'تعديل الحجز' : 'حجز جديد'" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <form @submit.prevent="submit" class="min-h-full space-y-5 bg-slate-100 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">
-                        {{ isEdit ? `تعديل الإقامة ${booking?.reference}` : 'إقامة جديدة' }}
+                        {{ isEdit ? `تعديل الحجز ${booking?.reference}` : 'حجز جديد' }}
                     </h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">
                         إقامة بالليالي — دخول {{ meta.stay.check_in_time }} وخروج {{ meta.stay.check_out_time }}
@@ -326,14 +422,61 @@ const submit = () => {
                     <div class="rounded-2xl border-2 border-teal-100 bg-white p-5 shadow-sm">
                         <div class="mb-3 flex items-center justify-between gap-2">
                             <h2 class="flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
-                                <Moon class="h-4 w-4 text-teal-500" /> مدة الإقامة
+                                <Moon class="h-4 w-4 text-teal-500" /> {{ isStay ? 'مدة الإقامة' : 'فترة الحجز' }}
                             </h2>
                             <span class="rounded-lg bg-teal-600 px-3 py-1 text-sm font-extrabold text-white">
-                                {{ nights }} {{ nights === 1 ? 'ليلة' : 'ليالٍ' }}
+                                <template v-if="isStay">{{ nights }} {{ nights === 1 ? 'ليلة' : 'ليالٍ' }}</template>
+                                <template v-else>{{ periodLabel(form.period) }}{{ days > 1 ? ` × ${days}` : '' }}</template>
                             </span>
                         </div>
 
-                        <div class="grid gap-3 sm:grid-cols-2">
+                        <!-- نوع الحجز: لا يظهر إلا لشاليه مسعَّر بالفترات -->
+                        <div v-if="canBookByDay" class="mb-3 flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
+                            <button type="button" @click="setMode(true)"
+                                class="flex-1 rounded-lg px-3 py-1.5 text-xs font-extrabold transition"
+                                :class="isStay ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                            >إقامة بليالٍ</button>
+                            <button type="button" @click="setMode(false)"
+                                class="flex-1 rounded-lg px-3 py-1.5 text-xs font-extrabold transition"
+                                :class="!isStay ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                            >حجز بالفترة</button>
+                        </div>
+
+                        <!-- الحجز النهاري: تاريخ واحد وفترة، بلا تاريخ خروج -->
+                        <div v-if="!isStay" class="space-y-3">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
+                                        <LogIn class="h-3.5 w-3.5 text-emerald-500" /> التاريخ
+                                    </label>
+                                    <input v-model="form.booking_date" type="date" :min="minDate" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                                    <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
+                                        <span class="rounded bg-emerald-50 px-1.5 py-0.5">{{ checkInHijri }}</span>
+                                        <span class="text-slate-500">{{ checkInDay }}</span>
+                                    </p>
+                                    <p v-if="form.errors.booking_date" class="mt-1 text-xs text-red-500">{{ form.errors.booking_date }}</p>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold text-slate-700">عدد الأيام</label>
+                                    <input v-model.number="form.days_count" type="number" min="1" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                                    <p class="mt-1 text-[11px] font-medium text-slate-500">الفترة نفسها تتكرر في كل يوم، ويُسعَّر كل يوم بيومه.</p>
+                                    <p v-if="form.errors.days_count" class="mt-1 text-xs text-red-500">{{ form.errors.days_count }}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="mb-1.5 block text-xs font-bold text-slate-700">اختر الفترة</label>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button v-for="p in dayPeriods" :key="p.key" type="button" @click="form.period = p.key"
+                                        class="rounded-lg px-3 py-1.5 text-xs font-bold transition"
+                                        :class="form.period === p.key ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                    >{{ p.label }} <span class="text-[10px] opacity-70" dir="ltr">{{ p.start }}–{{ p.end }}</span></button>
+                                </div>
+                                <p v-if="form.errors.period" class="mt-1 text-xs text-red-500">{{ form.errors.period }}</p>
+                            </div>
+                        </div>
+
+                        <div v-else class="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
                                     <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول ({{ meta.stay.check_in_time }})
@@ -359,7 +502,7 @@ const submit = () => {
                         </div>
 
                         <!-- مدد سريعة: أغلب الإقامات ليلة أو ليلتان أو نهاية أسبوع -->
-                        <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                        <div v-if="isStay" class="mt-3 flex flex-wrap items-center gap-1.5">
                             <span class="text-[11px] font-bold text-slate-500">مدد سريعة:</span>
                             <button v-for="n in [1, 2, 3, 7]" :key="n" type="button" @click="setNights(n)"
                                 class="rounded-lg px-2.5 py-1 text-[11px] font-bold transition"
@@ -367,7 +510,7 @@ const submit = () => {
                             >{{ n }} {{ n === 1 ? 'ليلة' : 'ليالٍ' }}</button>
                         </div>
 
-                        <p v-if="overMaxNights" class="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600">
+                        <p v-if="isStay && overMaxNights" class="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600">
                             أقصى مدة إقامة {{ meta.stay.max_nights }} ليلة، والمطلوب {{ nights }}.
                         </p>
                     </div>
@@ -390,10 +533,7 @@ const submit = () => {
                         </div>
 
                         <div v-if="form.scope === 'sections'" class="mt-2">
-                            <div class="mb-1 flex items-center gap-2 text-[11px] font-bold text-slate-600">
-                                <span>اختر الأقسام</span>
-                                <span v-if="selectedUnit.privacy_mode === 'exclusive'" class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">خصوصية مغلقة</span>
-                            </div>
+                            <div class="mb-1 text-[11px] font-bold text-slate-600">اختر الأقسام</div>
                             <div class="flex flex-wrap gap-1.5">
                                 <button
                                     v-for="s in selectedUnit.sections"
@@ -410,7 +550,12 @@ const submit = () => {
 
                     <!-- الخدمات الإضافية -->
                     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 class="mb-3 text-sm font-extrabold text-slate-800">الخدمات الإضافية</h2>
+                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <h2 class="text-sm font-extrabold text-slate-800">الخدمات الإضافية</h2>
+                            <Link v-if="can('addons.view')" href="/admin/addons" class="text-[11px] font-bold text-blue-600 hover:underline">
+                                إدارة الخدمات وأسعارها
+                            </Link>
+                        </div>
                         <div class="space-y-1.5">
                             <div v-for="a in addons" :key="a.id" class="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
                                 <input type="checkbox" :checked="!!form.addons[a.id]" @change="toggleAddon(a.id)" class="h-4 w-4 rounded border-slate-300 text-teal-600" />
@@ -422,11 +567,7 @@ const submit = () => {
                     </div>
 
                     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div class="grid gap-3 sm:grid-cols-3">
-                            <div>
-                                <label class="mb-1 block text-sm font-bold text-slate-700">عدد النزلاء</label>
-                                <input v-model.number="form.guests_count" type="number" min="1" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-                            </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="mb-1 block text-sm font-bold text-slate-700">الخصم</label>
                                 <input v-model.number="form.discount_amount" type="number" min="0" step="0.01" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
@@ -459,13 +600,13 @@ const submit = () => {
 
                     <div v-else-if="quote" class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-3">
                         <div class="flex items-center gap-2 text-sm font-extrabold text-emerald-700">
-                            <CheckCircle2 class="h-4 w-4" /> الليالي متاحة
+                            <CheckCircle2 class="h-4 w-4" /> {{ isStay ? 'الليالي متاحة' : 'الفترة متاحة' }}
                         </div>
                     </div>
 
                     <div v-if="pricing" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <!-- ملخّص الليالي: السعر مجموع ليالٍ، ومتوسط الليلة هو ما يفاوض عليه العميل -->
-                        <div class="mb-2 grid grid-cols-2 gap-2">
+                        <div v-if="isStay" class="mb-2 grid grid-cols-2 gap-2">
                             <div class="rounded-xl bg-teal-50 p-2 text-center">
                                 <div class="text-[10px] font-bold text-teal-600">الليالي</div>
                                 <div class="text-base font-extrabold text-teal-700">{{ pricing.nights }}</div>
@@ -476,9 +617,24 @@ const submit = () => {
                             </div>
                         </div>
 
+                        <!-- الحجز النهاري يُقاس بالفترة والأيام لا بالليالي -->
+                        <div v-else class="mb-2 grid grid-cols-2 gap-2">
+                            <div class="rounded-xl bg-teal-50 p-2 text-center">
+                                <div class="text-[10px] font-bold text-teal-600">الفترة</div>
+                                <div class="text-base font-extrabold text-teal-700">{{ periodLabel(form.period) }}</div>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 p-2 text-center">
+                                <div class="text-[10px] font-bold text-slate-500">الأيام</div>
+                                <div class="text-base font-extrabold text-slate-700">{{ pricing.days ?? days }}</div>
+                            </div>
+                        </div>
+
                         <div class="mb-2 flex flex-wrap gap-1">
-                            <span v-if="pricing.weekend_nights > 0" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                            <span v-if="isStay && pricing.weekend_nights > 0" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
                                 {{ pricing.weekend_nights }} ليلة نهاية أسبوع
+                            </span>
+                            <span v-else-if="!isStay && pricing.is_weekend" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                                يشمل نهاية الأسبوع
                             </span>
                         </div>
 
@@ -566,10 +722,15 @@ const submit = () => {
 
                     <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <p v-if="blocked" class="mb-2 text-xs font-bold text-red-600">لا يمكن الحفظ ما دام الشاليه غير متاح</p>
-                        <p v-else-if="nights < 1" class="mb-2 text-xs font-bold text-amber-600">مدة الإقامة ليلة واحدة على الأقل</p>
+                        <p v-else-if="isStay && nights < 1" class="mb-2 text-xs font-bold text-amber-600">مدة الإقامة ليلة واحدة على الأقل</p>
+
+                        <!-- خطأ لا يقابله حقل ظاهر — حتى لا يبدو الحفظ بلا أثر -->
+                        <ul v-if="otherErrors.length" class="mb-2 space-y-1 rounded-lg bg-red-50 px-3 py-2">
+                            <li v-for="(msg, i) in otherErrors" :key="i" class="text-[11px] font-bold text-red-600">{{ msg }}</li>
+                        </ul>
                         <div class="flex gap-2">
-                            <button type="submit" :disabled="form.processing || blocked || nights < 1 || overMaxNights" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
-                                {{ isEdit ? 'حفظ التعديل' : 'حفظ الإقامة' }}
+                            <button type="submit" :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights))" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
+                                {{ isEdit ? 'حفظ التعديل' : isStay ? 'حفظ الإقامة' : 'حفظ الحجز' }}
                             </button>
                             <Link href="/admin/bookings/chalets" class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">
                                 إلغاء

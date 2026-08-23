@@ -9,6 +9,7 @@ import {
     CalculatorIcon,
     CalendarDays,
     CalendarRange,
+    ConciergeBell,
     Contact,
     CreditCard,
     DatabaseBackup,
@@ -216,6 +217,9 @@ export function useNavigation() {
                 { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
                 { title: t('nav.departments'), href: '/admin/departments', icon: Building2, perm: 'departments.view' },
                 { title: t('nav.cities'), href: '/admin/cities', icon: MapPin, perm: 'cities.view' },
+                // Shared by both booking forms, so it sits with the common
+                // catalogues rather than under halls or chalets.
+                { title: t('nav.addons'), href: '/admin/addons', icon: ConciergeBell, perm: 'addons.view' },
             ],
         },
         // شاشاتٌ مساندة لا تخدم العمل اليومي: تُفتح عند الحاجة لا كل يوم،

@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\PaymentMethod;
+use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingAvailability;
@@ -38,6 +39,14 @@ abstract class BaseBookingsController extends Controller
         protected readonly BookingService $bookings,
         protected readonly WhatsappNotifier $whatsapp,
     ) {}
+
+    /**
+     * Payment-method columns for the bookings register — read once per request
+     * rather than once per row, since a page presents twenty bookings.
+     *
+     * @var list<array{id: int, code: string, label: string, is_credit: bool}>|null
+     */
+    private ?array $methodColumns = null;
 
     /**
      * نوع الوحدات التي تخدمها الشاشة: hall أو chalet.
@@ -219,6 +228,7 @@ abstract class BaseBookingsController extends Controller
             'booking_date' => $b->booking_date->toDateString(),
             'check_out_date' => $b->check_out_date?->toDateString(),
             'nights' => $b->nights,
+            'days_count' => $b->days_count,
             'starts_at' => $b->starts_at->toDateTimeString(),
             'ends_at' => $b->ends_at->toDateTimeString(),
             'status' => $b->status,
@@ -244,6 +254,88 @@ abstract class BaseBookingsController extends Controller
     }
 
     /**
+     * @return list<array{id: int, code: string, label: string, is_credit: bool}>
+     */
+    protected function methodColumns(): array
+    {
+        return $this->methodColumns ??= PaymentMethod::options();
+    }
+
+    /**
+     * معرّفات الطرق بترتيب أعمدتها.
+     *
+     * @return list<int>
+     */
+    protected function methodIds(): array
+    {
+        return array_column($this->methodColumns(), 'id');
+    }
+
+    /**
+     * أعمدة المال في السجل: من مبلغ الحجز إلى المسترجع.
+     *
+     * تُقرأ الصفوف أفقيًا كدفتر — مبلغ الحجز ناقصًا الخصم يبلغ الإجمالي،
+     * ومنه يُطرح المدفوع فيبقى المتبقي — فيُراجَع الصف بلا فتح لوحة الدفعات.
+     *
+     * Shared by both screens: a chalet simply carries no package or event fee,
+     * so those terms fall to zero rather than needing a ledger of their own.
+     *
+     * @return array<string, mixed>
+     */
+    protected function ledger(Booking $b): array
+    {
+        // مبلغ الحجز قبل الخصم: مجموع ما بيع فعلًا — القاعة والباقة
+        // والخدمات. والإجمالي المخزّن هو هذا ناقصًا الخصم.
+        $subtotal = round(
+            (float) $b->base_amount + (float) $b->package_amount
+            + (float) $b->event_fee_amount + (float) $b->addons_amount,
+            2,
+        );
+
+        $payments = $b->relationLoaded('payments') ? $b->payments : collect();
+
+        $paidByMethod = [];
+
+        foreach ($this->methodIds() as $methodId) {
+            $paidByMethod[$methodId] = round(
+                (float) $payments->where('type', '!=', 'refund')->where('payment_method_id', $methodId)->sum('amount'),
+                2,
+            );
+        }
+
+        $total = (float) $b->total_amount;
+
+        return [
+            'subtotal_amount' => $subtotal,
+            'discount_amount' => (float) $b->discount_amount,
+            'addons_amount' => (float) $b->addons_amount,
+            'tax_amount' => $this->taxPortion($total),
+            'paid_by_method' => $paidByMethod,
+            'refunded_amount' => round((float) $payments->where('type', 'refund')->sum('amount'), 2),
+            'payment_status' => match (true) {
+                $b->isFullyPaid() => 'مسدّدة',
+                (float) $b->paid_amount > 0 => 'مسدّدة جزئيًا',
+                default => 'غير مسدّدة',
+            },
+        ];
+    }
+
+    /**
+     * حصة الضريبة من إجمالي الحجز — مستخرجةً منه شاملًا لا مضافةً فوقه،
+     * كما تُحرَّر فاتورة الحجز. وبلا تسجيل ضريبي لا ضريبة على الصف.
+     */
+    protected function taxPortion(float $total): float
+    {
+        $settings = Setting::current();
+
+        if (! $settings->tax_enabled || blank($settings->tax_number) || (float) $settings->tax_rate <= 0) {
+            return 0.0;
+        }
+
+        return round($total - round($total / (1 + (float) $settings->tax_rate / 100), 2), 2);
+    }
+
+    /**
      * وحدات هذا النوع التي يصل إليها المستخدم.
      *
      * @return Collection<int, array<string, mixed>>
@@ -253,7 +345,7 @@ abstract class BaseBookingsController extends Controller
         return Unit::visibleTo($user)
             ->where('is_active', true)
             ->where('type', $this->unitType())
-            ->with('sections:id,unit_id,name,gender')
+            ->with(['sections:id,unit_id,name,gender', 'prices'])
             ->orderBy('sort_order')
             ->get()
             ->map(fn (Unit $u) => [
@@ -263,6 +355,10 @@ abstract class BaseBookingsController extends Controller
                 'type' => $u->type,
                 'bookable_mode' => $u->bookable_mode,
                 'privacy_mode' => $u->privacy_mode,
+                // Which day periods this unit may be booked for. A hall is
+                // always sold by period; a chalet only offers the ones that
+                // have been priced, and is a stay otherwise.
+                'day_use_periods' => $u->dayUsePeriods(),
                 'sections' => $u->sections->map(fn ($s) => [
                     'id' => $s->id, 'name' => $s->name, 'gender' => $s->gender,
                 ])->values(),

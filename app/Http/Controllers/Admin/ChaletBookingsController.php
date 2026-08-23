@@ -10,6 +10,7 @@ use App\Services\BookingPricing;
 use App\Services\BookingService;
 use App\Services\ChaletBookingService;
 use App\Services\WhatsappNotifier;
+use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -20,10 +21,13 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * حجوزات الشاليهات — إقامة ممتدة بتاريخ دخول وتاريخ خروج.
+ * حجوزات الشاليهات.
  *
- * ما يميّز هذه الشاشة عن شاشة القاعات: لا فترة تُختار ولا باقة ولا نوع
- * مناسبة؛ بل ليالٍ تُحسب بين تاريخين، وسعرٌ يُجمع ليلةً ليلة.
+ * A chalet is sold either as a stay — nights between a check-in and a
+ * check-out date, priced night by night — or, where the period has been
+ * priced, for a morning, an evening or a full day the way a hall is.
+ *
+ * ما يميّز هذه الشاشة عن شاشة القاعات: لا باقة ولا نوع مناسبة.
  */
 class ChaletBookingsController extends BaseBookingsController
 {
@@ -42,9 +46,37 @@ class ChaletBookingsController extends BaseBookingsController
         return 'chalet';
     }
 
+    /**
+     * No narrowing by period here. filteredQuery() already restricts the list
+     * to chalets, and a chalet holds both shapes — filtering on stays() as
+     * well would hide every day-use booking from its own screen while the
+     * halls screen excludes it by unit type, leaving it visible nowhere.
+     */
     protected function scopeToType(Builder $query): Builder
     {
-        return $query->stays();
+        return $query;
+    }
+
+    protected function extraRelations(): array
+    {
+        // Payments ride along with the row so the preview can show what was
+        // taken by which method — working it out per booking would open a
+        // query per line.
+        return ['payments:id,booking_id,type,payment_method_id,amount'];
+    }
+
+    /**
+     * The stay row carries the same money ledger as an event row: a chalet has
+     * no package or event fee, so those terms are simply zero.
+     *
+     * @return array<string, mixed>
+     */
+    protected function present(Booking $b): array
+    {
+        return [
+            ...parent::present($b),
+            ...$this->ledger($b),
+        ];
     }
 
     public function index(Request $request): Response
@@ -151,15 +183,30 @@ class ChaletBookingsController extends BaseBookingsController
             'section_ids' => ['array'],
             'section_ids.*' => ['integer', 'exists:unit_sections,id'],
             'booking_date' => ['required', 'date'],
-            'check_out_date' => ['required', 'date', 'after:booking_date'],
+            'period' => ['nullable', Rule::in(StayPeriod::pricingKeys())],
+            // Dropped outright for a day-use booking rather than merely made
+            // optional: the form keeps a check-out date in state while the
+            // field is hidden, and validating one nothing reads would fail the
+            // save against an input the day-use form never shows.
+            'check_out_date' => [
+                $this->excludeUnlessStay($request),
+                'required', 'date', 'after:booking_date',
+            ],
+            'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
             'client_id' => ['nullable', 'exists:clients,id'],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'ignore_booking_id' => ['nullable', 'integer'],
         ]);
 
-        $unit = Unit::with('sections')->findOrFail($data['unit_id']);
+        $unit = Unit::with(['sections', 'prices'])->findOrFail($data['unit_id']);
         $sectionIds = $data['scope'] === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
+        $period = $data['period'] ?? StayPeriod::PERIOD;
+
+        if ($period !== StayPeriod::PERIOD) {
+            return $this->dayUseQuote($unit, $data, $period, $sectionIds);
+        }
+
         $nights = StayPeriod::nights($data['booking_date'], $data['check_out_date']);
 
         // السقف يُفحص هنا أيضًا لا في الحفظ وحده، حتى ترى الواجهة السبب
@@ -199,6 +246,66 @@ class ChaletBookingsController extends BaseBookingsController
     }
 
     /**
+     * Availability and price for a chalet sold by the day rather than the
+     * night. Refuses an unpriced period here as well as on save, so the form
+     * says why before the rest of it is filled in.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<int>  $sectionIds
+     */
+    private function dayUseQuote(Unit $unit, array $data, string $period, array $sectionIds): JsonResponse
+    {
+        if (! in_array($period, $unit->dayUsePeriods(), true)) {
+            return response()->json([
+                'availability' => [
+                    'ok' => false,
+                    'reason' => 'هذه الفترة غير مسعَّرة لهذا الشاليه — أضف سعرها من شاشة الأسعار أولًا.',
+                    'conflicts' => [],
+                ],
+                'pricing' => null,
+            ]);
+        }
+
+        $days = BookingPeriod::days((int) ($data['days_count'] ?? 1));
+        [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $period, $days);
+
+        return response()->json([
+            'availability' => $this->availability->checkRange(
+                $unit,
+                $data['scope'],
+                $startsAt,
+                $endsAt,
+                $sectionIds,
+                isset($data['client_id']) ? (int) $data['client_id'] : null,
+                $data['ignore_booking_id'] ?? null,
+            ),
+            'pricing' => $this->pricing->quote(
+                $unit,
+                $data['scope'],
+                $data['booking_date'],
+                $period,
+                $sectionIds,
+                $data['addons'] ?? [],
+                (float) ($data['discount_amount'] ?? 0),
+                null,
+                null,
+                $days,
+            ),
+        ]);
+    }
+
+    /**
+     * Drops the field unless this request is an overnight stay, so a day-use
+     * booking neither validates nor keeps a check-out date.
+     */
+    private function excludeUnlessStay(Request $request): \Illuminate\Validation\Rules\ExcludeIf
+    {
+        return Rule::excludeIf(
+            fn () => ($request->input('period') ?? StayPeriod::PERIOD) !== StayPeriod::PERIOD,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function validated(Request $request): array
@@ -212,7 +319,17 @@ class ChaletBookingsController extends BaseBookingsController
             // booking_date هو تاريخ الدخول؛ سُمّي كذلك ليبقى عمودًا واحدًا
             // يفهمه التقويم والتقارير في النوعين.
             'booking_date' => ['required', 'date'],
-            'check_out_date' => ['required', 'date', 'after:booking_date'],
+            // A chalet is a stay by default. A day-use booking names one of
+            // the day periods instead, and then carries days_count rather
+            // than a check-out date — see ChaletBookingService::plan().
+            'period' => ['nullable', Rule::in(StayPeriod::pricingKeys())],
+            // See the note in quote(): a day-use booking has no check-out
+            // date, so a leftover one is dropped instead of validated.
+            'check_out_date' => [
+                $this->excludeUnlessStay($request),
+                'required', 'date', 'after:booking_date',
+            ],
+            'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],

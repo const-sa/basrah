@@ -36,14 +36,21 @@ class ChaletCalendarController extends BaseCalendarController
         $bookings = Booking::query()
             ->visibleTo($request->user())
             ->blocking()
-            ->stays()
+            // Not narrowed to stays(): whereIn on chalet units already scopes
+            // this, and a day-use chalet booking occupies the unit just as a
+            // stay does — hiding it would show those days as free.
             ->whereIn('unit_id', $units->modelKeys())
             ->with(['client:id,name', 'sections:id,name'])
             // الإقامة تدخل الشهر إن تقاطعت معه، لا إن بدأت فيه: إقامة تبدأ
             // في الشهر الماضي وتنتهي في هذا الشهر تشغل ليالي هذا الشهر فعلًا.
             ->where('booking_date', '<=', $end->toDateString())
             ->where(function ($q) use ($start) {
-                $q->whereNull('check_out_date')->orWhere('check_out_date', '>', $start->toDateString());
+                // A day-use booking stores no check-out date, so its tail is
+                // read from ends_at instead — without this it would match
+                // every month rather than the one it falls in.
+                $q->where('check_out_date', '>', $start->toDateString())
+                    ->orWhere(fn ($sub) => $sub->whereNull('check_out_date')
+                        ->where('ends_at', '>=', $start->startOfDay()));
             })
             ->when($request->integer('unit_id'), fn ($q, $id) => $q->where('unit_id', $id))
             ->orderBy('booking_date')
@@ -76,14 +83,23 @@ class ChaletCalendarController extends BaseCalendarController
         $checkIn = CarbonImmutable::parse($b->booking_date->toDateString())->startOfDay();
         $checkOut = CarbonImmutable::parse($b->checkOutDate())->startOfDay();
 
+        /*
+         * The last day the booking actually holds the chalet.
+         *
+         * A stay is released on the morning of its check-out date, so its
+         * last occupied night is the day before. A day-use booking holds its
+         * own days instead — and deriving that from ends_at would be wrong
+         * for a morning period, which closes at 17:00 the same day and would
+         * come out as the day *before* it starts.
+         */
+        $lastDay = $b->isStay()
+            ? $checkOut->subDay()
+            : CarbonImmutable::parse($b->lastDayDate())->startOfDay();
+
         // أول ليلة مرئية وآخر ليلة مرئية، محصورتان داخل الشهر.
         $firstNight = $checkIn->lt($monthStart) ? $monthStart : $checkIn;
-        $lastNight = $checkOut->subDay();
         $monthEnd = $monthStart->addDays($daysInMonth - 1);
-
-        if ($lastNight->gt($monthEnd)) {
-            $lastNight = $monthEnd;
-        }
+        $lastNight = $lastDay->gt($monthEnd) ? $monthEnd : $lastDay;
 
         if ($lastNight->lt($firstNight)) {
             return null;
@@ -100,14 +116,15 @@ class ChaletCalendarController extends BaseCalendarController
             'section_names' => $b->sections->pluck('name')->all(),
             'client_name' => $b->client?->name,
             'check_in' => $checkIn->toDateString(),
-            'check_out' => $checkOut->toDateString(),
+            // A day-use booking has no check-out; report the last day it holds.
+            'check_out' => $b->isStay() ? $checkOut->toDateString() : $lastDay->toDateString(),
             'nights' => $b->nightsCount(),
             'schedule_label' => $b->scheduleLabel(),
             // موضع الشريط في الشبكة — الواجهة ترسم لا تحسب.
             'start_index' => $startIndex,
             'span' => (int) $firstNight->diffInDays($lastNight) + 1,
             'continues_before' => $checkIn->lt($monthStart),
-            'continues_after' => $checkOut->subDay()->gt($monthEnd),
+            'continues_after' => $lastDay->gt($monthEnd),
             'status' => $b->status,
             'status_label' => $b->statusLabel(),
             'color' => Booking::STATUS_COLORS[$b->status] ?? 'slate',

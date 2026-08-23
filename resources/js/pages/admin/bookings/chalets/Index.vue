@@ -4,9 +4,10 @@ import PageShortcuts from '@/components/PageShortcuts.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
+import { toHijri } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Bell, CalendarClock, Check, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-vue-next';
+import { Bell, CalendarClock, Check, Eye, FileSignature, FileText, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Receipt, Search, Trash2, Wallet, X } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 interface SectionOption {
@@ -49,6 +50,17 @@ interface Booking {
     is_deposit_settled: boolean;
     guests_count: number | null;
     notes: string | null;
+    /** The contract issued from this stay, if one was generated. */
+    contract: { id: number; number: string } | null;
+    has_payments: boolean;
+    subtotal_amount: number;
+    discount_amount: number;
+    addons_amount: number;
+    tax_amount: number;
+    refunded_amount: number;
+    payment_status: string;
+    /** {payment method id: amount taken by it} */
+    paid_by_method: Record<number, number>;
 }
 
 interface Payment {
@@ -197,6 +209,25 @@ const destroy = (b: Booking) => {
 };
 
 const colorClass = statusChipClass;
+
+const payStatusClass = (status: string) =>
+    ({
+        مسدّدة: 'bg-emerald-100 text-emerald-800',
+        'مسدّدة جزئيًا': 'bg-amber-100 text-amber-800',
+        'غير مسدّدة': 'bg-red-100 text-red-800',
+    })[status] ?? 'bg-slate-200 text-slate-800';
+
+// Preview stands in for the columns the table has no room for.
+const previewBooking = ref<Booking | null>(null);
+
+const openPreview = (b: Booking) => (previewBooking.value = b);
+
+/** Contracts are generated from the booking itself, whatever its unit type. */
+const generateContract = (b: Booking) => {
+    if (confirm(`توليد عقد للحجز ${b.reference}؟`)) {
+        router.post('/admin/contracts', { booking_id: b.id }, { preserveScroll: true });
+    }
+};
 </script>
 
 <template>
@@ -219,7 +250,7 @@ const colorClass = statusChipClass;
                         href="/admin/bookings/chalets/create"
                         class="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-700"
                     >
-                        <Plus class="h-4 w-4" /> إقامة جديدة
+                        <Plus class="h-4 w-4" /> حجز جديد
                     </Link>
                 </div>
             </div>
@@ -348,12 +379,47 @@ const colorClass = statusChipClass;
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center justify-center gap-1">
+                                        <!-- المعاينة أولى الأزرار: هي بديل الأعمدة المخفيّة -->
+                                        <TableActionButton variant="view" :icon="Eye" title="معاينة كل التفاصيل" @click="openPreview(b)" />
+
                                         <TableActionButton
                                             v-if="can('chalet_bookings.edit')"
                                             variant="primary"
                                             :icon="Wallet"
                                             title="الدفعات والعربون"
                                             @click="openPayments(b)"
+                                        />
+
+                                        <!-- السند لا يُحرَّر على حجز لم يُقبض منه شيء -->
+                                        <TableActionButton
+                                            v-if="b.has_payments"
+                                            variant="dark"
+                                            :icon="Receipt"
+                                            title="السند"
+                                            @click="router.visit(`/admin/bookings/${b.id}/bond`)"
+                                        />
+
+                                        <!-- الفاتورة تُحرَّر على الحجز نفسه، فتصلح قبل القبض وبعده -->
+                                        <TableActionButton
+                                            variant="success"
+                                            :icon="FileText"
+                                            title="الفاتورة"
+                                            @click="router.visit(`/admin/bookings/${b.id}/invoice`)"
+                                        />
+
+                                        <TableActionButton
+                                            v-if="b.contract"
+                                            variant="danger"
+                                            :icon="FileSignature"
+                                            :title="`العقد ${b.contract.number}`"
+                                            @click="router.visit(`/admin/contracts/${b.contract.id}`)"
+                                        />
+                                        <TableActionButton
+                                            v-else-if="can('contracts.create')"
+                                            variant="muted"
+                                            :icon="FileSignature"
+                                            title="توليد العقد"
+                                            @click="generateContract(b)"
                                         />
                                         <TableActionButton
                                             v-if="can('whatsapp.send') && b.client?.mobile && !isClosedStatus(b.status)"
@@ -445,6 +511,198 @@ const colorClass = statusChipClass;
                         ]"
                         v-html="l.label"
                     />
+                </div>
+            </div>
+        </div>
+
+        <!-- معاينة الإقامة — بديل الأعمدة التي لا يتّسع لها الجدول -->
+        <div v-if="previewBooking" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="previewBooking = null">
+            <div class="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h2 class="text-lg font-extrabold text-slate-900" dir="ltr">{{ previewBooking.reference }}</h2>
+                            <span class="rounded-md px-2 py-0.5 text-xs font-bold" :class="colorClass(previewBooking.status_color)">
+                                {{ previewBooking.status_label }}
+                            </span>
+                            <span class="rounded-md px-2 py-0.5 text-xs font-bold" :class="payStatusClass(previewBooking.payment_status)">
+                                {{ previewBooking.payment_status }}
+                            </span>
+                        </div>
+                        <p class="mt-1 text-xs font-bold text-slate-600">
+                            {{ previewBooking.unit.name }} · {{ previewBooking.client?.name ?? 'بلا نزيل' }}
+                        </p>
+                    </div>
+                    <button type="button" @click="previewBooking = null" class="rounded-lg p-1 text-slate-600 hover:bg-slate-100">
+                        <X class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+                    <section>
+                        <h3 class="mb-2 text-xs font-extrabold text-slate-500">النزيل</h3>
+                        <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الاسم</dt>
+                                <dd class="font-extrabold text-slate-900">{{ previewBooking.client?.name ?? '—' }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الجوال</dt>
+                                <dd class="font-bold text-slate-900" dir="ltr">{{ previewBooking.client?.mobile ?? '—' }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">عدد النزلاء</dt>
+                                <dd class="font-bold text-slate-900">{{ previewBooking.guests_count ?? '—' }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">العقد</dt>
+                                <dd class="font-bold text-slate-900" dir="ltr">{{ previewBooking.contract?.number ?? '—' }}</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section>
+                        <h3 class="mb-2 text-xs font-extrabold text-slate-500">الإقامة</h3>
+                        <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الشاليه</dt>
+                                <dd class="font-extrabold text-slate-900">
+                                    {{ previewBooking.unit.name }} <span class="text-slate-600" dir="ltr">({{ previewBooking.unit.code }})</span>
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">النطاق</dt>
+                                <dd class="font-bold text-slate-900">
+                                    {{ previewBooking.scope === 'whole' ? 'الوحدة كاملة' : previewBooking.sections.join('، ') }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الدخول</dt>
+                                <dd class="text-left">
+                                    <div class="font-bold text-slate-900" dir="ltr">{{ previewBooking.booking_date }}</div>
+                                    <div class="text-xs font-bold text-emerald-800">{{ toHijri(previewBooking.booking_date) }}</div>
+                                </dd>
+                            </div>
+                            <div v-if="previewBooking.check_out_date" class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الخروج</dt>
+                                <dd class="text-left">
+                                    <div class="font-bold text-slate-900" dir="ltr">{{ previewBooking.check_out_date }}</div>
+                                    <div class="text-xs font-bold text-emerald-800">{{ toHijri(previewBooking.check_out_date) }}</div>
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">المدة</dt>
+                                <dd class="font-bold text-slate-900">{{ previewBooking.nights ?? '—' }} ليلة</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">التوقيت</dt>
+                                <dd class="font-bold text-slate-900">{{ previewBooking.schedule_label }}</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section>
+                        <h3 class="mb-2 text-xs font-extrabold text-slate-500">المال</h3>
+                        <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">مبلغ الإقامة</dt>
+                                <dd class="font-bold text-slate-900" dir="ltr">{{ money(previewBooking.subtotal_amount) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الخدمات الإضافية</dt>
+                                <dd class="font-bold text-slate-900" dir="ltr">{{ money(previewBooking.addons_amount) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الخصم</dt>
+                                <dd class="font-bold text-amber-800" dir="ltr">{{ money(previewBooking.discount_amount) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">العربون</dt>
+                                <dd class="font-bold" :class="previewBooking.is_deposit_settled ? 'text-slate-900' : 'text-amber-800'" dir="ltr">
+                                    {{ money(previewBooking.deposit_amount) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الضريبة</dt>
+                                <dd class="font-bold text-slate-900" dir="ltr">{{ money(previewBooking.tax_amount) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">الإجمالي</dt>
+                                <dd class="font-extrabold text-slate-900" dir="ltr">{{ money(previewBooking.total_amount) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">المدفوع</dt>
+                                <dd class="font-extrabold text-emerald-800" dir="ltr">{{ money(previewBooking.paid_amount) }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">المتبقي</dt>
+                                <dd
+                                    class="font-extrabold"
+                                    :class="previewBooking.remaining_amount > 0 ? 'text-red-700' : 'text-emerald-800'"
+                                    dir="ltr"
+                                >
+                                    {{ money(previewBooking.remaining_amount) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                <dt class="font-bold text-slate-600">المسترجع</dt>
+                                <dd class="font-bold" :class="previewBooking.refunded_amount > 0 ? 'text-red-700' : 'text-slate-600'" dir="ltr">
+                                    {{ money(previewBooking.refunded_amount) }}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <!-- المقبوض موزّعًا على طرقه — يقرأ الموظف منه ما دخل الصندوق وما دخل البنك -->
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            <span
+                                v-for="m in meta.payment_methods" :key="m.id"
+                                class="rounded-md px-2 py-0.5 text-[11px] font-bold"
+                                :class="previewBooking.paid_by_method[m.id] > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'"
+                            >
+                                {{ m.label }}: <span dir="ltr">{{ money(previewBooking.paid_by_method[m.id] ?? 0) }}</span>
+                            </span>
+                        </div>
+                    </section>
+
+                    <section v-if="previewBooking.notes">
+                        <h3 class="mb-2 text-xs font-extrabold text-slate-500">الملاحظات</h3>
+                        <p class="whitespace-pre-wrap rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                            {{ previewBooking.notes }}
+                        </p>
+                    </section>
+                </div>
+
+                <!-- مستندات الإقامة — تُفتح من المعاينة مباشرة -->
+                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
+                    <div class="flex flex-wrap gap-2">
+                        <Link
+                            :href="`/admin/bookings/${previewBooking.id}/invoice`"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+                        >
+                            <FileText class="h-4 w-4" /> الفاتورة
+                        </Link>
+                        <Link
+                            v-if="previewBooking.has_payments"
+                            :href="`/admin/bookings/${previewBooking.id}/bond`"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-sm font-bold text-white hover:bg-slate-900"
+                        >
+                            <Receipt class="h-4 w-4" /> السند
+                        </Link>
+                        <Link
+                            v-if="previewBooking.contract"
+                            :href="`/admin/contracts/${previewBooking.contract.id}`"
+                            class="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-sm font-bold text-white hover:bg-red-700"
+                        >
+                            <FileSignature class="h-4 w-4" /> العقد
+                        </Link>
+                    </div>
+                    <Link
+                        v-if="can('chalet_bookings.edit')"
+                        :href="`/admin/bookings/chalets/${previewBooking.id}/edit`"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-100"
+                    >
+                        <Pencil class="h-4 w-4" /> تعديل الإقامة
+                    </Link>
                 </div>
             </div>
         </div>

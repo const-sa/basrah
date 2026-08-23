@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\BookingPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -74,7 +75,35 @@ class Unit extends Model
     }
 
     /**
+     * Day periods this unit may actually be booked for.
+     *
+     * Pricing is what turns a period on. A chalet is sold as an overnight
+     * stay by default; it only becomes bookable for a morning, an evening or
+     * a full day once someone prices that period from the pricing screen. So
+     * a period that was never priced is never offered, and no booking can be
+     * quoted at 0 because its period had no price behind it.
+     *
+     * Reads the loaded prices relation — eager-load it when mapping a list.
+     *
+     * @return list<string>
+     */
+    public function dayUsePeriods(): array
+    {
+        return array_values(array_filter(
+            BookingPeriod::keys(),
+            fn (string $period) => $this->prices
+                ->where('period', $period)
+                ->where('is_active', true)
+                ->contains(fn (UnitPrice $price) => $price->hasAnyPrice()),
+        ));
+    }
+
+    /**
      * المستخدمون المصرّح لهم بهذه الوحدة تحديدًا.
+     *
+     * This doubles as the unit's staff list: posting an account here is what
+     * the unit form edits, and what scopeVisibleTo() reads back. Permissions
+     * are not held here — those come from the account's role.
      */
     public function users(): BelongsToMany
     {

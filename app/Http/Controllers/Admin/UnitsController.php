@@ -7,9 +7,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Facility;
 use App\Models\Unit;
+use App\Models\User;
 use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
 use App\Support\Weekdays;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -52,7 +54,7 @@ class UnitsController extends Controller
             ->visibleTo($request->user())
             ->whereIn('type', $visibleTypes)
             ->when($unitType, fn ($q) => $q->where('type', $unitType))
-            ->with(['sections.facilities:id,name,icon', 'manager:id,name', 'prices'])
+            ->with(['sections.facilities:id,name,icon', 'manager:id,name', 'users:id,name', 'prices'])
             ->withCount(['bookings' => fn ($q) => $q->blocking()])
             ->orderBy('sort_order')
             ->get()
@@ -71,6 +73,9 @@ class UnitsController extends Controller
                 'notes' => $u->notes,
                 'is_active' => $u->is_active,
                 'bookings_count' => $u->bookings_count,
+                // Unit staff — ids for the form, names for the card.
+                'staff_ids' => $u->users->pluck('id')->values(),
+                'staff_names' => $u->users->pluck('name')->values(),
                 'sections' => $u->sections->map(fn ($s) => [
                     'id' => $s->id,
                     'name' => $s->name,
@@ -86,6 +91,9 @@ class UnitsController extends Controller
                     'period' => $p->period,
                     'weekday_price' => (float) $p->weekday_price,
                     'weekend_price' => (float) $p->weekend_price,
+                    // Null, not 0 — an unset deposit must round-trip as unset.
+                    'deposit_amount' => $p->deposit_amount === null ? null : (float) $p->deposit_amount,
+                    'deposit_percent' => $p->deposit_percent === null ? null : (float) $p->deposit_percent,
                     // خريطة {رقم اليوم: السعر} — تُرسَل بأيام الأسبوع كلها حتى
                     // لا تفرّق الواجهة بين «يوم لم يُدخَل» و«يوم غائب من الخريطة».
                     'day_prices' => collect(Weekdays::keys())
@@ -117,12 +125,13 @@ class UnitsController extends Controller
         $this->authorizeUnitAction($request, $data['type'], 'create');
 
         $unit = Unit::create([
-            ...collect($data)->except(['sections', 'logo'])->all(),
+            ...collect($data)->except(['sections', 'staff_ids', 'logo'])->all(),
             'logo_path' => $this->storeLogo($request),
             'sort_order' => (Unit::max('sort_order') ?? 0) + 1,
         ]);
 
         $this->syncSections($unit, $data['sections'] ?? []);
+        $this->syncStaff($unit, $data['staff_ids'] ?? []);
 
         return back()->with('success', 'تم إضافة الوحدة بنجاح');
     }
@@ -136,7 +145,7 @@ class UnitsController extends Controller
         // نقل الوحدة من نوع إلى نوع يلزمه امتلاك النوعين معًا.
         $this->authorizeUnitAction($request, $data['type'], 'edit');
 
-        $payload = collect($data)->except(['sections', 'logo'])->all();
+        $payload = collect($data)->except(['sections', 'staff_ids', 'logo'])->all();
 
         if ($path = $this->storeLogo($request, $unit)) {
             $payload['logo_path'] = $path;
@@ -150,6 +159,7 @@ class UnitsController extends Controller
 
         $unit->update($payload);
         $this->syncSections($unit, $data['sections'] ?? []);
+        $this->syncStaff($unit, $data['staff_ids'] ?? []);
 
         return back()->with('success', 'تم تحديث الوحدة');
     }
@@ -238,6 +248,9 @@ class UnitsController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['boolean'],
 
+            'staff_ids' => ['array'],
+            'staff_ids.*' => ['integer', 'exists:users,id'],
+
             'sections' => ['array'],
             'sections.*.id' => ['nullable', 'integer', 'exists:unit_sections,id'],
             'sections.*.name' => ['required', 'string', 'max:255'],
@@ -316,6 +329,61 @@ class UnitsController extends Controller
     }
 
     /**
+     * Sync the unit's staff — which is the same thing as the access scope of
+     * their accounts, so it is stored in unit_user and nowhere else.
+     *
+     * Posting someone neither grants nor removes a permission — those come from
+     * the account's role — it opens this unit to that account or closes it.
+     *
+     * @param  list<int>  $staffIds
+     */
+    private function syncStaff(Unit $unit, array $staffIds): void
+    {
+        // The form posts multipart for the logo, so ids arrive as strings.
+        $staffIds = array_map('intval', $staffIds);
+
+        // The picker never offers super admins: they reach every unit through
+        // their role, so a row here would mean nothing. Rows outside what the
+        // picker can offer are therefore left alone rather than synced away —
+        // a plain sync() would silently delete what the form never showed.
+        $offerable = self::staffCandidates()->modelKeys();
+
+        $selected = array_values(array_intersect($staffIds, $offerable));
+        $before = $unit->users()->pluck('users.id')->all();
+
+        $attach = array_values(array_diff($selected, $before));
+        $detach = array_values(array_intersect(array_diff($before, $selected), $offerable));
+
+        if ($attach) {
+            $unit->users()->attach($attach);
+
+            // Posting binds an account to the units it is posted to, so a
+            // blanket «sees all units» flag has to go — left standing it would
+            // swallow the scope and hand a hall clerk the whole business.
+            User::whereIn('id', $attach)->where('has_all_units', true)
+                ->update(['has_all_units' => false]);
+        }
+
+        if ($detach) {
+            $unit->users()->detach($detach);
+        }
+    }
+
+    /**
+     * The accounts the staff picker may offer — everyone but the super admin.
+     *
+     * @return Collection<int, User>
+     */
+    private static function staffCandidates()
+    {
+        return User::query()
+            ->whereDoesntHave('role', fn ($q) => $q->where('slug', 'super-admin'))
+            ->with('role:id,name')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role_id', 'is_active', 'is_demo', 'has_all_units']);
+    }
+
+    /**
      * الخيارات الثابتة المعروضة في الواجهة.
      *
      * @return array<string, mixed>
@@ -344,6 +412,20 @@ class UnitsController extends Controller
             'facilities' => Facility::where('is_active', true)->orderBy('sort_order')
                 ->get(['id', 'name', 'icon']),
             'managers' => Employee::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            // Staff candidates are login accounts, not HR files: the picker
+            // decides who may open the unit, and only an account can open
+            // anything. Super admins are left out — they already see every unit.
+            'staff' => self::staffCandidates()->map(fn (User $u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                // The role is where permissions come from; read-only here so it
+                // keeps a single place to be edited.
+                'role_name' => $u->role?->name,
+                'is_active' => (bool) $u->is_active,
+                'is_demo' => (bool) $u->is_demo,
+                'sees_all_units' => (bool) $u->has_all_units,
+            ])->values(),
             'periods' => BookingPeriod::forView(),
             // الشاليه يُسعَّر بالليلة لا بفترات اليوم، فله جدوله الخاص.
             'stay_periods' => StayPeriod::pricingPeriods(),

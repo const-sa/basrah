@@ -153,6 +153,11 @@ class SystemRegistry
                 'employees' => ['label' => 'مستخدمو النظام', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'roles' => ['label' => 'المجموعات والصلاحيات', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'cities' => ['label' => 'المدن', 'actions' => ['view', 'create', 'edit', 'delete']],
+                // Add-ons are filed with the shared catalogues rather than under
+                // halls or chalets: both booking forms sell the same list, and
+                // giving it to either activity would hand the other's staff a
+                // key inside a section that is not theirs.
+                'addons' => ['label' => 'الخدمات الإضافية', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'departments' => ['label' => 'الأقسام الإدارية', 'actions' => ['view', 'edit']],
                 'audit' => ['label' => 'سجل التدقيق', 'actions' => ['view', 'export']],
                 // الحذف هنا هو الإتلاف النهائي من الأرشيف وحده — ولذلك
@@ -188,15 +193,13 @@ class SystemRegistry
         'units.create' => ['halls.create', 'chalets.create'],
         'units.edit' => ['halls.edit', 'chalets.edit', 'hall_contract.edit'],
         'units.delete' => ['halls.delete', 'chalets.delete'],
-        // شاشتان لم يكن لهما مسار قط — تسقطان بلا بديل.
+        // A screen that never had a route — it drops with no replacement.
+        // (addons.* used to be listed here for the same reason; the add-ons
+        // screen exists now, so those keys pass through untranslated again.)
         'pricing.view' => [],
         'pricing.create' => [],
         'pricing.edit' => [],
         'pricing.delete' => [],
-        'addons.view' => [],
-        'addons.create' => [],
-        'addons.edit' => [],
-        'addons.delete' => [],
     ];
 
     /**

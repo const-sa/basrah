@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AccountingController;
+use App\Http\Controllers\Admin\AddonsController;
 use App\Http\Controllers\Admin\ArchiveController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupsController;
@@ -32,12 +33,12 @@ use App\Http\Controllers\Admin\PackagesController;
 use App\Http\Controllers\Admin\PaymentMethodsController;
 use App\Http\Controllers\Admin\PosController;
 use App\Http\Controllers\Admin\PricingController;
+use App\Http\Controllers\Admin\PurchaseController;
+use App\Http\Controllers\Admin\QuotationController;
 use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\RevenuesController;
 use App\Http\Controllers\Admin\RolesController;
 use App\Http\Controllers\Admin\SalesController;
-use App\Http\Controllers\Admin\PurchaseController;
-use App\Http\Controllers\Admin\QuotationController;
 use App\Http\Controllers\Admin\SearchController;
 use App\Http\Controllers\Admin\SuppliersController;
 use App\Http\Controllers\Admin\TicketsController;
@@ -135,6 +136,13 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::put('event-types/{eventType}', [EventTypesController::class, 'update'])->middleware('perm:event_types.edit')->name('event_types.update');
         Route::patch('event-types/{eventType}/toggle', [EventTypesController::class, 'toggle'])->middleware('perm:event_types.edit')->name('event_types.toggle');
         Route::delete('event-types/{eventType}', [EventTypesController::class, 'destroy'])->middleware('perm:event_types.delete')->name('event_types.destroy');
+
+        // الخدمات الإضافية — كتالوج واحد يقرؤه نموذجا حجز القاعات والشاليهات
+        Route::get('addons', [AddonsController::class, 'index'])->middleware('perm:addons.view')->name('addons.index');
+        Route::post('addons', [AddonsController::class, 'store'])->middleware('perm:addons.create')->name('addons.store');
+        Route::put('addons/{addon}', [AddonsController::class, 'update'])->middleware('perm:addons.edit')->name('addons.update');
+        Route::patch('addons/{addon}/toggle', [AddonsController::class, 'toggle'])->middleware('perm:addons.edit')->name('addons.toggle');
+        Route::delete('addons/{addon}', [AddonsController::class, 'destroy'])->middleware('perm:addons.delete')->name('addons.destroy');
 
         // مرافق الوحدات
         Route::get('units-facilities', [FacilitiesController::class, 'index'])->middleware('perm:halls.view|chalets.view')->name('facilities.index');
@@ -264,8 +272,6 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::delete('quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('perm:quotations.delete')->name('quotations.destroy');
         Route::get('quotations/{quotation}', [QuotationController::class, 'show'])->middleware('perm:quotations.view')->name('quotations.show');
         Route::get('quotations/{quotation}/pdf', [QuotationController::class, 'pdf'])->middleware('perm:quotations.view')->name('quotations.pdf');
-
-
 
         Route::post('inventory/adjust', [ItemsController::class, 'adjust'])->middleware('perm:inventory.approve')->name('inventory.adjust');
         Route::get('inventory/movements', [ItemsController::class, 'movements'])->middleware('perm:inventory.view')->name('inventory.movements');

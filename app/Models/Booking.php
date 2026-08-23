@@ -273,10 +273,14 @@ class Booking extends Model
     // ── نوع الحجز ────────────────────────────────────────────
 
     /**
-     * حجز إقامة (شاليه) أم حجز مناسبة (قاعة)؟
+     * Is this booking measured in nights, or in day periods?
      *
      * الفصل يقوم على الفترة لا على نوع الوحدة: الفترة هي ما يحدد شكل الحجز
      * فعليًا، وقراءتها لا تستدعي تحميل الوحدة مع كل صف في القائمة.
+     *
+     * This answers the shape of the booking, not which screen owns it — a
+     * chalet sold for a morning is a chalet booking that is not a stay. The
+     * screen is decided by the unit's type; see scopeStays().
      */
     public function isStay(): bool
     {
@@ -376,7 +380,11 @@ class Booking extends Model
     // ── النطاقات ─────────────────────────────────────────────
 
     /**
-     * حجوزات القاعات — كل ما ليس إقامة ممتدة.
+     * Bookings sold by day period rather than by night.
+     *
+     * Narrows by shape, NOT by unit type — a chalet sold for a morning lands
+     * here too. Do not use this to pick what a chalet screen shows, or day-use
+     * chalet bookings disappear from it; filter on the unit's type instead.
      */
     public function scopeEvents(Builder $query): Builder
     {
@@ -384,7 +392,10 @@ class Booking extends Model
     }
 
     /**
-     * حجوزات الشاليهات — الإقامات الممتدة بالليالي.
+     * Bookings measured in nights.
+     *
+     * Same caveat as events(): this is the booking's shape, not the screen it
+     * belongs to. A chalet may hold either shape.
      */
     public function scopeStays(Builder $query): Builder
     {

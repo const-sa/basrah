@@ -6,8 +6,6 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\EventType;
 use App\Models\Package;
-use App\Models\PaymentMethod;
-use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
 use App\Support\BookingPeriod;
@@ -29,32 +27,6 @@ use Inertia\Response;
  */
 class HallBookingsController extends BaseBookingsController
 {
-    /**
-     * أعمدة طرق الدفع في سجل الحجوزات — تُقرأ مرة واحدة للطلب كله لا مرة
-     * لكل صف، فالتقديم يجري على عشرين حجزًا في الصفحة.
-     *
-     * @var list<array{id: int, code: string, label: string, is_credit: bool}>|null
-     */
-    private ?array $methodColumns = null;
-
-    /**
-     * @return list<array{id: int, code: string, label: string, is_credit: bool}>
-     */
-    private function methodColumns(): array
-    {
-        return $this->methodColumns ??= PaymentMethod::options();
-    }
-
-    /**
-     * معرّفات الطرق بترتيب أعمدتها.
-     *
-     * @return list<int>
-     */
-    private function methodIds(): array
-    {
-        return array_column($this->methodColumns(), 'id');
-    }
-
     protected function unitType(): string
     {
         return 'hall';
@@ -101,67 +73,6 @@ class HallBookingsController extends BaseBookingsController
             'last_day_date' => $b->lastDayDate(),
             ...$this->ledger($b),
         ];
-    }
-
-    /**
-     * أعمدة المال في السجل: من مبلغ الحجز إلى المسترجع.
-     *
-     * تُقرأ الصفوف أفقيًا كدفتر — مبلغ الحجز ناقصًا الخصم يبلغ الإجمالي،
-     * ومنه يُطرح المدفوع فيبقى المتبقي — فيُراجَع الصف بلا فتح لوحة الدفعات.
-     *
-     * @return array<string, mixed>
-     */
-    private function ledger(Booking $b): array
-    {
-        // مبلغ الحجز قبل الخصم: مجموع ما بيع فعلًا — القاعة والباقة
-        // والخدمات. والإجمالي المخزّن هو هذا ناقصًا الخصم.
-        $subtotal = round(
-            (float) $b->base_amount + (float) $b->package_amount
-            + (float) $b->event_fee_amount + (float) $b->addons_amount,
-            2,
-        );
-
-        $payments = $b->relationLoaded('payments') ? $b->payments : collect();
-
-        $paidByMethod = [];
-
-        foreach ($this->methodIds() as $methodId) {
-            $paidByMethod[$methodId] = round(
-                (float) $payments->where('type', '!=', 'refund')->where('payment_method_id', $methodId)->sum('amount'),
-                2,
-            );
-        }
-
-        $total = (float) $b->total_amount;
-
-        return [
-            'subtotal_amount' => $subtotal,
-            'discount_amount' => (float) $b->discount_amount,
-            'addons_amount' => (float) $b->addons_amount,
-            'tax_amount' => $this->taxPortion($total),
-            'paid_by_method' => $paidByMethod,
-            'refunded_amount' => round((float) $payments->where('type', 'refund')->sum('amount'), 2),
-            'payment_status' => match (true) {
-                $b->isFullyPaid() => 'مسدّدة',
-                (float) $b->paid_amount > 0 => 'مسدّدة جزئيًا',
-                default => 'غير مسدّدة',
-            },
-        ];
-    }
-
-    /**
-     * حصة الضريبة من إجمالي الحجز — مستخرجةً منه شاملًا لا مضافةً فوقه،
-     * كما تُحرَّر فاتورة الحجز. وبلا تسجيل ضريبي لا ضريبة على الصف.
-     */
-    private function taxPortion(float $total): float
-    {
-        $settings = Setting::current();
-
-        if (! $settings->tax_enabled || blank($settings->tax_number) || (float) $settings->tax_rate <= 0) {
-            return 0.0;
-        }
-
-        return round($total - round($total / (1 + (float) $settings->tax_rate / 100), 2), 2);
     }
 
     public function index(Request $request): Response

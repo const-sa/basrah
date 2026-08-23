@@ -30,6 +30,16 @@ export default defineConfig({
             plugins: [tailwindcss, autoprefixer],
         },
     },
+    build: {
+        rollupOptions: {
+            output: {
+                // Split the framework code that every page loads into its own chunk so it
+                // stays cached across deploys — only the app entry rehashes on a change.
+                manualChunks: (id) =>
+                    /[\\/]node_modules[\\/](vue|@vue|@inertiajs|axios)[\\/]/.test(id) ? 'vendor' : undefined,
+            },
+        },
+    },
     server: {
         host: '127.0.0.1',
         port: 5173,

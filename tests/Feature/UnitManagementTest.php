@@ -223,6 +223,129 @@ class UnitManagementTest extends TestCase
             );
     }
 
+    // ── طاقم الوحدة ──────────────────────────────────────────
+
+    /**
+     * Post accounts to a unit as its staff, and return the unit fresh.
+     *
+     * @param  list<int>  $staffIds
+     */
+    private function postStaff(Unit $unit, array $staffIds): Unit
+    {
+        $this->actingAs($this->owner)->put("/admin/units/{$unit->id}", [
+            'code' => $unit->code, 'name' => $unit->name,
+            'type' => $unit->type, 'bookable_mode' => $unit->bookable_mode,
+            'privacy_mode' => $unit->privacy_mode, 'is_active' => true,
+            'staff_ids' => $staffIds,
+        ])->assertSessionHasNoErrors();
+
+        return $unit->fresh();
+    }
+
+    /**
+     * An ordinary staff account — anything but the super admin.
+     */
+    private function staffAccount(string $name, bool $seesAllUnits = false): User
+    {
+        return User::factory()->create([
+            'name' => $name,
+            'role_id' => Role::where('slug', '!=', 'super-admin')->value('id'),
+            'is_active' => true,
+            'has_all_units' => $seesAllUnits,
+        ]);
+    }
+
+    public function test_an_account_is_posted_to_a_unit_and_may_serve_several(): void
+    {
+        $user = $this->staffAccount('منسّق الحجوزات');
+        $first = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        $second = Unit::where('type', 'hall')->firstOrFail();
+
+        $this->assertSame([$user->id], $this->postStaff($first, [$user->id])->users->pluck('id')->all());
+        $this->assertSame([$user->id], $this->postStaff($second, [$user->id])->users->pluck('id')->all());
+
+        // One person, two units at once — and both are reachable.
+        $this->assertEqualsCanonicalizing(
+            [$first->id, $second->id],
+            $user->fresh()->units->pluck('id')->all(),
+        );
+    }
+
+    public function test_posting_opens_the_unit_and_unposting_closes_it(): void
+    {
+        $user = $this->staffAccount('موظف قاعة');
+        $unit = Unit::where('code', 'CH-BSR1')->firstOrFail();
+
+        $this->postStaff($unit, [$user->id]);
+        $this->assertTrue($user->fresh()->canAccessUnit($unit));
+
+        // The scope follows the staff list in both directions.
+        $this->postStaff($unit, []);
+        $this->assertFalse($user->fresh()->canAccessUnit($unit));
+    }
+
+    public function test_posting_narrows_an_account_that_saw_every_unit(): void
+    {
+        $user = $this->staffAccount('محاسب سابق', seesAllUnits: true);
+
+        $unit = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        $other = Unit::where('type', 'hall')->firstOrFail();
+
+        $this->postStaff($unit, [$user->id]);
+
+        // Only the super admin sees everything, so the blanket flag gives way
+        // to the posting — otherwise the scope would never bite.
+        $user = $user->fresh();
+        $this->assertFalse($user->has_all_units);
+        $this->assertTrue($user->canAccessUnit($unit));
+        $this->assertFalse($user->canAccessUnit($other));
+    }
+
+    public function test_the_super_admin_is_never_offered_nor_posted(): void
+    {
+        $admin = User::factory()->create([
+            'name' => 'المالك',
+            'role_id' => Role::where('slug', 'super-admin')->value('id'),
+            'is_active' => true,
+            'has_all_units' => true,
+        ]);
+
+        $unit = Unit::where('code', 'CH-BSR1')->firstOrFail();
+
+        // Even asked for by id, the posting is refused — the picker never offers them.
+        $this->postStaff($unit, [$admin->id]);
+
+        $this->assertSame(0, $unit->fresh()->users()->count());
+        $this->assertTrue($admin->fresh()->has_all_units);
+        $this->assertTrue($admin->fresh()->seesAllUnits());
+    }
+
+    public function test_units_screen_offers_every_account_but_the_super_admin(): void
+    {
+        $role = Role::where('slug', '!=', 'super-admin')->firstOrFail();
+
+        User::factory()->create(['name' => 'أ موظف بدور', 'role_id' => $role->id, 'is_active' => true]);
+        User::factory()->create(['name' => 'ب موظف بلا دور', 'role_id' => null, 'is_active' => true]);
+
+        // A second super admin, to prove exclusion is by role and not by
+        // «whoever happens to be signed in».
+        User::factory()->create([
+            'name' => 'ج مدير عام', 'role_id' => Role::where('slug', 'super-admin')->value('id'), 'is_active' => true,
+        ]);
+
+        $this->actingAs($this->owner)
+            ->get('/admin/units')
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p
+                // Two of the four accounts: both super admins are left out.
+                ->has('options.staff', 2)
+                ->where('options.staff.0.name', 'أ موظف بدور')
+                ->where('options.staff.0.role_name', $role->name)
+                ->where('options.staff.1.name', 'ب موظف بلا دور')
+                ->where('options.staff.1.role_name', null),
+            );
+    }
+
     // ── المرافق ──────────────────────────────────────────────
 
     public function test_facilities_screen_lists_and_creates(): void

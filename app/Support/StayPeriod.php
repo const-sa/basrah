@@ -23,10 +23,7 @@ class StayPeriod
      */
     public const PERIOD = 'overnight';
 
-    /**
-     * وصف الفترة في شاشة الأسعار: الشاليه سطر واحد لا ثلاثة، لأن ما يُسعَّر
-     * فيه الليلة لا الفترة الصباحية والمسائية.
-     */
+    /** Label for the overnight row in the pricing screen. */
     public const LABEL = 'الليلة';
 
     public static function checkInTime(): string
@@ -104,18 +101,37 @@ class StayPeriod
     }
 
     /**
-     * فترات التسعير للشاليه — واحدة، بنفس شكل BookingPeriod::forView()
-     * لتقرأها شاشة الأسعار بلا تفريق بين النوعين.
+     * Pricing periods a chalet may carry, in the same shape as
+     * BookingPeriod::forView() so the pricing screen reads both unit types
+     * without branching.
+     *
+     * The night comes first because it is what a chalet is normally sold as.
+     * The three day periods follow so the same chalet can also be sold for a
+     * morning, an evening, or a full day without an overnight stay — pricing
+     * a period here is what makes it bookable, see Unit::dayUsePeriods().
      *
      * @return list<array{key: string, label: string, start: string, end: string}>
      */
     public static function pricingPeriods(): array
     {
-        return [[
-            'key' => self::PERIOD,
-            'label' => self::LABEL,
-            'start' => self::checkInTime(),
-            'end' => self::checkOutTime(),
-        ]];
+        return [
+            [
+                'key' => self::PERIOD,
+                'label' => self::LABEL,
+                'start' => self::checkInTime(),
+                'end' => self::checkOutTime(),
+            ],
+            ...BookingPeriod::forView(),
+        ];
+    }
+
+    /**
+     * Keys of the periods above — what the pricing endpoint accepts.
+     *
+     * @return list<string>
+     */
+    public static function pricingKeys(): array
+    {
+        return array_column(self::pricingPeriods(), 'key');
     }
 }

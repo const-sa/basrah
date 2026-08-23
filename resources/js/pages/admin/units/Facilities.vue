@@ -4,9 +4,17 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import * as icons from 'lucide-vue-next';
-import { Pencil, Plus, Settings2, Trash2, X } from 'lucide-vue-next';
-import { ref } from 'vue';
+import {
+    Baby, Car, ChefHat, DoorOpen, Dumbbell, Flame, Pencil, Plus,
+    Settings2, Trash2, Trees, Tv, Volleyball, Waves, Wifi, Wind, X,
+} from 'lucide-vue-next';
+import { ref, type Component } from 'vue';
+
+/** Available icon names — mirrors FacilitiesController::ICONS. */
+const ICONS: Record<string, Component> = {
+    Waves, ChefHat, Car, DoorOpen, Trees, Dumbbell,
+    Wifi, Tv, Wind, Flame, Baby, Volleyball,
+};
 
 interface Facility {
     id: number; name: string; icon: string | null; description: string | null;
@@ -23,9 +31,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'المرافق', href: '/admin/units-facilities' },
 ];
 
-/** أيقونة lucide بالاسم — وإن لم توجد فأيقونة محايدة. */
-const iconOf = (name: string | null) =>
-    (name && (icons as Record<string, unknown>)[name]) || Settings2;
+/** Resolve a lucide icon by name, falling back to a neutral one. */
+const iconOf = (name: string | null) => (name && ICONS[name]) || Settings2;
 
 const showModal = ref(false);
 const editingId = ref<number | null>(null);

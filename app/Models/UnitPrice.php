@@ -77,6 +77,25 @@ class UnitPrice extends Model
     }
 
     /**
+     * Does this row carry a usable price at all?
+     *
+     * A row exists as soon as the pricing screen is saved, even with every
+     * box left empty, so "the row exists" is not the same as "it is priced".
+     * Used to decide whether a period may be offered when booking, keeping
+     * an unpriced period from quoting 0.
+     */
+    public function hasAnyPrice(): bool
+    {
+        foreach ($this->day_prices ?? [] as $price) {
+            if ((float) $price > 0) {
+                return true;
+            }
+        }
+
+        return (float) $this->weekday_price > 0 || (float) $this->weekend_price > 0;
+    }
+
+    /**
      * العربون المطلوب على إجمالي معيّن — المبلغ الثابت يتقدّم على النسبة.
      */
     public function depositFor(float $total): float
