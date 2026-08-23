@@ -22,7 +22,7 @@ class DeployController extends Controller
         }
 
         $url = 'https://'.$request->header('X-GITHUB-TOKEN')
-            .'@github.com/const-tech/'.$request->header('X-REPO-NAME').'.git';
+            .'@github.com/const-sa/'.$request->header('X-REPO-NAME').'.git';
         $branch = $request->input('branch', 'main');
 
         $log = [];
