@@ -87,6 +87,10 @@ class ChaletBookingService
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
                 'deposit_amount' => $quote['deposit_amount'],
+                // The security deposit is the chalet's usual one unless the
+                // form said otherwise. It is stored beside the total, never
+                // inside it: it is held, not charged.
+                'security_deposit_amount' => $this->securityDeposit($unit, $data),
                 'paid_amount' => 0,
                 'guests_count' => $data['guests_count'] ?? null,
                 'notes' => $data['notes'] ?? null,
@@ -154,6 +158,13 @@ class ChaletBookingService
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
                 'deposit_amount' => $quote['deposit_amount'],
+                // An edit keeps what was agreed unless it is being changed:
+                // falling back to the chalet's usual amount here would undo a
+                // waiver every time the dates were touched.
+                'security_deposit_amount' => array_key_exists('security_deposit_amount', $data)
+                    && $data['security_deposit_amount'] !== null
+                        ? round((float) $data['security_deposit_amount'], 2)
+                        : (float) $booking->security_deposit_amount,
                 'guests_count' => $data['guests_count'] ?? $booking->guests_count,
                 'notes' => $data['notes'] ?? $booking->notes,
             ]);
@@ -163,6 +174,23 @@ class ChaletBookingService
 
             return $booking->fresh(['unit', 'client', 'sections', 'addons']);
         });
+    }
+
+    /**
+     * The security deposit this booking asks for.
+     *
+     * The chalet's usual amount is a default, not a rule — a returning guest
+     * may be let off it, and a group taking three chalets is rarely charged
+     * three times over. A number sent from the form therefore wins, including
+     * a zero, which is why the key is tested for rather than coalesced.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function securityDeposit(Unit $unit, array $data): float
+    {
+        return array_key_exists('security_deposit_amount', $data) && $data['security_deposit_amount'] !== null
+            ? round((float) $data['security_deposit_amount'], 2)
+            : $unit->securityDeposit();
     }
 
     /**

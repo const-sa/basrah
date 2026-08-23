@@ -37,6 +37,11 @@ class AccountsSeeder extends Seeder
         [Ledger::UNEARNED_REVENUE, 'عرابين حجوزات غير مكتسبة', 'liability', false, '2200'],
         ['2300', 'مستحقات الموظفين', 'liability', true, '2000'],
         [Ledger::SALARIES_PAYABLE, 'رواتب مستحقة', 'liability', false, '2300'],
+        // A security deposit is not unearned revenue: a booking deposit is on
+        // its way to becoming revenue, a security deposit is on its way back
+        // to the guest unless damage is taken out of it.
+        ['2400', 'تأمينات مستلمة', 'liability', true, '2000'],
+        [Ledger::REFUNDABLE_DEPOSITS, 'تأمينات حجوزات مستردة', 'liability', false, '2400'],
 
         ['3000', 'حقوق الملكية', 'equity', true, null],
         ['3100', 'رأس المال', 'equity', false, '3000'],

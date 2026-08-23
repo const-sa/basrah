@@ -429,6 +429,9 @@ class ChaletBookingsController extends BaseBookingsController
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // The security deposit is held, not charged, so it has no bearing
+            // on the total and is only bounded against a typing slip.
+            'security_deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'guests_count' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);

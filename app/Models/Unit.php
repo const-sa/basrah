@@ -26,6 +26,7 @@ class Unit extends Model
         'bookable_mode',
         'privacy_mode',
         'capacity',
+        'security_deposit',
         'description',
         'notes',
         'sort_order',
@@ -38,7 +39,18 @@ class Unit extends Model
             'is_active' => 'boolean',
             'capacity' => 'integer',
             'sort_order' => 'integer',
+            'security_deposit' => 'decimal:2',
         ];
+    }
+
+    /**
+     * The security deposit normally taken on this unit, or zero when it takes
+     * none. What a booking asks for starts here and stays editable — the guest
+     * who books three chalets is not always charged three times the usual.
+     */
+    public function securityDeposit(): float
+    {
+        return round((float) ($this->security_deposit ?? 0), 2);
     }
 
     public function sections(): HasMany

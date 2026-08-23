@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\PaymentMethod;
 use App\Models\Setting;
@@ -163,41 +162,62 @@ abstract class BaseBookingsController extends Controller
 
         $payment = $request->validate([
             'payment_amount' => ['nullable', 'numeric', 'min:0'],
-            'payment_type' => ['nullable', Rule::in(array_keys(BookingPayment::TYPES))],
+            // Security movements are not offered here: what is taken at the
+            // desk is the price. The deposit rides along on its own flag.
+            'payment_type' => ['nullable', Rule::in(['deposit', 'payment'])],
             'payment_method_id' => ['nullable', Rule::exists('payment_methods', 'id')
                 ->where('is_active', true)],
             'payment_paid_on' => ['nullable', 'date'],
             'payment_notify' => ['boolean'],
+            'security_collected' => ['boolean'],
         ]);
 
         $amount = round((float) ($payment['payment_amount'] ?? 0), 2);
+        $paidOn = $payment['payment_paid_on'] ?? now()->toDateString();
 
-        $booking = DB::transaction(function () use ($create, $payment, $amount, $request) {
+        $booking = DB::transaction(function () use ($create, $payment, $amount, $paidOn, $request) {
             $booking = $create();
 
-            if ($amount <= 0) {
-                return $booking;
+            if ($amount > 0) {
+                if ($amount > (float) $booking->total_amount) {
+                    throw ValidationException::withMessages([
+                        'payment_amount' => 'المبلغ المسدَّد يتجاوز إجمالي الحجز.',
+                    ]);
+                }
+
+                $this->bookings->recordPayment($booking, [
+                    'type' => $payment['payment_type'] ?? 'deposit',
+                    'payment_method_id' => $payment['payment_method_id'] ?? null,
+                    'amount' => $amount,
+                    'paid_on' => $paidOn,
+                    'notes' => 'دفعة مسجّلة عند إنشاء الحجز',
+                ], $request->user()?->id);
             }
 
-            if ($amount > (float) $booking->total_amount) {
-                throw ValidationException::withMessages([
-                    'payment_amount' => 'المبلغ المسدَّد يتجاوز إجمالي الحجز.',
-                ]);
-            }
+            // The security deposit is usually taken at the desk with the rest,
+            // so it is recorded here by the same method. It is not checked
+            // against the total because it is not part of it.
+            $held = $request->boolean('security_collected')
+                ? round((float) $booking->security_deposit_amount, 2)
+                : 0.0;
 
-            $this->bookings->recordPayment($booking, [
-                'type' => $payment['payment_type'] ?? 'deposit',
-                'payment_method_id' => $payment['payment_method_id'] ?? null,
-                'amount' => $amount,
-                'paid_on' => $payment['payment_paid_on'] ?? now()->toDateString(),
-                'notes' => 'دفعة مسجّلة عند إنشاء الحجز',
-            ], $request->user()?->id);
+            if ($held > 0) {
+                $this->bookings->recordPayment($booking, [
+                    'type' => 'security_deposit',
+                    'payment_method_id' => $payment['payment_method_id'] ?? null,
+                    'amount' => $held,
+                    'paid_on' => $paidOn,
+                    'notes' => 'تأمين مقبوض عند إنشاء الحجز',
+                ], $request->user()?->id);
+            }
 
             return $booking->fresh();
         });
 
+        $security = $booking->securityHeld() > 0 ? '، والتأمين مقبوض' : '';
+
         if ($amount <= 0) {
-            return $back()->with('success', "تم إنشاء الحجز {$booking->reference} — غير مسدَّد");
+            return $back()->with('success', "تم إنشاء الحجز {$booking->reference} — غير مسدَّد{$security}");
         }
 
         if ($request->boolean('payment_notify')) {
@@ -206,7 +226,7 @@ abstract class BaseBookingsController extends Controller
 
         $state = $booking->isFullyPaid() ? 'مسدَّد بالكامل' : 'مسدَّد جزئيًا';
 
-        return $back()->with('success', "تم إنشاء الحجز {$booking->reference} — {$state}");
+        return $back()->with('success', "تم إنشاء الحجز {$booking->reference} — {$state}{$security}");
     }
 
     /**
@@ -242,6 +262,10 @@ abstract class BaseBookingsController extends Controller
             'paid_amount' => (float) $b->paid_amount,
             'remaining_amount' => $b->remainingAmount(),
             'is_deposit_settled' => $b->isDepositSettled(),
+            // Agreed against actually in hand: the first is what the contract
+            // says, the second is what has to go back at check-out.
+            'security_deposit_amount' => (float) $b->security_deposit_amount,
+            'security_held' => $b->securityHeld(),
             'guests_count' => $b->guests_count,
             'notes' => $b->notes,
             // العقد الصادر عن الحجز إن وُجد — السجل يفتحه مباشرة، وغيابه
@@ -359,6 +383,9 @@ abstract class BaseBookingsController extends Controller
                 // always sold by period; a chalet only offers the ones that
                 // have been priced, and is a stay otherwise.
                 'day_use_periods' => $u->dayUsePeriods(),
+                // The security deposit this unit usually takes — the booking
+                // form starts from it and lets the clerk change it.
+                'security_deposit' => $u->securityDeposit(),
                 'sections' => $u->sections->map(fn ($s) => [
                     'id' => $s->id, 'name' => $s->name, 'gender' => $s->gender,
                 ])->values(),

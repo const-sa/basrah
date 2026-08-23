@@ -46,6 +46,10 @@ class PricingController extends Controller
             : BookingPeriod::hallKeys();
 
         $data = $request->validate([
+            // The security deposit is one figure for the whole unit, not one
+            // per period: it answers for damage to the chalet, and damage does
+            // not care whether the guest came for a morning or a week.
+            'security_deposit' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'prices' => ['array'],
             'prices.*.unit_section_id' => [
                 'nullable',
@@ -62,6 +66,10 @@ class PricingController extends Controller
             'prices.*.deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'prices.*.deposit_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
+
+        if (array_key_exists('security_deposit', $data)) {
+            $unit->update(['security_deposit' => $this->nullableDecimal($data['security_deposit'])]);
+        }
 
         foreach ($data['prices'] ?? [] as $row) {
             $dayPrices = $this->dayPrices($row['day_prices'] ?? null);

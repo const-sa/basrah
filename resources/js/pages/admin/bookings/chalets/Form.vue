@@ -9,7 +9,7 @@ import { addDays, daysBetween, formatTime12, startOfMonth, todayString } from '@
 import { toHijri, weekdayName } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LogIn, LogOut, Moon, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -19,6 +19,8 @@ interface UnitOption {
     privacy_mode: 'open' | 'exclusive';
     /** Day periods this chalet is priced for — empty means stays only. */
     day_use_periods: string[];
+    /** The refundable deposit normally taken on this chalet — 0 means none. */
+    security_deposit: number;
     sections: SectionOption[];
 }
 interface AddonOption { id: number; name: string; price: number; pricing: string }
@@ -37,6 +39,9 @@ interface ExistingBooking {
     days_count: number | null;
     status: string;
     discount_amount: number;
+    /** The deposit agreed on this booking, and what is still held of it. */
+    security_deposit_amount: number;
+    security_held: number;
     addons: Record<number, number>;
     guests_count: number | null;
     notes: string | null;
@@ -123,6 +128,12 @@ const form = useForm({
     discount_amount: props.booking?.discount_amount ?? 0,
     notes: props.booking?.notes ?? '',
 
+    // The security deposit: money held against damage, entirely outside the
+    // price. A new booking starts from the chalet's usual amount once one is
+    // chosen; an existing one keeps whatever was agreed on it.
+    security_deposit_amount: props.booking?.security_deposit_amount ?? 0,
+    security_collected: true,
+
     payment_amount: 0,
     payment_type: 'deposit',
     // أول طريقة في الترتيب هي الافتراض — يرتّبها المستخدم من شاشة طرق الدفع.
@@ -204,6 +215,9 @@ watch(() => form.unit_id, () => {
 
     form.section_ids = [];
     form.scope = canBookWhole.value ? 'whole' : 'sections';
+    // Each chalet has its own deposit, so switching chalets brings its amount
+    // rather than carrying the previous one across.
+    form.security_deposit_amount = selectedUnit.value?.security_deposit ?? 0;
 });
 
 // A unit change can drop the period that was picked — fall back to a stay
@@ -466,6 +480,15 @@ watch(maxCheckOut, (max) => {
 const periodFree = (key: string): boolean =>
     dayUseSpan.value.every((date) => availability.value[date]?.periods[key] !== false);
 
+// ── The security deposit: held, not charged ─────────────────
+
+/** What this chalet usually asks for — the figure the form starts from. */
+const unitSecurityDeposit = computed(() => selectedUnit.value?.security_deposit ?? 0);
+
+const securityChanged = computed(() =>
+    unitSecurityDeposit.value > 0 && Number(form.security_deposit_amount) !== unitSecurityDeposit.value,
+);
+
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
 const suggestedDeposit = computed(() => pricing.value?.deposit_amount ?? 0);
 const suggestedTotal = computed(() => pricing.value?.total_amount ?? 0);
@@ -497,6 +520,7 @@ const setPayChoice = (choice: 'none' | 'deposit' | 'full') => {
 const inlineErrorKeys = computed(() => [
     'unit_id', 'client_id', 'booking_date', 'period', 'days_count',
     'availability', 'payment_amount', 'discount_amount', 'notes',
+    'security_deposit_amount',
     ...(isStay.value ? ['check_out_date'] : []),
 ]);
 
@@ -912,6 +936,52 @@ const submit = () => {
                         <p v-else class="mt-2 text-[11px] font-medium text-slate-500">
                             تُحفظ الإقامة بلا دفعة، ويبقى المبلغ كاملًا على النزيل.
                         </p>
+                    </div>
+
+                    <!--
+                        Its own card, deliberately away from the price: this
+                        money is held, not taken. Putting it beside the total
+                        would invite adding the two, which is exactly the
+                        mistake the separate account exists to prevent.
+                    -->
+                    <div v-if="selectedUnit" class="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+                        <h3 class="mb-1 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
+                            <ShieldCheck class="h-4 w-4 text-indigo-400" /> التأمين
+                        </h3>
+                        <p class="mb-2.5 text-[11px] font-medium leading-relaxed text-slate-500">
+                            ضمانٌ للتلفيات يُعاد عند الخروج — خارج الإجمالي وخارج المتبقي على النزيل.
+                        </p>
+
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
+                        <input
+                            v-model.number="form.security_deposit_amount"
+                            type="number" min="0" step="0.01" dir="ltr"
+                            class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-bold focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        />
+                        <p v-if="form.errors.security_deposit_amount" class="mt-1 text-[11px] text-red-500">{{ form.errors.security_deposit_amount }}</p>
+
+                        <p v-if="securityChanged" class="mt-1.5 text-[11px] font-bold text-amber-600">
+                            المعتاد لهذا الشاليه {{ money(unitSecurityDeposit) }} —
+                            <button type="button" @click="form.security_deposit_amount = unitSecurityDeposit" class="underline hover:text-amber-700">استعادته</button>
+                        </p>
+
+                        <template v-if="!isEdit">
+                            <label v-if="form.security_deposit_amount > 0" class="mt-2.5 flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700">
+                                <input type="checkbox" v-model="form.security_collected" class="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600" />
+                                قُبض التأمين الآن
+                            </label>
+                            <p v-if="form.security_deposit_amount > 0 && !form.security_collected" class="mt-1.5 text-[11px] font-bold text-amber-600">
+                                يُثبَت المبلغ في الحجز ويبقى غير مقبوض حتى يُستلم من لوحة الدفعات.
+                            </p>
+                        </template>
+
+                        <div v-else class="mt-2.5 space-y-1">
+                            <div class="flex justify-between rounded-lg bg-indigo-50 px-2.5 py-2 text-xs">
+                                <span class="font-bold text-indigo-700">المحتجز الآن</span>
+                                <span class="font-extrabold text-indigo-800">{{ money(booking?.security_held ?? 0) }}</span>
+                            </div>
+                            <p class="text-[11px] font-medium text-slate-500">قبض التأمين ورده يتمّان من لوحة الدفعات في السجل.</p>
+                        </div>
                     </div>
 
                     <p v-if="form.errors.availability" class="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{{ form.errors.availability }}</p>

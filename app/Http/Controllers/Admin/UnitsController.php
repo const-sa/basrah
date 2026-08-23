@@ -69,6 +69,9 @@ class UnitsController extends Controller
                 'bookable_mode' => $u->bookable_mode,
                 'privacy_mode' => $u->privacy_mode,
                 'capacity' => $u->capacity,
+                // Null, not 0 — a unit that asks for no security deposit and
+                // one nobody has set an amount for must stay distinguishable.
+                'security_deposit' => $u->security_deposit === null ? null : (float) $u->security_deposit,
                 'description' => $u->description,
                 'notes' => $u->notes,
                 'is_active' => $u->is_active,

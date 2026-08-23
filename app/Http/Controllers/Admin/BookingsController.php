@@ -98,8 +98,14 @@ class BookingsController extends Controller
             'type' => ['required', Rule::in(array_keys(BookingPayment::TYPES))],
             // الطريقة تُفحص في الجدول لا في ثابت: المعطَّلة تُرفض هنا،
             // فلا تُسجَّل دفعة بطريقة لا تُعرض في الشاشة.
-            'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')
-                ->where('is_active', true)],
+            //
+            // A forfeit is the exception: no money moves, so demanding a
+            // method would have the clerk name a till nothing passes through.
+            'payment_method_id' => [
+                Rule::requiredIf(fn () => $request->input('type') !== 'security_forfeit'),
+                'nullable',
+                Rule::exists('payment_methods', 'id')->where('is_active', true),
+            ],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'paid_on' => ['required', 'date'],
             'reference' => ['nullable', 'string', 'max:100'],
@@ -111,7 +117,11 @@ class BookingsController extends Controller
 
         $payment = $this->bookings->recordPayment($booking, $data, $request->user()?->id);
 
-        if ($request->boolean('notify') && $data['type'] !== 'refund') {
+        // A security movement changes nothing the guest owes, so the "payment
+        // received" message would only make them think their balance moved.
+        $silent = ['refund', ...BookingPayment::SECURITY_TYPES];
+
+        if ($request->boolean('notify') && ! in_array($data['type'], $silent, true)) {
             $this->whatsapp->paymentReceived($booking->fresh(), (float) $payment->amount, $request->user()?->id);
         }
 
@@ -148,6 +158,10 @@ class BookingsController extends Controller
                 'remaining_amount' => $booking->remainingAmount(),
                 'is_deposit_settled' => $booking->isDepositSettled(),
                 'is_fully_paid' => $booking->isFullyPaid(),
+                // The security deposit is tracked beside the price, never
+                // inside it — agreed, and what is actually still held.
+                'security_deposit_amount' => (float) $booking->security_deposit_amount,
+                'security_held' => $booking->securityHeld(),
             ],
         ]);
     }

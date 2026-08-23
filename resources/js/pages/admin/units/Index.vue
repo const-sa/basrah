@@ -29,6 +29,8 @@ interface Unit {
     bookable_mode: 'whole' | 'sections' | 'both';
     privacy_mode: 'open' | 'exclusive';
     capacity: number | null;
+    /** The refundable deposit this unit usually takes — null means none. */
+    security_deposit: number | null;
     description: string | null;
     notes: string | null;
     is_active: boolean;
@@ -265,7 +267,7 @@ const toggle = (u: Unit) => router.patch(`/admin/units/${u.id}/toggle`, {}, { pr
 const showPrices = ref(false);
 const pricedUnit = ref<Unit | null>(null);
 
-const priceForm = useForm({ prices: [] as PriceRow[] });
+const priceForm = useForm({ security_deposit: null as number | null, prices: [] as PriceRow[] });
 
 /** التسعير اليومي للشاليهات وحدها؛ القاعة تبقى على صفّي الأسبوع. */
 const pricedByDay = computed(() => pricedUnit.value?.type === 'chalet');
@@ -330,6 +332,7 @@ const enabled = ref<Record<string, boolean>>({});
 const openPrices = (u: Unit) => {
     pricedUnit.value = u;
     priceForm.clearErrors();
+    priceForm.security_deposit = u.security_deposit;
     priceForm.prices = buildPriceRows(u);
 
     enabled.value = {};
@@ -824,6 +827,31 @@ const destroy = (u: Unit) => {
                         </p>
                     </div>
                     <button type="button" @click="showPrices = false" class="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X class="h-5 w-5" /></button>
+                </div>
+
+                <!--
+                    One figure for the whole unit, sitting above the periods
+                    rather than inside them: the deposit answers for damage to
+                    the chalet, and damage does not care which period the guest
+                    booked. It is held, never charged, so it stays out of the
+                    price rows entirely.
+                -->
+                <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-indigo-50/40 px-6 py-3">
+                    <label class="flex items-center gap-2">
+                        <span class="text-xs font-extrabold text-indigo-800">التأمين المسترد</span>
+                        <input
+                            v-model.number="priceForm.security_deposit"
+                            type="number" min="0" step="any" dir="ltr" placeholder="—"
+                            class="w-28 rounded-lg border border-indigo-200 px-2.5 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        />
+                    </label>
+                    <p class="min-w-0 flex-1 text-[11px] font-medium text-slate-500">
+                        يُقبض ضمانًا للتلفيات ويُعاد عند الخروج — لا يدخل في سعر الحجز ولا في المتبقي على النزيل.
+                        اتركه فارغًا إن كانت الوحدة بلا تأمين.
+                    </p>
+                    <p v-if="priceForm.errors.security_deposit" class="text-[11px] font-bold text-red-600">
+                        {{ priceForm.errors.security_deposit }}
+                    </p>
                 </div>
 
                 <!-- الأقسام كتبويبات: عرضها مكدّسةً يجعل النافذة شريطًا لا ينتهي -->

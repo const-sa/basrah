@@ -9,7 +9,7 @@ import { formatTime12, todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Bell, CalendarClock, Check, Eye, FileSignature, FileText, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Receipt, Search, Trash2, Wallet, X } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 interface SectionOption {
     id: number;
@@ -49,6 +49,9 @@ interface Booking {
     paid_amount: number;
     remaining_amount: number;
     is_deposit_settled: boolean;
+    /** Agreed against actually in hand — the second is what must go back. */
+    security_deposit_amount: number;
+    security_held: number;
     guests_count: number | null;
     notes: string | null;
     /** The contract issued from this stay, if one was generated. */
@@ -83,6 +86,8 @@ interface PaymentSummary {
     remaining_amount: number;
     is_deposit_settled: boolean;
     is_fully_paid: boolean;
+    security_deposit_amount: number;
+    security_held: number;
 }
 
 const props = defineProps<{
@@ -149,6 +154,58 @@ const loadPayments = async (b: Booking) => {
     }
 };
 
+/**
+ * Security movements — a second row of buttons, because they are not part of
+ * the price.
+ *
+ * They share this panel because one till and one receipt book serve both, but
+ * they answer a different question: how much of the guest's own money is still
+ * being held, not how much of the price is still owed.
+ */
+const SECURITY_TYPES = ['security_deposit', 'security_refund', 'security_forfeit'];
+
+const isSecurity = computed(() => SECURITY_TYPES.includes(payForm.type));
+
+/** What is held right now — from the summary once it lands, else from the row. */
+const securityHeld = computed(() => paySummary.value?.security_held ?? payBooking.value?.security_held ?? 0);
+
+const securityAgreed = computed(
+    () => paySummary.value?.security_deposit_amount ?? payBooking.value?.security_deposit_amount ?? 0,
+);
+
+/**
+ * The amount each type opens with: the rest of what is due, or the rest of
+ * what is held. A refund typed from memory is how a guest gets back more than
+ * they left.
+ */
+const suggestedAmount = (type: string): number => {
+    const b = payBooking.value;
+
+    if (!b) return 0;
+
+    const paid = paySummary.value?.paid_amount ?? b.paid_amount;
+    const remaining = paySummary.value?.remaining_amount ?? b.remaining_amount;
+
+    switch (type) {
+        case 'security_deposit':
+            return Math.max(0, securityAgreed.value - securityHeld.value);
+        case 'security_refund':
+        case 'security_forfeit':
+            return securityHeld.value;
+        case 'refund':
+            return 0;
+        case 'deposit':
+            return Math.max(0, Math.min((paySummary.value?.deposit_amount ?? b.deposit_amount) - paid, remaining));
+        default:
+            return remaining;
+    }
+};
+
+const setPayType = (type: string) => {
+    payForm.type = type;
+    payForm.amount = suggestedAmount(type);
+};
+
 const openPayments = (b: Booking) => {
     payBooking.value = b;
     payments.value = [];
@@ -156,7 +213,7 @@ const openPayments = (b: Booking) => {
     payForm.reset();
     payForm.clearErrors();
     payForm.type = b.is_deposit_settled ? 'payment' : 'deposit';
-    payForm.amount = b.is_deposit_settled ? b.remaining_amount : Math.min(b.deposit_amount - b.paid_amount, b.remaining_amount);
+    payForm.amount = suggestedAmount(payForm.type);
     loadPayments(b);
 };
 
@@ -749,6 +806,23 @@ const generateContract = (b: Booking) => {
                         </div>
                     </div>
 
+                    <!-- Outside the four tiles on purpose: this figure is not added to them -->
+                    <div
+                        v-if="paySummary && (paySummary.security_deposit_amount > 0 || paySummary.security_held > 0)"
+                        class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-indigo-50 px-3 py-2.5"
+                    >
+                        <span class="text-[11px] font-extrabold text-indigo-700">التأمين</span>
+                        <span class="text-[11px] font-bold text-indigo-600">
+                            المتفق عليه <span class="font-extrabold text-indigo-800">{{ money(paySummary.security_deposit_amount) }}</span>
+                        </span>
+                        <span class="text-[11px] font-bold text-indigo-600">
+                            المحتجز الآن <span class="font-extrabold text-indigo-800">{{ money(paySummary.security_held) }}</span>
+                        </span>
+                        <span class="min-w-0 flex-1 text-[10px] font-medium text-slate-500">
+                            محتجز للنزيل — لا يدخل في الإجمالي ولا في المتبقي أعلاه.
+                        </span>
+                    </div>
+
                     <div class="grid gap-4 lg:grid-cols-[300px_1fr]">
                         <form
                             v-if="can('chalet_bookings.edit')"
@@ -766,7 +840,7 @@ const generateContract = (b: Booking) => {
                                     ]"
                                     :key="t[0]"
                                     type="button"
-                                    @click="payForm.type = t[0]"
+                                    @click="setPayType(t[0])"
                                     class="rounded-lg py-1.5 text-[11px] font-bold transition"
                                     :class="
                                         payForm.type === t[0]
@@ -780,6 +854,41 @@ const generateContract = (b: Booking) => {
                                 </button>
                             </div>
 
+                            <!--
+                                Kept on its own row and in its own colour: this
+                                money is held for the guest, and a clerk who
+                                reaches for «رد تأمين» must never be one slip
+                                away from «استرداد» off the price.
+                            -->
+                            <div class="grid grid-cols-3 gap-1 border-t border-slate-200 pt-2.5">
+                                <button
+                                    v-for="t in [
+                                        ['security_deposit', 'قبض تأمين'],
+                                        ['security_refund', 'رد تأمين'],
+                                        ['security_forfeit', 'خصم تلفيات'],
+                                    ]"
+                                    :key="t[0]"
+                                    type="button"
+                                    :disabled="t[0] !== 'security_deposit' && securityHeld <= 0"
+                                    @click="setPayType(t[0])"
+                                    class="rounded-lg py-1.5 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:bg-white disabled:text-slate-300 disabled:ring-slate-100"
+                                    :class="payForm.type === t[0] ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-700 ring-1 ring-indigo-200'"
+                                >
+                                    {{ t[1] }}
+                                </button>
+                            </div>
+
+                            <p v-if="isSecurity" class="rounded-lg bg-indigo-50 px-2.5 py-2 text-[11px] font-bold text-indigo-700">
+                                <template v-if="payForm.type === 'security_deposit'">
+                                    التأمين المتفق عليه {{ money(securityAgreed) }} — المحتجز الآن {{ money(securityHeld) }}.
+                                </template>
+                                <template v-else-if="payForm.type === 'security_forfeit'">
+                                    يُخصم من المحتجز ({{ money(securityHeld) }}) مقابل تلفيات، ولا يخرج نقدًا من الصندوق.
+                                </template>
+                                <template v-else> يُعاد للنزيل من المحتجز ({{ money(securityHeld) }}). </template>
+                                لا يتغيّر به إجمالي الحجز ولا المتبقي.
+                            </p>
+
                             <div>
                                 <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
                                 <input
@@ -792,8 +901,9 @@ const generateContract = (b: Booking) => {
                                 <p v-if="payForm.errors.amount" class="mt-1 text-[11px] text-red-500">{{ payForm.errors.amount }}</p>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
+                            <div class="grid gap-2" :class="payForm.type === 'security_forfeit' ? 'grid-cols-1' : 'grid-cols-2'">
+                                <!-- A forfeit moves no cash, so naming a till would be a fiction -->
+                                <div v-if="payForm.type !== 'security_forfeit'">
                                     <label class="mb-1 block text-[11px] font-bold text-slate-600">الطريقة</label>
                                     <select v-model="payForm.payment_method_id" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
                                         <option v-for="m in meta.payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
@@ -815,7 +925,7 @@ const generateContract = (b: Booking) => {
                             </div>
 
                             <label
-                                v-if="payBooking.client?.mobile && payForm.type !== 'refund'"
+                                v-if="payBooking.client?.mobile && payForm.type !== 'refund' && !isSecurity"
                                 class="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700"
                             >
                                 <input type="checkbox" v-model="payForm.notify" class="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600" />
@@ -827,10 +937,14 @@ const generateContract = (b: Booking) => {
                                 :disabled="payForm.processing || payForm.amount <= 0"
                                 class="w-full rounded-md bg-teal-600 py-2 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-50"
                             >
-                                تسجيل الدفعة
+                                {{ isSecurity ? 'تسجيل حركة التأمين' : 'تسجيل الدفعة' }}
                             </button>
 
-                            <p class="text-[10px] font-medium leading-5 text-slate-500">
+                            <p v-if="isSecurity" class="text-[10px] font-medium leading-5 text-slate-500">
+                                التأمين يُقيَّد في حساب «تأمينات حجوزات مستردة» لا في العرابين، فلا يظهر إيرادًا. وما يُخصم منه
+                                للتلفيات وحده هو الذي يتحوّل إلى إيراد.
+                            </p>
+                            <p v-else class="text-[10px] font-medium leading-5 text-slate-500">
                                 العربون يُقيَّد التزامًا (إيراد غير مكتسب) لا إيرادًا، ويتحوّل إلى إيراد عند إنهاء الإقامة.
                             </p>
                         </form>

@@ -34,6 +34,13 @@ class Ledger
 
     public const SALARIES_PAYABLE = '2310';
 
+    /**
+     * Security deposits held against damage. Deliberately not UNEARNED_REVENUE:
+     * that account holds money on its way to becoming revenue, and this money
+     * is on its way back to the guest. Only a forfeited part ever crosses over.
+     */
+    public const REFUNDABLE_DEPOSITS = '2410';
+
     public const BOOKING_REVENUE = '4110';
 
     public const SALES_REVENUE = '4120';

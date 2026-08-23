@@ -105,6 +105,7 @@ class Booking extends Model
         'discount_amount',
         'total_amount',
         'deposit_amount',
+        'security_deposit_amount',
         'paid_amount',
         'guests_count',
         'notes',
@@ -129,6 +130,7 @@ class Booking extends Model
             'discount_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'deposit_amount' => 'decimal:2',
+            'security_deposit_amount' => 'decimal:2',
             'paid_amount' => 'decimal:2',
         ];
     }
@@ -214,14 +216,38 @@ class Booking extends Model
 
     /**
      * إعادة احتساب المسدَّد من الدفعات الفعلية (الاسترداد يُخصم).
+     *
+     * Security movements are left out entirely. That money is held, not paid:
+     * counting it here would show a booking as settled while the price is
+     * still owed, and hand the guest back their own deposit as change.
      */
     public function recalculatePaidAmount(): void
     {
         $paid = $this->payments()
+            ->whereNotIn('type', BookingPayment::SECURITY_TYPES)
             ->selectRaw("SUM(CASE WHEN type = 'refund' THEN -amount ELSE amount END) AS total")
             ->value('total');
 
         $this->update(['paid_amount' => round((float) $paid, 2)]);
+    }
+
+    /**
+     * التأمين المحتجز فعلًا الآن — المقبوض ناقص ما رُدَّ أو خُصم.
+     *
+     * Read from the movements rather than kept in a column: what was agreed
+     * and what is actually in hand are two different facts, and one column
+     * would have to be right about both.
+     *
+     * Uses the loaded payments when there are any — the booking lists carry
+     * them already, and a query per row would cost a round trip per line.
+     */
+    public function securityHeld(): float
+    {
+        $movements = $this->relationLoaded('payments')
+            ? $this->payments->whereIn('type', BookingPayment::SECURITY_TYPES)
+            : $this->payments()->whereIn('type', BookingPayment::SECURITY_TYPES)->get();
+
+        return round($movements->sum(fn (BookingPayment $p) => $p->signedAmount()), 2);
     }
 
     // ── الحالة ───────────────────────────────────────────────

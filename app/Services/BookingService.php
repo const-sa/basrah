@@ -59,8 +59,20 @@ class BookingService
             ]);
         }
 
-        $methodId = $data['payment_method_id']
-            ?? PaymentMethod::default()->id;
+        // Nothing may be released that is not being held. Without this the
+        // deposits account goes negative — the books would show the property
+        // owing a guest money it never took from them.
+        if (in_array($type, BookingPayment::SECURITY_RELEASES, true) && $amount > $booking->securityHeld()) {
+            throw ValidationException::withMessages([
+                'amount' => 'المبلغ يتجاوز التأمين المحتجز على هذا الحجز.',
+            ]);
+        }
+
+        // A forfeit moves no cash — it only ends the claim on money already in
+        // the till — so it carries no payment method to mislead the reports.
+        $methodId = $type === 'security_forfeit'
+            ? null
+            : ($data['payment_method_id'] ?? PaymentMethod::default()->id);
 
         return DB::transaction(function () use ($booking, $data, $amount, $type, $userId, $methodId) {
             $payment = $booking->payments()->create([
