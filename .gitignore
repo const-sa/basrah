@@ -26,3 +26,9 @@ yarn-error.log
 /.vscode
 /.zed
 /public/build
+# Runtime uploads (logos, signatures, stamps) written by the app on the server
+# — server data, not source. See GeneralSettingsController::upload().
+/public/uploads
+# Host-specific rewrite rules at the repo root, plus stray backups of them.
+# public/.htaccess stays tracked: those are Laravel's own rules.
+/.htaccess*
