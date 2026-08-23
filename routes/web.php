@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ArchiveController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupsController;
 use App\Http\Controllers\Admin\BookingsController;
+use App\Http\Controllers\Admin\BookingTimesController;
 use App\Http\Controllers\Admin\ChaletBookingsController;
 use App\Http\Controllers\Admin\ChaletCalendarController;
 use App\Http\Controllers\Admin\CitiesController;
@@ -451,6 +452,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // الإعدادات العامة
     Route::get('settings/general', [GeneralSettingsController::class, 'edit'])->middleware('perm:settings.view')->name('settings.general.edit');
     Route::post('settings/general', [GeneralSettingsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.general.update');
+
+    // أوقات الحجز — فترات اليوم وأوقات إقامة الشاليه
+    Route::get('settings/booking-times', [BookingTimesController::class, 'edit'])->middleware('perm:settings.view')->name('settings.booking_times.edit');
+    Route::post('settings/booking-times', [BookingTimesController::class, 'update'])->middleware('perm:settings.edit')->name('settings.booking_times.update');
+    Route::post('settings/booking-times/reset', [BookingTimesController::class, 'reset'])->middleware('perm:settings.edit')->name('settings.booking_times.reset');
 
     // إعدادات الواتساب (بوابة c-wts.com)
     Route::get('settings/whatsapp', [WhatsappSettingsController::class, 'edit'])->middleware('perm:settings.view')->name('settings.whatsapp.edit');

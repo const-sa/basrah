@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\RolesController;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Observers\AuditObserver;
+use App\Support\BookingTimes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
@@ -19,7 +20,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Booking hours are read many times per request (every period label in
+        // a list), so they resolve once. A singleton rather than a static so
+        // nothing leaks between tests, and Setting::booted() drops it on save.
+        $this->app->singleton(BookingTimes::class);
     }
 
     /**

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import UploadProgress from '@/components/UploadProgress.vue';
+import SettingsTabs from '@/components/SettingsTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
@@ -107,9 +108,12 @@ const submit = () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <form @submit.prevent="submit" class="min-h-full space-y-5 bg-slate-100 p-5">
-            <div>
-                <h1 class="text-2xl font-extrabold text-slate-900">الإعدادات العامة</h1>
-                <p class="mt-1 text-sm font-medium text-slate-600">شعار النشاط وبياناته وإعدادات الضريبة</p>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <SettingsTabs />
+                <div class="text-start">
+                    <h1 class="text-2xl font-extrabold text-slate-900">الإعدادات العامة</h1>
+                    <p class="mt-1 text-sm font-medium text-slate-600">شعار النشاط وبياناته وإعدادات الضريبة</p>
+                </div>
             </div>
 
             <!-- شريط تحميل المرفوعات أثناء الحفظ -->

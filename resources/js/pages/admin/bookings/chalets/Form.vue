@@ -4,6 +4,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfToken } from '@/lib/csrf';
+import { addDays, daysBetween, formatTime12, todayString } from '@/lib/dates';
 import { toHijri, weekdayName } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -60,6 +61,8 @@ const props = defineProps<{
     clients: ClientOption[];
     meta: {
         statuses: { key: string; label: string; color: string }[];
+        /** Day periods with their configured hours — the day-use menu. */
+        periods: { key: string; label: string; start: string; end: string }[];
         stay: { check_in_time: string; check_out_time: string; max_nights: number };
         payment_methods: PaymentMethodOption[];
     };
@@ -80,22 +83,10 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
 
-const addDays = (date: string, days: number) => {
-    const d = new Date(`${date}T00:00:00`);
-    d.setDate(d.getDate() + days);
-
-    return d.toISOString().slice(0, 10);
-};
-
 /** عدد الليالي بين تاريخين — يوم الخروج غير محسوب ليلةً، كقاعدة الخادم. */
-const nightsBetween = (checkIn: string, checkOut: string) => {
-    if (!checkIn || !checkOut) return 0;
-    const ms = new Date(`${checkOut}T00:00:00`).getTime() - new Date(`${checkIn}T00:00:00`).getTime();
+const nightsBetween = daysBetween;
 
-    return Math.round(ms / 86_400_000);
-};
-
-const today = new Date().toISOString().slice(0, 10);
+const today = todayString();
 
 /** The period value that means "an overnight stay" rather than day use. */
 const STAY = 'overnight';
@@ -470,7 +461,7 @@ const submit = () => {
                                     <button v-for="p in dayPeriods" :key="p.key" type="button" @click="form.period = p.key"
                                         class="rounded-lg px-3 py-1.5 text-xs font-bold transition"
                                         :class="form.period === p.key ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
-                                    >{{ p.label }} <span class="text-[10px] opacity-70" dir="ltr">{{ p.start }}–{{ p.end }}</span></button>
+                                    >{{ p.label }} <span class="text-[10px] opacity-70" dir="ltr">{{ formatTime12(p.start) }} – {{ formatTime12(p.end) }}</span></button>
                                 </div>
                                 <p v-if="form.errors.period" class="mt-1 text-xs text-red-500">{{ form.errors.period }}</p>
                             </div>
@@ -479,7 +470,7 @@ const submit = () => {
                         <div v-else class="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول ({{ meta.stay.check_in_time }})
+                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول ({{ formatTime12(meta.stay.check_in_time) }})
                                 </label>
                                 <input v-model="form.booking_date" type="date" :min="minDate" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                                 <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
@@ -490,7 +481,7 @@ const submit = () => {
                             </div>
                             <div>
                                 <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                    <LogOut class="h-3.5 w-3.5 text-rose-500" /> الخروج ({{ meta.stay.check_out_time }})
+                                    <LogOut class="h-3.5 w-3.5 text-rose-500" /> الخروج ({{ formatTime12(meta.stay.check_out_time) }})
                                 </label>
                                 <input v-model="form.check_out_date" type="date" :min="form.booking_date" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                                 <p v-if="checkOutHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-rose-700">

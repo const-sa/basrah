@@ -98,7 +98,7 @@ class BookingPagesTest extends TestCase
                 // الشاشة تعرض قاعاتها وحدها: الشاليه لا يُحجز من هنا فلا يُعرض
                 ->has('units', $halls)
                 ->has('meta.statuses', 7)
-                ->has('meta.periods', 3),
+                ->has('meta.periods', 1),
             );
     }
 
@@ -138,7 +138,7 @@ class BookingPagesTest extends TestCase
 
         $booking = app(BookingService::class)->create([
             'unit_id' => $hall->id, 'scope' => 'whole',
-            'booking_date' => '2026-11-15', 'period' => 'evening', 'status' => 'confirmed',
+            'booking_date' => '2026-11-15', 'period' => 'full_day', 'status' => 'confirmed',
         ]);
 
         $this->actingAs($this->owner)
@@ -147,7 +147,7 @@ class BookingPagesTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('admin/bookings/halls/Form')
                 ->where('booking.id', $booking->id)
-                ->where('booking.period', 'evening')
+                ->where('booking.period', 'full_day')
                 ->where('booking.unit.id', $hall->id),
             );
     }
@@ -318,8 +318,8 @@ class BookingPagesTest extends TestCase
         $unit = Unit::where('type', 'hall')->firstOrFail();
         $service = app(BookingService::class);
 
-        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-01', 'period' => 'morning', 'status' => 'confirmed']);
-        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-02', 'period' => 'morning', 'status' => 'tentative']);
+        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-01', 'period' => 'full_day', 'status' => 'confirmed']);
+        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-02', 'period' => 'full_day', 'status' => 'tentative']);
 
         $this->actingAs($this->owner)
             ->get('/admin/bookings/halls?status=confirmed')

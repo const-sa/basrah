@@ -28,17 +28,17 @@ class StayPeriod
 
     public static function checkInTime(): string
     {
-        return (string) config('operations.booking.chalet.check_in_time', '16:00');
+        return app(BookingTimes::class)->stay()['check_in'];
     }
 
     public static function checkOutTime(): string
     {
-        return (string) config('operations.booking.chalet.check_out_time', '12:00');
+        return app(BookingTimes::class)->stay()['check_out'];
     }
 
     public static function maxNights(): int
     {
-        return (int) config('operations.booking.chalet.max_nights', 30);
+        return app(BookingTimes::class)->stay()['max_nights'];
     }
 
     /**

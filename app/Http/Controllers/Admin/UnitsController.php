@@ -426,8 +426,9 @@ class UnitsController extends Controller
                 'is_demo' => (bool) $u->is_demo,
                 'sees_all_units' => (bool) $u->has_all_units,
             ])->values(),
-            'periods' => BookingPeriod::forView(),
-            // الشاليه يُسعَّر بالليلة لا بفترات اليوم، فله جدوله الخاص.
+            // القاعة تُسعَّر يومًا كاملًا وحده — الصباحي والمسائي للشاليه.
+            'periods' => BookingPeriod::hallPeriods(),
+            // والشاليه يُسعَّر بالليلة وبفترات اليوم معًا، فله جدوله الخاص.
             'stay_periods' => StayPeriod::pricingPeriods(),
             'weekdays' => Weekdays::forView(),
         ];

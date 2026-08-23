@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import SiteLayout, { type SiteOrg } from '@/layouts/SiteLayout.vue';
+import { addDays } from '@/lib/dates';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowRight, Loader2, ShieldCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -28,7 +29,7 @@ const form = useForm({
     section_ids: [] as number[],
     booking_date: '',
     check_out_date: '',
-    period: props.periods[0]?.key ?? 'evening',
+    period: props.periods[0]?.key ?? 'full_day',
     days_count: 1,
     event_type_id: null as number | null,
     guests_count: null as number | null,
@@ -117,9 +118,7 @@ watch(
     () => form.booking_date,
     (value) => {
         if (props.isStay && value && (!form.check_out_date || form.check_out_date <= value)) {
-            const next = new Date(value);
-            next.setDate(next.getDate() + 1);
-            form.check_out_date = next.toISOString().slice(0, 10);
+            form.check_out_date = addDays(value, 1);
         }
     },
 );
@@ -204,7 +203,11 @@ const submit = () => form.post(`/book/${props.unit.id}`, { preserveScroll: true 
 
                             <div v-else>
                                 <label class="mb-1.5 block text-sm font-bold text-slate-700">الفترة</label>
-                                <select v-model="form.period" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                <!-- بفترة واحدة تُعرض خبرًا: قائمةٌ بخيار واحد تسأل سؤالًا بلا جواب آخر -->
+                                <div v-if="periods.length === 1" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700">
+                                    {{ periods[0].label }}
+                                </div>
+                                <select v-else v-model="form.period" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
                                     <option v-for="p in periods" :key="p.key" :value="p.key">{{ p.label }}</option>
                                 </select>
                             </div>

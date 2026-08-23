@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\BookingTimes;
 use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
@@ -15,6 +16,8 @@ class Setting extends Model
         // الهوية والتواصل
         'business_name', 'logo_path', 'favicon_path',
         'phone', 'whatsapp', 'email', 'address',
+        // أوقات الحجز — فترات اليوم وأوقات الشاليه
+        'booking_periods', 'chalet_check_in_time', 'chalet_check_out_time', 'chalet_max_nights',
         // الضريبة والسجل
         'tax_enabled', 'tax_number', 'tax_rate', 'commercial_register',
         // الواتساب
@@ -35,7 +38,16 @@ class Setting extends Model
             'wa_enabled' => 'boolean',
             'wa_welcome_enabled' => 'boolean',
             'wa_connected_at' => 'datetime',
+            'booking_periods' => 'array',
+            'chalet_max_nights' => 'integer',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Booking hours are memoised for the request; a save must not leave
+        // the old ones in play for the rest of it.
+        static::saved(fn () => app()->forgetInstance(BookingTimes::class));
     }
 
     /**

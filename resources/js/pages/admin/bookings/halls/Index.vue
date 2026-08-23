@@ -7,6 +7,7 @@ import { useTableColumns, type ColumnPreset, type TableColumn } from '@/composab
 import AppLayout from '@/layouts/AppLayout.vue';
 import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
 import { toHijri } from '@/lib/hijri';
+import { todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -248,7 +249,7 @@ const payForm = useForm({
     type: 'deposit',
     payment_method_id: props.meta.payment_methods[0]?.id ?? (null as number | null),
     amount: 0,
-    paid_on: new Date().toISOString().slice(0, 10),
+    paid_on: todayString(),
     reference: '',
     notes: '',
     notify: true,

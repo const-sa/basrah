@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\ExcludeIf;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -95,7 +96,7 @@ class ChaletBookingsController extends BaseBookingsController
             'bookings' => $bookings,
             'filters' => $request->only(['status', 'unit_id', 'from', 'to', 'search']),
             'units' => $this->unitOptions($user),
-            'meta' => self::meta(),
+            'meta' => static::meta(),
             'stats' => $this->stats($query),
         ]);
     }
@@ -168,7 +169,7 @@ class ChaletBookingsController extends BaseBookingsController
             'clients' => $this->clientOptions(),
             'addons' => Addon::where('is_active', true)->orderBy('sort_order')
                 ->get(['id', 'name', 'price', 'pricing']),
-            'meta' => self::meta(),
+            'meta' => static::meta(),
         ];
     }
 
@@ -298,7 +299,7 @@ class ChaletBookingsController extends BaseBookingsController
      * Drops the field unless this request is an overnight stay, so a day-use
      * booking neither validates nor keeps a check-out date.
      */
-    private function excludeUnlessStay(Request $request): \Illuminate\Validation\Rules\ExcludeIf
+    private function excludeUnlessStay(Request $request): ExcludeIf
     {
         return Rule::excludeIf(
             fn () => ($request->input('period') ?? StayPeriod::PERIOD) !== StayPeriod::PERIOD,

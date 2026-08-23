@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Booking;
 use App\Models\EventType;
+use App\Models\Package;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\User;
@@ -57,7 +58,7 @@ class MultiDayHallBookingTest extends TestCase
             'scope' => 'whole',
             // 2026-10-14 أربعاء — المناسبة تمتد إلى الخميس والجمعة
             'booking_date' => '2026-10-14',
-            'period' => 'evening',
+            'period' => 'full_day',
             'status' => 'confirmed',
             ...$overrides,
         ];
@@ -87,9 +88,9 @@ class MultiDayHallBookingTest extends TestCase
         $this->assertSame('2026-10-16', $booking->lastDayDate());
         $this->assertSame(['2026-10-14', '2026-10-15', '2026-10-16'], $booking->dayDates());
 
-        // المدى يبدأ بمساء اليوم الأول وينتهي بعد منتصف ليل اليوم الأخير،
-        // لأن الفترة المسائية تعبر منتصف الليل.
-        $this->assertSame('2026-10-14 17:00:00', $booking->starts_at->toDateTimeString());
+        // المدى يبدأ بصباح اليوم الأول وينتهي بعد منتصف ليل اليوم الأخير،
+        // لأن اليوم الكامل يعبر منتصف الليل.
+        $this->assertSame('2026-10-14 09:00:00', $booking->starts_at->toDateTimeString());
         $this->assertSame('2026-10-17 01:00:00', $booking->ends_at->toDateTimeString());
     }
 
@@ -120,11 +121,11 @@ class MultiDayHallBookingTest extends TestCase
     {
         $pricing = app(BookingPricing::class);
 
-        $wednesday = $pricing->quote($this->hall, 'whole', '2026-10-14', 'evening');
-        $thursday = $pricing->quote($this->hall, 'whole', '2026-10-15', 'evening');
-        $friday = $pricing->quote($this->hall, 'whole', '2026-10-16', 'evening');
+        $wednesday = $pricing->quote($this->hall, 'whole', '2026-10-14', 'full_day');
+        $thursday = $pricing->quote($this->hall, 'whole', '2026-10-15', 'full_day');
+        $friday = $pricing->quote($this->hall, 'whole', '2026-10-16', 'full_day');
 
-        $threeDays = $pricing->quote($this->hall, 'whole', '2026-10-14', 'evening', [], [], 0, null, null, 3);
+        $threeDays = $pricing->quote($this->hall, 'whole', '2026-10-14', 'full_day', [], [], 0, null, null, 3);
 
         $this->assertTrue($friday['is_weekend']);
         $this->assertSame(3, $threeDays['days']);
@@ -148,7 +149,7 @@ class MultiDayHallBookingTest extends TestCase
         ]);
 
         $quote = app(BookingPricing::class)
-            ->quote($this->hall, 'whole', '2026-10-14', 'evening', [], [], 0, null, $type->id, 2);
+            ->quote($this->hall, 'whole', '2026-10-14', 'full_day', [], [], 0, null, $type->id, 2);
 
         $this->assertTrue($quote['priced_by_event']);
         $this->assertSame(20000.0, $quote['base_amount']);
@@ -159,7 +160,7 @@ class MultiDayHallBookingTest extends TestCase
 
     public function test_the_package_is_charged_once_for_the_whole_event(): void
     {
-        $package = \App\Models\Package::create([
+        $package = Package::create([
             'unit_id' => $this->hall->id,
             'name' => 'باقة الضيافة',
             'price' => 3000,
@@ -167,7 +168,7 @@ class MultiDayHallBookingTest extends TestCase
         ]);
 
         $quote = app(BookingPricing::class)
-            ->quote($this->hall, 'whole', '2026-10-14', 'evening', [], [], 0, $package->id, null, 3);
+            ->quote($this->hall, 'whole', '2026-10-14', 'full_day', [], [], 0, $package->id, null, 3);
 
         $this->assertSame(3000.0, $quote['package_amount']);
     }

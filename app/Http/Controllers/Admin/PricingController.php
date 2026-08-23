@@ -43,7 +43,7 @@ class PricingController extends Controller
         // unit can be sold as a stay or for a morning/evening/full day.
         $periods = $unit->type === 'chalet'
             ? StayPeriod::pricingKeys()
-            : BookingPeriod::keys();
+            : BookingPeriod::hallKeys();
 
         $data = $request->validate([
             'prices' => ['array'],

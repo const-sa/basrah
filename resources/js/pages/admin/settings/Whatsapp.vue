@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SettingsTabs from '@/components/SettingsTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
 import { type BreadcrumbItem } from '@/types';
@@ -183,6 +184,8 @@ const insertVar = (v: string) => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <form @submit.prevent="submit" class="min-h-full space-y-5 bg-slate-100 p-5">
+            <SettingsTabs />
+
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">إعدادات الواتساب</h1>

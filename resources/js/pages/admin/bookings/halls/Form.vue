@@ -4,6 +4,7 @@ import SearchableSelect from '@/components/SearchableSelect.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
 import { toHijri, weekdayName } from '@/lib/hijri';
+import { todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, Info, Loader2, PartyPopper, Wallet } from 'lucide-vue-next';
@@ -87,7 +88,7 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 ]);
 
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
-const today = new Date().toISOString().slice(0, 10);
+const today = todayString();
 
 /**
  * أقدم تاريخ يقبله حقل التاريخ — اليوم، فالقاعة لا تُحجز بأثر رجعي.
@@ -578,7 +579,15 @@ const eventBadge = (color: string) =>
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="mb-1 block text-[15px] font-bold text-slate-900">الفترة</label>
-                                <select v-model="form.period" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
+                                <!-- القاعة تُباع بفترة واحدة، فتُعرض خبرًا لا قائمةً بخيار واحد -->
+                                <div
+                                    v-if="meta.periods.length === 1"
+                                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] font-bold text-slate-700"
+                                >
+                                    {{ meta.periods[0].label }}
+                                    <span class="text-sm font-medium text-slate-500" dir="ltr">({{ meta.periods[0].start }}–{{ meta.periods[0].end }})</span>
+                                </div>
+                                <select v-else v-model="form.period" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
                                     <option v-for="p in meta.periods" :key="p.key" :value="p.key">{{ p.label }} ({{ p.start }}–{{ p.end }})</option>
                                 </select>
                             </div>

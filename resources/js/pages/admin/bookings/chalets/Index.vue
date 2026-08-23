@@ -5,6 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
 import { toHijri } from '@/lib/hijri';
+import { formatTime12, todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Bell, CalendarClock, Check, Eye, FileSignature, FileText, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Receipt, Search, Trash2, Wallet, X } from 'lucide-vue-next';
@@ -106,7 +107,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
 
-const today = new Date().toISOString().slice(0, 10);
+const today = todayString();
 
 // ── الفلاتر ─────────────────────────────────────────────────
 const filters = ref({ ...props.filters });
@@ -239,7 +240,7 @@ const generateContract = (b: Booking) => {
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">حجوزات الشاليهات</h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">
-                        إقامة بالليالي — دخول {{ meta.stay.check_in_time }} وخروج {{ meta.stay.check_out_time }}
+                        إقامة بالليالي — دخول {{ formatTime12(meta.stay.check_in_time) }} وخروج {{ formatTime12(meta.stay.check_out_time) }}
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">

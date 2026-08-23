@@ -73,7 +73,8 @@ class BookingSetupSeeder extends Seeder
      */
     private function seedHallPeriods(Unit $unit): void
     {
-        foreach (BookingPeriod::keys() as $period) {
+        // القاعة تُباع يومًا كاملًا، فلا يُسعَّر لها ما لا يُحجز.
+        foreach (BookingPeriod::hallKeys() as $period) {
             [$weekday, $weekend] = self::BASE[$period];
 
             $unit->prices()->updateOrCreate(

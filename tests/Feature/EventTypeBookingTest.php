@@ -55,7 +55,7 @@ class EventTypeBookingTest extends TestCase
             'unit_id' => $this->hall->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-15',
-            'period' => 'evening',
+            'period' => 'full_day',
             'status' => 'confirmed',
             ...$overrides,
         ];

@@ -75,7 +75,9 @@ class SiteController extends Controller
             ->whereNull('unit_section_id')
             ->where('is_active', true)
             ->when($isStay, fn ($q) => $q->where('period', StayPeriod::PERIOD))
-            ->when(! $isStay, fn ($q) => $q->where('period', '!=', StayPeriod::PERIOD))
+            // القاعة تُعرض بسعر يومها الكامل — وصفوف فتراتٍ قديمة قد تبقى
+            // في الجدول من قبل، فتُستبعد بالمفتاح لا بنفي «الليلة».
+            ->when(! $isStay, fn ($q) => $q->whereIn('period', BookingPeriod::hallKeys()))
             ->get();
 
         return $rows->map(fn (UnitPrice $p) => [
@@ -91,7 +93,9 @@ class SiteController extends Controller
      */
     private function periodOptions(): array
     {
-        return collect(BookingPeriod::PERIODS)
+        // صفحة القاعة تعرض ما تُباع به — يومًا كاملًا لا فتراتٍ.
+        return collect(BookingPeriod::periods())
+            ->only(BookingPeriod::hallKeys())
             ->map(fn (array $meta, string $key) => [
                 'key' => $key,
                 'label' => $meta['label'],

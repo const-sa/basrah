@@ -70,8 +70,9 @@ class OnlineBookingController extends Controller
                 'sections' => $unit->sections->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])->values(),
             ],
             'isStay' => $isStay,
-            'periods' => $isStay ? [] : collect(BookingPeriod::PERIODS)
-                ->map(fn (array $m, string $k) => ['key' => $k, 'label' => $m['label']])
+            // الزائر يحجز قاعةً يومًا كاملًا — والصباحي والمسائي للشاليه.
+            'periods' => $isStay ? [] : collect(BookingPeriod::hallPeriods())
+                ->map(fn (array $p) => ['key' => $p['key'], 'label' => $p['label']])
                 ->values(),
             // أنواع المناسبات تخصّ القاعات وحدها
             'eventTypes' => $isStay ? [] : EventType::active()->forUnit($unit->id)->get(['id', 'name']),
@@ -237,7 +238,7 @@ class OnlineBookingController extends Controller
         if ($isStay) {
             $rules['check_out_date'] = ['required', 'date', 'after:booking_date'];
         } else {
-            $rules['period'] = ['required', Rule::in(array_keys(BookingPeriod::PERIODS))];
+            $rules['period'] = ['required', Rule::in(BookingPeriod::hallKeys())];
             $rules['days_count'] = ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS];
             $rules['event_type_id'] = ['nullable', 'integer', 'exists:event_types,id'];
         }

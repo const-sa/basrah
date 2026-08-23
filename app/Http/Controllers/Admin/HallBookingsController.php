@@ -20,10 +20,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * حجوزات القاعات — مناسبة داخل يوم واحد بفترة محددة.
+ * حجوزات القاعات — مناسبة تشغل اليوم.
  *
- * ما يميّز هذه الشاشة: اختيار الفترة (صباحي/مسائي/يوم كامل)، والباقات،
- * وأنواع المناسبات، وحجز الوحدة كاملة أو أقسامًا منها.
+ * ما يميّز هذه الشاشة: الباقات وأنواع المناسبات، وحجز الوحدة كاملة أو أقسامًا
+ * منها. والقاعة تُباع يومًا كاملًا لا فتراتٍ — see BookingPeriod::HALL_KEYS.
  */
 class HallBookingsController extends BaseBookingsController
 {
@@ -35,6 +35,20 @@ class HallBookingsController extends BaseBookingsController
     protected function scopeToType(Builder $query): Builder
     {
         return $query->events();
+    }
+
+    /**
+     * القاعة تُباع يومًا كاملًا — الصباحي والمسائي إسكانٌ نهاري يخصّ الشاليه.
+     *
+     * Narrowed here rather than at each screen so the register, the form, the
+     * calendar and the month view all read one list: whoever calls
+     * HallBookingsController::meta() gets a hall's periods, not the catalogue.
+     *
+     * @return array<string, mixed>
+     */
+    public static function meta(): array
+    {
+        return [...parent::meta(), 'periods' => BookingPeriod::hallPeriods()];
     }
 
     protected function extraRelations(): array
@@ -93,7 +107,7 @@ class HallBookingsController extends BaseBookingsController
             'units' => $this->unitOptions($user),
             // القائمة تحتاج الأنواع للفلتر وحده — النموذج له شاشته وبياناتها.
             'eventTypes' => $this->eventTypeOptions($user),
-            'meta' => self::meta(),
+            'meta' => static::meta(),
             'stats' => $this->stats($query),
             // أعمدة طرق الدفع تُبنى من جدول الطرق لا من الصفوف المعروضة:
             // الطريقة التي لم يُقبض بها في هذه الصفحة يبقى عمودها بصفره،
@@ -205,7 +219,7 @@ class HallBookingsController extends BaseBookingsController
             'prefill' => array_filter([
                 'unit_id' => $request->integer('unit_id') ?: null,
                 'booking_date' => $request->date('booking_date')?->toDateString(),
-                'period' => in_array($request->string('period')->toString(), BookingPeriod::keys(), true)
+                'period' => in_array($request->string('period')->toString(), BookingPeriod::hallKeys(), true)
                     ? $request->string('period')->toString()
                     : null,
                 'section_ids' => array_values(array_filter(array_map(
@@ -293,7 +307,7 @@ class HallBookingsController extends BaseBookingsController
                     ])->values(),
                 ]),
             'eventTypes' => $this->eventTypeOptions($user),
-            'meta' => self::meta(),
+            'meta' => static::meta(),
         ];
     }
 
@@ -329,7 +343,7 @@ class HallBookingsController extends BaseBookingsController
             'section_ids.*' => ['integer', 'exists:unit_sections,id'],
             'booking_date' => ['required', 'date'],
             'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
-            'period' => ['required', Rule::in(BookingPeriod::keys())],
+            'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
             'client_id' => ['nullable', 'exists:clients,id'],
             'event_type_id' => ['nullable', $this->eventTypeBelongsToUnit($request)],
             'package_id' => ['nullable', 'exists:packages,id'],
@@ -392,7 +406,7 @@ class HallBookingsController extends BaseBookingsController
             // واحدًا: الحد الأعلى حارس خطأ إدخال لا سياسة تسعير.
             'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
             // فترة القاعة لا تشمل «المبيت»: تلك طريقة الشاليه وشاشته.
-            'period' => ['required', Rule::in(BookingPeriod::keys())],
+            'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'guests_count' => ['nullable', 'integer', 'min:1'],

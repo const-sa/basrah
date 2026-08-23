@@ -2,6 +2,7 @@
 import { StatusBadge } from '@/components/data-table';
 import SmallBox from '@/components/lte/SmallBox.vue';
 import { usePermissions } from '@/composables/usePermissions';
+import SettingsTabs from '@/components/SettingsTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -98,6 +99,8 @@ const destinationIcon = (key: string) => (key === 'bank' ? Landmark : Banknote);
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-4 p-5">
+            <SettingsTabs />
+
             <div>
                 <h1 class="text-2xl font-extrabold text-slate-900">طرق الدفع</h1>
                 <p class="mt-1 text-sm font-medium text-slate-600">

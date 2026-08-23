@@ -9,6 +9,7 @@ import {
     CalculatorIcon,
     CalendarDays,
     CalendarRange,
+    Clock,
     ConciergeBell,
     Contact,
     CreditCard,
@@ -213,6 +214,9 @@ export function useNavigation() {
             icon: Settings,
             children: [
                 { title: t('nav.settings_general'), href: '/admin/settings/general', icon: SlidersHorizontal, perm: 'settings.view' },
+                // The hours behind every booking range — day periods and chalet
+                // check-in/out. They decide what counts as a clash, not just labels.
+                { title: t('nav.settings_booking_times'), href: '/admin/settings/booking-times', icon: Clock, perm: 'settings.view' },
                 { title: t('nav.settings_whatsapp'), href: '/admin/settings/whatsapp', icon: MessageCircle, perm: 'settings.view' },
                 { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
                 { title: t('nav.departments'), href: '/admin/departments', icon: Building2, perm: 'departments.view' },

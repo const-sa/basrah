@@ -58,8 +58,8 @@ class PublicSiteBookingTest extends TestCase
                 ->where('unit.name', 'قاعة المشام')
                 ->where('isStay', false)
                 ->has('unit.sections', 2)
-                ->has('prices', 3)
-                ->has('periods', 3),
+                ->has('prices', 1)
+                ->has('periods', 1),
             );
     }
 
@@ -90,7 +90,7 @@ class PublicSiteBookingTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('site/Book')
                 ->where('unit.id', $this->hall->id)
-                ->has('periods', 3),
+                ->has('periods', 1),
             );
     }
 
@@ -101,7 +101,7 @@ class PublicSiteBookingTest extends TestCase
         $response = $this->postJson("/book/{$this->hall->id}/quote", [
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
-            'period' => 'evening',
+            'period' => 'full_day',
             'days_count' => 1,
         ]);
 
@@ -121,7 +121,7 @@ class PublicSiteBookingTest extends TestCase
         return [
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
-            'period' => 'evening',
+            'period' => 'full_day',
             'days_count' => 1,
             'client_name' => 'زائر الموقع',
             'client_mobile' => '0559998888',
@@ -189,7 +189,7 @@ class PublicSiteBookingTest extends TestCase
         app(BookingService::class)->create([
             'unit_id' => $this->hall->id,
             'scope' => 'whole',
-            'period' => 'evening',
+            'period' => 'full_day',
             'booking_date' => '2026-09-10',
         ], $owner->id);
 
@@ -290,7 +290,7 @@ class PublicSiteBookingTest extends TestCase
         $booking = app(BookingService::class)->create([
             'unit_id' => $this->hall->id,
             'scope' => 'whole',
-            'period' => 'evening',
+            'period' => 'full_day',
             'booking_date' => '2026-09-10',
         ], $owner->id);
 

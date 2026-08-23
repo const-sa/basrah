@@ -13,11 +13,65 @@ use Carbon\CarbonImmutable;
  */
 class BookingPeriod
 {
-    public const PERIODS = [
+    /**
+     * Shipped hours, used until the client sets their own from the booking
+     * times screen. Read periods() rather than this constant — it is only the
+     * fallback, and the overnight flag here is documentation: the live one is
+     * derived from the hours in BookingTimes.
+     */
+    public const DEFAULTS = [
         'morning' => ['label' => 'صباحي', 'start' => '09:00', 'end' => '17:00', 'overnight' => false],
         'evening' => ['label' => 'مسائي', 'start' => '17:00', 'end' => '01:00', 'overnight' => true],
         'full_day' => ['label' => 'يوم كامل', 'start' => '09:00', 'end' => '01:00', 'overnight' => true],
     ];
+
+    /**
+     * The periods as configured, keyed by period.
+     *
+     * The full catalogue — every period whose hours the client may set. What
+     * a given unit type is actually sold in is narrower; see hallKeys().
+     *
+     * @return array<string, array{label: string, start: string, end: string, overnight: bool}>
+     */
+    public static function periods(): array
+    {
+        return app(BookingTimes::class)->periods();
+    }
+
+    /**
+     * الفترة التي تُباع بها القاعة — يومٌ كامل لا غير.
+     *
+     * The morning/evening split is day-use, and day-use is a chalet
+     * arrangement: the same chalet is let for a few hours, then again in the
+     * evening, then overnight. A hall goes out for the occasion, which
+     * occupies the day. Both halves of that split still exist as periods —
+     * StayPeriod::pricingPeriods() offers them to chalets, and the booking
+     * times screen sets their hours — they are simply not on a hall's menu.
+     *
+     * @var list<string>
+     */
+    public const HALL_KEYS = ['full_day'];
+
+    /**
+     * @return list<string>
+     */
+    public static function hallKeys(): array
+    {
+        return self::HALL_KEYS;
+    }
+
+    /**
+     * فترات القاعة جاهزةً للواجهة — بنفس شكل forView حتى تقرأها الشاشات بلا تفريق.
+     *
+     * @return list<array{key: string, label: string, start: string, end: string}>
+     */
+    public static function hallPeriods(): array
+    {
+        return array_values(array_filter(
+            self::forView(),
+            fn (array $p) => in_array($p['key'], self::HALL_KEYS, true),
+        ));
+    }
 
     /**
      * أقصى عدد أيام لمناسبة واحدة — حارس خطأ إدخال لا سياسة تسعير.
@@ -37,7 +91,8 @@ class BookingPeriod
      */
     public static function range(string $date, string $period, int $days = 1): array
     {
-        $meta = self::PERIODS[$period] ?? self::PERIODS['full_day'];
+        $periods = self::periods();
+        $meta = $periods[$period] ?? $periods['full_day'];
 
         $day = CarbonImmutable::parse($date)->startOfDay();
         $starts = $day->setTimeFromTimeString($meta['start']);
@@ -87,12 +142,12 @@ class BookingPeriod
      */
     public static function labels(): array
     {
-        return array_map(fn ($m) => $m['label'], self::PERIODS);
+        return array_map(fn ($m) => $m['label'], self::periods());
     }
 
     public static function label(string $period): string
     {
-        return self::PERIODS[$period]['label'] ?? $period;
+        return self::periods()[$period]['label'] ?? $period;
     }
 
     /**
@@ -100,7 +155,7 @@ class BookingPeriod
      */
     public static function keys(): array
     {
-        return array_keys(self::PERIODS);
+        return array_keys(self::periods());
     }
 
     /**
@@ -110,7 +165,7 @@ class BookingPeriod
      */
     public static function forView(): array
     {
-        return collect(self::PERIODS)->map(fn ($m, $key) => [
+        return collect(self::periods())->map(fn ($m, $key) => [
             'key' => $key,
             'label' => $m['label'],
             'start' => $m['start'],
