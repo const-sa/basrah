@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
+use App\Models\Setting;
 use App\Models\Supplier;
 use App\Services\InventoryService;
 use Illuminate\Database\Eloquent\Builder;
@@ -328,11 +329,39 @@ class PurchaseController extends Controller
             ]),
         ];
 
+        // Only the printable sheet in the list modal draws the business identity.
+        // The Show page never renders it, and passing it there would leak a stray
+        // attribute onto the component root.
         if ($request->wantsJson()) {
-            return response()->json($data);
+            return response()->json($data + ['issuer' => $this->issuer($purchase)]);
         }
 
         return Inertia::render('admin/purchases/Show', $data);
+    }
+
+    /**
+     * Header of the printed purchase invoice: identity of the receiving business.
+     *
+     * No ZATCA QR here — that code is issued by the seller, and a purchase
+     * invoice comes in from the supplier rather than out from us, so stamping
+     * one on this sheet would attribute to us an invoice we never issued.
+     *
+     * @return array<string, mixed>
+     */
+    private function issuer(Purchase $purchase): array
+    {
+        $settings = Setting::current();
+
+        return [
+            'business_name' => $settings->business_name ?: config('app.name'),
+            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
+            'address' => $settings->address,
+            'phone' => $settings->phone,
+            'email' => $settings->email,
+            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+            'commercial_register' => $settings->commercial_register,
+            'activity' => $purchase->department?->name,
+        ];
     }
 
     private function summarize(Purchase $purchase): array

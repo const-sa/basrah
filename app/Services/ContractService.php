@@ -5,15 +5,20 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
+use App\Models\Quotation;
+use App\Models\QuotationItem;
 use App\Models\Setting;
 use App\Support\BookingPeriod;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * توليد العقود من الحجوزات (§الطبقة أ - بند 2).
+ * Generating contracts from their source document (§الطبقة أ - بند 2).
  *
- * نص العقد يُجمَّد وقت التوليد، فتعديل القالب لاحقًا لا يمسّ عقدًا صدر.
+ * A contract is never typed from scratch: a hall or chalet contract is
+ * generated from its booking, and a pools contract from the quotation the
+ * client accepted. Either way the text is frozen at generation time, so
+ * editing the template afterwards does not touch a contract already issued.
  */
 class ContractService
 {
@@ -52,6 +57,109 @@ class ContractService
     }
 
     /**
+     * Generate a contract from an accepted quotation — the pools path.
+     *
+     * The pools business (sales, installation, maintenance) has no bookings to
+     * generate from; its agreement starts as a quotation. Deriving the contract
+     * from that quotation instead of retyping it means the contracted price is
+     * the quoted price by construction, and the priced lines the client already
+     * saw become the contract's scope of work.
+     */
+    public function generateFromQuotation(Quotation $quotation, ?ContractTemplate $template = null, ?int $userId = null): Contract
+    {
+        $template ??= ContractTemplate::defaultTemplate();
+
+        if (! $template) {
+            throw new RuntimeException('لا يوجد قالب عقد فعّال — أضف قالبًا أولًا.');
+        }
+
+        return DB::transaction(function () use ($quotation, $template, $userId) {
+            $quotation->loadMissing(['client', 'department', 'items.item']);
+
+            $number = $this->nextNumber();
+            $data = $this->buildQuotationData($quotation, $number);
+
+            return Contract::create([
+                'number' => $number,
+                'booking_id' => null,
+                'quotation_id' => $quotation->id,
+                'client_id' => $quotation->client_id,
+                'contract_template_id' => $template->id,
+                'created_by' => $userId,
+                'body' => $this->render($template->body, $data),
+                'terms' => filled($template->terms) ? $this->render($template->terms, $data) : null,
+                'data' => $data,
+                'status' => 'draft',
+            ]);
+        });
+    }
+
+    /**
+     * The values that fill the template's placeholders for a quotation contract.
+     *
+     * The keys are deliberately the same ones a booking contract writes, so a
+     * single template renders both: what has no counterpart here (period, guest
+     * count, booked sections) is written as «—» exactly as a missing booking
+     * field is, and the screen hides those rows rather than printing a dash.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildQuotationData(Quotation $quotation, string $contractNumber): array
+    {
+        $settings = Setting::current();
+
+        $lines = $quotation->items->map(fn (QuotationItem $line) => [
+            'name' => $line->item?->name ?? '—',
+            'code' => $line->item?->code,
+            'quantity' => (float) $line->quantity,
+            'unit_price' => number_format((float) $line->unit_price, 2),
+            'total_price' => number_format((float) $line->total_price, 2),
+        ])->values()->all();
+
+        $total = (float) $quotation->total_amount;
+
+        return [
+            'contract_number' => $contractNumber,
+            'contract_date' => now()->toDateString(),
+            'org_name' => (string) ($settings->site_name ?? config('app.name')),
+            'client_name' => (string) ($quotation->client?->name ?? '—'),
+            'client_mobile' => (string) ($quotation->client?->mobile ?? '—'),
+            'client_id_number' => (string) ($quotation->client?->national_id ?: $quotation->client?->tax_number ?: '—'),
+            // The department is the activity being contracted for (pools, halls…),
+            // which is what belongs in the contract's heading — not the item list,
+            // which can run to a dozen lines and is printed in full below anyway.
+            'subject' => (string) ($quotation->department?->name ?? 'توريد وخدمات'),
+            'unit_name' => '—',
+            'booking_reference' => '—',
+            'sections' => '—',
+            // A quotation has no booked date or period. Its validity date is the
+            // deadline for accepting it, not a term of the contract, so it is
+            // carried under its own key rather than dressed up as a booking date.
+            'booking_date' => '—',
+            'last_day_date' => '—',
+            'days_count' => '—',
+            'period' => '—',
+            'starts_at' => '—',
+            'ends_at' => '—',
+            'guests_count' => '—',
+            'quotation_number' => (string) $quotation->number,
+            'quotation_date' => $quotation->created_at?->toDateString() ?? '—',
+            'valid_until' => $quotation->valid_until?->toDateString() ?? '—',
+            'items' => $lines,
+            'subtotal' => number_format((float) $quotation->subtotal, 2),
+            'discount_amount' => number_format((float) $quotation->discount_amount, 2),
+            'tax_amount' => number_format((float) $quotation->tax_amount, 2),
+            'total_amount' => number_format($total, 2),
+            // Nothing is paid at signing: the quotation prices the work, it does
+            // not collect for it. The paid and remaining boxes stay on the page
+            // so the contract reads the same as a booking contract, and the
+            // first receipt voucher is what moves them.
+            'deposit_amount' => number_format(0, 2),
+            'remaining_amount' => number_format($total, 2),
+        ];
+    }
+
+    /**
      * إعادة توليد نص عقد قائم من قالبه الحالي.
      *
      * التجميد يحمي عقدًا وصل العميل، لا مسودةً لم تُرسل بعد: تحرير النموذج
@@ -64,6 +172,22 @@ class ContractService
 
         if (! $template) {
             throw new RuntimeException('لا يوجد قالب عقد فعّال — أضف قالبًا أولًا.');
+        }
+
+        // A quotation contract is rebuilt from its own frozen snapshot, not from
+        // the quotation: the quotation stays editable after the contract is
+        // drawn, and rereading it here would let a later price change rewrite a
+        // contract silently. Only the template's wording is refreshed.
+        if ($contract->fromQuotation()) {
+            $data = $contract->data ?? [];
+
+            $contract->update([
+                'contract_template_id' => $template->id,
+                'body' => $this->render($template->body, $data),
+                'terms' => filled($template->terms) ? $this->render($template->terms, $data) : null,
+            ]);
+
+            return $contract;
         }
 
         $booking = $contract->booking;
@@ -104,6 +228,10 @@ class ContractService
             'client_mobile' => (string) ($booking->client?->mobile ?? '—'),
             // رقم الهوية أولًا، فإن لم يُسجَّل يُستعمل الرقم الضريبي للعميل الضريبي.
             'client_id_number' => (string) ($booking->client?->national_id ?: $booking->client?->tax_number ?: '—'),
+            // What a booking contract is about is the unit being rented, so one
+            // template can carry {{subject}} and still read correctly for both
+            // this and a quotation contract, where the subject is the activity.
+            'subject' => (string) ($booking->unit?->name ?? '—'),
             'booking_reference' => $booking->reference,
             'unit_name' => (string) ($booking->unit?->name ?? '—'),
             'sections' => $booking->scope === 'whole'
@@ -129,13 +257,17 @@ class ContractService
      * استبدال {{مفتاح}} بقيمته. المفتاح غير المعروف يُترك كما هو
      * ليظهر للمحرّر أنه خطأ مطبعي بدل أن يختفي بصمت.
      *
-     * @param  array<string, string>  $data
+     * A key whose value is not a scalar is left standing too: the snapshot
+     * carries the quotation's priced lines under `items`, and those are printed
+     * as a table by the contract layout, not spliced into a sentence.
+     *
+     * @param  array<string, mixed>  $data
      */
     public function render(string $body, array $data): string
     {
         return preg_replace_callback(
             '/\{\{\s*([a-z_]+)\s*\}\}/i',
-            fn ($m) => $data[$m[1]] ?? $m[0],
+            fn ($m) => is_scalar($data[$m[1]] ?? null) ? (string) $data[$m[1]] : $m[0],
             $body,
         ) ?? $body;
     }

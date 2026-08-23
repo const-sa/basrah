@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
+use App\Models\Setting;
 use App\Services\QuotationPdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -248,11 +249,38 @@ class QuotationController extends Controller
             ]),
         ];
 
+        // Only the printable sheet in the list modal draws the business identity.
+        // The Show page never renders it, and passing it there would leak a stray
+        // attribute onto the component root.
         if ($request->wantsJson()) {
-            return response()->json($data);
+            return response()->json($data + ['issuer' => $this->issuer()]);
         }
 
         return Inertia::render('admin/quotations/Show', $data);
+    }
+
+    /**
+     * Header of the printed quotation: identity of the issuing business.
+     *
+     * No ZATCA QR here — that code belongs on a tax invoice for a completed
+     * sale, and a quotation is only an offer, so stamping one on it would
+     * present a price offer as a settled invoice.
+     *
+     * @return array<string, mixed>
+     */
+    private function issuer(): array
+    {
+        $settings = Setting::current();
+
+        return [
+            'business_name' => $settings->business_name ?: config('app.name'),
+            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
+            'address' => $settings->address,
+            'phone' => $settings->phone,
+            'email' => $settings->email,
+            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+            'commercial_register' => $settings->commercial_register,
+        ];
     }
 
     public function changeStatus(Request $request, Quotation $quotation): \Illuminate\Http\RedirectResponse

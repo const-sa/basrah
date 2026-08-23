@@ -114,7 +114,7 @@ class ContractPdf
      */
     private function viewData(Contract $contract): array
     {
-        $contract->loadMissing(['booking.unit', 'booking.eventType', 'client', 'template']);
+        $contract->loadMissing(['booking.unit', 'booking.eventType', 'quotation', 'client', 'template']);
 
         $settings = Setting::current();
 
@@ -131,6 +131,11 @@ class ContractPdf
             'contract' => $contract,
             'data' => $data,
             'isStay' => $isStay,
+            // A pools contract prints its priced lines where a rental contract
+            // prints unit, period and guest count — different documents behind
+            // the same letterhead, numbering and signatures.
+            'isQuotation' => $contract->fromQuotation(),
+            'lines' => $contract->lines(),
             'unitName' => $data['unit_name'] ?? $contract->booking?->unit?->name,
             'eventName' => $contract->booking?->eventType?->name,
             'periodLabel' => $data['period'] ?? ($contract->booking ? BookingPeriod::label($contract->booking->period) : null),

@@ -20,6 +20,12 @@ const props = defineProps<{
         period: string | null; starts_at: string | null; ends_at: string | null;
         guests_count: string | null;
         total_amount: string | null; deposit_amount: string | null; remaining_amount: string | null;
+        // Quotation contracts (pools): the priced lines are the scope of work.
+        from_quotation: boolean; subject: string | null;
+        quotation_id: number | null; quotation_number: string | null;
+        quotation_date: string | null; valid_until: string | null;
+        items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string }[];
+        subtotal: string | null; discount_amount: string | null; tax_amount: string | null;
         sent_at: string | null; signed_at: string | null;
     };
     issuer: {
@@ -50,6 +56,11 @@ const logoFailed = ref(false);
 watch(logo, () => (logoFailed.value = false));
 
 const isStay = computed(() => props.contract.unit_type === 'chalet');
+
+// A quotation contract prints the priced lines it was drawn from instead of the
+// rental terms — that list is what the parties actually agreed on.
+const isQuotation = computed(() => props.contract.from_quotation);
+const lines = computed(() => props.contract.items ?? []);
 
 // المدى الزمني: المناسبة الممتدة والإقامة يُذكر آخر يومهما، واليوم الواحد يُكتفى بتاريخه.
 const spansMoreThanOneDay = computed(
@@ -96,8 +107,12 @@ const print = () => window.print();
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900" dir="ltr">{{ contract.number }}</h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">
-                        {{ contract.client_name ?? 'بلا عميل' }} · حجز
-                        <span dir="ltr">{{ contract.booking_reference }}</span> · {{ contract.status_label }}
+                        {{ contract.client_name ?? 'بلا عميل' }} ·
+                        <template v-if="isQuotation">
+                            عرض سعر <span dir="ltr">{{ contract.quotation_number ?? '—' }}</span>
+                        </template>
+                        <template v-else> حجز <span dir="ltr">{{ contract.booking_reference }}</span> </template>
+                        · {{ contract.status_label }}
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -163,9 +178,14 @@ const print = () => window.print();
                      تتكرّر أعلى كل ورقة عند تعدّدها فلا تخرج ورقةٌ بلا هويّة. -->
                 <div class="print-keep flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-900 pb-3 print:pb-2">
                     <h2 class="text-lg font-extrabold text-slate-900 print:text-[13px]">
-                        <template v-if="isStay">عقد إيجار شاليه</template>
-                        <template v-else>عقد إيجار قاعة</template>
-                        {{ contract.unit_name ?? issuer.business_name }}
+                        <template v-if="isQuotation">
+                            عقد {{ contract.subject ?? 'توريد وخدمات' }}
+                        </template>
+                        <template v-else>
+                            <template v-if="isStay">عقد إيجار شاليه</template>
+                            <template v-else>عقد إيجار قاعة</template>
+                            {{ contract.unit_name ?? issuer.business_name }}
+                        </template>
                         — رقم العقد (<span dir="ltr">{{ contract.number }}</span>)
                     </h2>
                     <div class="text-sm font-bold text-slate-700">
@@ -180,7 +200,7 @@ const print = () => window.print();
                             بيانات الطرف الأول
                         </h3>
                         <div class="space-y-1 text-sm text-slate-800">
-                            <p class="font-extrabold">{{ contract.unit_name ?? issuer.business_name }}</p>
+                            <p class="font-extrabold">{{ (isQuotation ? null : contract.unit_name) ?? issuer.business_name }}</p>
                             <p v-if="issuer.address" class="font-medium">{{ issuer.address }}</p>
                             <p v-if="issuer.phone">
                                 <span class="font-extrabold">جوال: </span><span dir="ltr">{{ issuer.phone }}</span>
@@ -214,15 +234,62 @@ const print = () => window.print();
                                 <span class="font-extrabold">رقم الهوية: </span
                                 ><span dir="ltr">{{ contract.client_id_number ?? '—' }}</span>
                             </p>
-                            <p>
+                            <p v-if="isQuotation">
+                                <span class="font-extrabold">رقم عرض السعر: </span
+                                ><span dir="ltr">{{ contract.quotation_number ?? '—' }}</span>
+                            </p>
+                            <p v-else>
                                 <span class="font-extrabold">رقم الحجز: </span><span dir="ltr">{{ contract.booking_reference ?? '—' }}</span>
                             </p>
                         </div>
                     </div>
                 </div>
 
+                <!-- أولاً: موضوع العقد — بنود العرض هي نطاق العمل المتفق عليه -->
+                <section v-if="isQuotation" class="mb-4 text-sm text-slate-800 print:mb-3">
+                    <h3 class="mb-2 font-extrabold text-slate-900">أولاً: موضوع العقد ونطاق العمل</h3>
+                    <p class="mb-2 leading-7">
+                        يتعهد الطرف الأول بتنفيذ أعمال
+                        <span class="font-bold">{{ contract.subject ?? 'التوريد والخدمات' }}</span>
+                        للطرف الثاني وفق البنود والأسعار المبيّنة أدناه، والمحرَّرة على عرض السعر رقم
+                        <span class="font-bold" dir="ltr">{{ contract.quotation_number ?? '—' }}</span
+                        ><template v-if="contract.quotation_date">
+                            بتاريخ <span dir="ltr">{{ contract.quotation_date }}</span> </template
+                        >.
+                    </p>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full border border-slate-300 text-sm">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="border border-slate-300 px-2 py-1.5 text-right text-xs font-extrabold text-slate-800">م</th>
+                                    <th class="border border-slate-300 px-2 py-1.5 text-right text-xs font-extrabold text-slate-800">البند</th>
+                                    <th class="border border-slate-300 px-2 py-1.5 text-center text-xs font-extrabold text-slate-800">الكمية</th>
+                                    <th class="border border-slate-300 px-2 py-1.5 text-center text-xs font-extrabold text-slate-800">سعر الوحدة</th>
+                                    <th class="border border-slate-300 px-2 py-1.5 text-center text-xs font-extrabold text-slate-800">الإجمالي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(l, i) in lines" :key="i">
+                                    <td class="border border-slate-300 px-2 py-1.5 text-center">{{ i + 1 }}</td>
+                                    <td class="border border-slate-300 px-2 py-1.5">
+                                        <span class="font-bold">{{ l.name }}</span>
+                                        <span v-if="l.code" class="text-[11px] text-slate-500" dir="ltr"> ({{ l.code }})</span>
+                                    </td>
+                                    <td class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">{{ l.quantity }}</td>
+                                    <td class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">{{ l.unit_price }}</td>
+                                    <td class="border border-slate-300 px-2 py-1.5 text-center font-bold" dir="ltr">{{ l.total_price }}</td>
+                                </tr>
+                                <tr v-if="!lines.length">
+                                    <td colspan="5" class="border border-slate-300 px-2 py-4 text-center text-slate-500">لا بنود</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <!-- أولاً: موضوع العقد -->
-                <section class="print-keep mb-4 text-sm text-slate-800 print:mb-3">
+                <section v-else class="print-keep mb-4 text-sm text-slate-800 print:mb-3">
                     <h3 class="mb-2 font-extrabold text-slate-900">أولاً: موضوع العقد</h3>
                     <p class="mb-2 leading-7">
                         يتعهد الطرف الأول بتأجير
@@ -263,13 +330,28 @@ const print = () => window.print();
                 <!-- ثانيًا: القيمة والدفعات المالية — المبالغ لا تُفرَّق عن بعضها -->
                 <section class="print-keep mb-4 text-sm text-slate-800 print:mb-3">
                     <h3 class="mb-2 font-extrabold text-slate-900">ثانيًا: القيمة والدفعات المالية</h3>
+                    <!-- تفصيل العرض قبل إجماليه: الخصم والضريبة جزءٌ ممّا وُقّع عليه -->
+                    <div v-if="isQuotation" class="mb-2 grid gap-2 sm:grid-cols-3 print:grid-cols-3">
+                        <div class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs">
+                            <span class="font-bold text-slate-600">المجموع قبل الخصم: </span>
+                            <span class="font-extrabold text-slate-800" dir="ltr">{{ contract.subtotal ?? '—' }}</span>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs">
+                            <span class="font-bold text-slate-600">الخصم: </span>
+                            <span class="font-extrabold text-slate-800" dir="ltr">{{ contract.discount_amount ?? '—' }}</span>
+                        </div>
+                        <div class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs">
+                            <span class="font-bold text-slate-600">الضريبة: </span>
+                            <span class="font-extrabold text-slate-800" dir="ltr">{{ contract.tax_amount ?? '—' }}</span>
+                        </div>
+                    </div>
                     <div class="grid gap-2 sm:grid-cols-3 print:grid-cols-3">
                         <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">
-                            <div class="text-xs font-bold text-slate-600">قيمة الإيجار</div>
+                            <div class="text-xs font-bold text-slate-600">{{ isQuotation ? 'قيمة العقد' : 'قيمة الإيجار' }}</div>
                             <div class="font-extrabold text-slate-900">{{ contract.total_amount ?? '—' }} ريال</div>
                         </div>
                         <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">
-                            <div class="text-xs font-bold text-slate-600">العربون المدفوع</div>
+                            <div class="text-xs font-bold text-slate-600">{{ isQuotation ? 'المدفوع' : 'العربون المدفوع' }}</div>
                             <div class="font-extrabold text-emerald-700">{{ contract.deposit_amount ?? '—' }} ريال</div>
                         </div>
                         <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">

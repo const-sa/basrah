@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
+use App\Models\Quotation;
 use App\Models\Setting;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
@@ -45,13 +46,48 @@ class ContractsController extends Controller
         ]);
     }
 
+    /**
+     * The full contract register — every contract the user may see, whatever
+     * it was drawn from. This is the contracts section's own screen.
+     */
     public function index(Request $request): Response
     {
+        return $this->register($request, 'all');
+    }
+
+    /**
+     * The same screen reached from the pools menu, showing that activity's own
+     * contracts only.
+     *
+     * A pools employee opening «العقود» from their menu is looking for the
+     * maintenance and installation agreements they wrote, and a register that
+     * answers with hall and chalet rentals buries them under work that is not
+     * theirs. The overseeing contracts section still sees everything.
+     */
+    public function poolsIndex(Request $request): Response
+    {
+        return $this->register($request, 'quotation');
+    }
+
+    /**
+     * @param  'all'|'quotation'  $scope
+     */
+    private function register(Request $request, string $scope): Response
+    {
         $user = $request->user();
+        $poolsOnly = $scope === 'quotation';
 
         $query = Contract::query()
-            ->whereHas('booking', fn ($q) => $q->visibleTo($user))
-            ->with(['booking:id,reference,unit_id,booking_date', 'booking.unit:id,name', 'client:id,name,mobile'])
+            // A quotation contract has no unit behind it, so unit visibility
+            // cannot scope it — `contracts.view` is the whole gate there.
+            ->when($poolsOnly, fn ($q) => $q->whereNotNull('quotation_id'))
+            ->unless($poolsOnly, fn ($q) => $q->where(fn ($w) => $w
+                ->whereNotNull('quotation_id')
+                ->orWhereHas('booking', fn ($b) => $b->visibleTo($user))))
+            ->with([
+                'booking:id,reference,unit_id,booking_date', 'booking.unit:id,name',
+                'quotation:id,number', 'client:id,name,mobile',
+            ])
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
             ->when($request->string('search')->toString(), fn ($q, $term) => $q->where(
                 fn ($sub) => $sub->where('number', 'like', "%{$term}%")
@@ -67,23 +103,45 @@ class ContractsController extends Controller
                     'status_label' => $c->statusLabel(),
                     'client_name' => $c->client?->name,
                     'client_mobile' => $c->client?->mobile,
+                    'from_quotation' => $c->fromQuotation(),
+                    'subject' => $c->subject(),
+                    'quotation_number' => $c->quotation?->number ?? ($c->data['quotation_number'] ?? null),
                     'booking_reference' => $c->booking?->reference,
                     'unit_name' => $c->booking?->unit?->name,
                     'booking_date' => $c->booking?->booking_date?->toDateString(),
+                    'total_amount' => $c->data['total_amount'] ?? null,
                     'sent_at' => $c->sent_at?->format('Y-m-d H:i'),
                     'created_at' => $c->created_at->toDateString(),
                 ]),
+            'scope' => $scope,
             'filters' => $request->only(['status', 'search']),
             'statuses' => collect(Contract::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
             'templates' => ContractTemplate::where('is_active', true)->get(['id', 'name', 'is_default']),
-            // الحجوزات التي لا عقد لها بعد — هي المرشّحة للتوليد
-            'bookings' => Booking::visibleTo($user)->blocking()
+            // الحجوزات التي لا عقد لها بعد — هي المرشّحة للتوليد.
+            // The pools screen offers no booking source at all: a contract
+            // drawn there would land outside the register that drew it.
+            'bookings' => $poolsOnly ? [] : Booking::visibleTo($user)->blocking()
                 ->whereDoesntHave('contracts')
                 ->with('unit:id,name', 'client:id,name')
                 ->latest('id')->limit(200)->get()
                 ->map(fn (Booking $b) => [
                     'id' => $b->id,
                     'label' => $b->reference.' — '.($b->unit?->name ?? '').' — '.($b->client?->name ?? 'بلا عميل'),
+                ]),
+            // Quotations still open and not yet contracted. A rejected quotation
+            // is excluded outright: the client turned that price down, and a
+            // contract is exactly the thing that must not be drawn from it.
+            'quotations' => Quotation::where('status', '!=', 'rejected')
+                ->whereDoesntHave('contracts')
+                ->with('client:id,name', 'department:id,name')
+                ->latest('id')->limit(200)->get()
+                ->map(fn (Quotation $q) => [
+                    'id' => $q->id,
+                    'label' => $q->number.' — '.($q->client?->name ?? 'بلا عميل')
+                        .' — '.number_format((float) $q->total_amount, 2).' ريال',
+                    'department' => $q->department?->name,
+                    'status' => $q->status,
+                    'accepted' => $q->status === 'accepted',
                 ]),
             'stats' => [
                 'total' => (clone $query)->count(),
@@ -96,7 +154,7 @@ class ContractsController extends Controller
 
     public function show(Contract $contract): Response
     {
-        $contract->load(['booking.unit', 'booking.eventType', 'client', 'template']);
+        $contract->load(['booking.unit', 'booking.eventType', 'quotation', 'client', 'template']);
 
         $settings = Setting::current();
 
@@ -141,6 +199,19 @@ class ContractsController extends Controller
                 'total_amount' => $data['total_amount'] ?? null,
                 'deposit_amount' => $data['deposit_amount'] ?? null,
                 'remaining_amount' => $data['remaining_amount'] ?? null,
+                // Quotation contracts: the priced lines are the scope of work,
+                // read from the snapshot so a later edit to the quotation
+                // cannot change what a contract already issued says.
+                'from_quotation' => $contract->fromQuotation(),
+                'subject' => $contract->subject(),
+                'quotation_id' => $contract->quotation_id,
+                'quotation_number' => $contract->quotation?->number ?? ($data['quotation_number'] ?? null),
+                'quotation_date' => $data['quotation_date'] ?? null,
+                'valid_until' => $data['valid_until'] ?? null,
+                'items' => $contract->lines(),
+                'subtotal' => $data['subtotal'] ?? null,
+                'discount_amount' => $data['discount_amount'] ?? null,
+                'tax_amount' => $data['tax_amount'] ?? null,
                 'sent_at' => $contract->sent_at?->format('Y-m-d H:i'),
                 'signed_at' => $contract->signed_at?->format('Y-m-d H:i'),
             ],
@@ -159,6 +230,9 @@ class ContractsController extends Controller
         ]);
     }
 
+    /**
+     * Generate a contract from a booking (halls and chalets).
+     */
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
@@ -185,6 +259,47 @@ class ContractsController extends Controller
         }
 
         return back()->with('success', "تم توليد العقد {$contract->number}");
+    }
+
+    /**
+     * Generate a contract from a quotation (pools — sales and maintenance).
+     */
+    public function storeFromQuotation(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'quotation_id' => ['required', 'exists:quotations,id'],
+            'contract_template_id' => ['nullable', 'exists:contract_templates,id'],
+        ]);
+
+        $quotation = Quotation::findOrFail($data['quotation_id']);
+
+        // One contract per quotation. Two contracts over the same priced lines
+        // would be two live agreements for one job, and the client holds both.
+        if ($quotation->contracts()->exists()) {
+            return back()->with('warning', 'لعرض السعر هذا عقد بالفعل.');
+        }
+
+        if ($quotation->status === 'rejected') {
+            return back()->with('warning', 'عرض السعر مرفوض — لا يُحرَّر عليه عقد.');
+        }
+
+        $template = isset($data['contract_template_id'])
+            ? ContractTemplate::find($data['contract_template_id'])
+            : null;
+
+        try {
+            $contract = $this->contracts->generateFromQuotation($quotation, $template, $request->user()?->id);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        // Drawing the contract is the acceptance: the client agreed to this
+        // price, so the quotation should not keep showing as still pending.
+        if ($quotation->status !== 'accepted') {
+            $quotation->update(['status' => 'accepted']);
+        }
+
+        return back()->with('success', "تم توليد العقد {$contract->number} من عرض السعر {$quotation->number}");
     }
 
     /**

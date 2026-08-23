@@ -214,9 +214,12 @@ html {
     ::placeholder { color: #94a3b8 !important; opacity: 1; }
 
     /* نصوص خلايا الجداول → أسود في كل الصفحات (الشارات والأزرار الملوّنة
-       تحتفظ بألوانها لأنها تضبط لونها مباشرةً على العنصر). */
+       تحتفظ بألوانها لأنها تضبط لونها مباشرةً على العنصر).
+       An action that navigates renders as <a>, not <button>: without the
+       exemption this rule repaints its white icon dark on a coloured tile,
+       so the one action in the cell that is a link looks broken. */
     tbody td { color: #0f172a !important; }
-    tbody td a:not(.badge) { color: #0f172a !important; }
+    tbody td a:not(.badge):not(.table-action) { color: #0f172a !important; }
 }
 
 /* =========================================================================

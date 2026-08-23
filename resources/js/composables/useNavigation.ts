@@ -157,6 +157,12 @@ export function useNavigation() {
                 { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view' },
                 { title: t('nav.purchases'), href: '/admin/purchases', icon: ShoppingBag, perm: 'purchases.view' },
                 { title: t('nav.quotations'), href: '/admin/quotations', icon: FileText, perm: 'quotations.view' },
+                // A pools contract is drawn from the quotation the client
+                // accepted, so it belongs next to them in this activity's menu.
+                // It points at the pools register, not the full one: from here
+                // the employee wants this activity's contracts, not every
+                // hall and chalet rental in the business.
+                { title: t('nav.contracts_list'), href: '/admin/pools/contracts', icon: FileSignature, perm: 'contracts.view' },
             ],
         },
         {

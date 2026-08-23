@@ -299,7 +299,8 @@ const submitRefund = () => {
                                         <span class="font-extrabold text-slate-800" dir="ltr">{{ s.number }}</span>
                                         <span v-if="s.type === 'return'" class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">مرتجع</span>
                                     </div>
-                                    <div class="text-[11px] text-slate-500" dir="ltr">{{ s.date }} · {{ s.time }}</div>
+                                    <!-- dir="ltr" would left-align this block away from the number above it. -->
+                                    <div class="text-right text-[11px] text-slate-500" dir="ltr">{{ s.date }} · {{ s.time }}</div>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="text-xs font-bold text-slate-700">{{ s.client ?? 'عميل نقدي' }}</div>

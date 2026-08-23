@@ -26,6 +26,12 @@ interface QuotationDetails {
         notes: string | null; client_mobile: string | null;
     };
     items: QuotationLine[];
+    /** Business identity on the printed sheet — no tax QR, a quotation is an offer not an invoice. */
+    issuer: {
+        business_name: string; logo_url: string | null; address: string | null;
+        phone: string | null; email: string | null;
+        tax_number: string | null; commercial_register: string | null;
+    };
 }
 
 const props = defineProps<{
@@ -92,6 +98,9 @@ const closeDetails = () => {
     activeQuotation.value = null;
     details.value = null;
 };
+
+/** Printing emits the quotation sheet alone — the @media print rules below hide everything else. */
+const printQuotation = () => window.print();
 
 const destroy = (q: QuotationRow) => {
     if (confirm(`هل أنت متأكد من حذف عرض السعر رقم ${q.number}؟`)) {
@@ -185,9 +194,14 @@ const changeStatus = (status: string) => {
                         </thead>
                         <tbody>
                             <tr v-for="q in quotations.data" :key="q.id" class="border-t border-slate-100 hover:bg-slate-50">
+                                <!--
+                                    dir="ltr" keeps the number and the date reading left-to-right, but on a
+                                    block it also drags text-align to the left and the cell drifts away from
+                                    its right-aligned header. text-right pins it back without reordering.
+                                -->
                                 <td class="px-4 py-3">
-                                    <div class="font-extrabold text-slate-800" dir="ltr">{{ q.number }}</div>
-                                    <div class="text-[11px] text-slate-500" dir="ltr">{{ q.date }} · {{ q.time }}</div>
+                                    <div class="text-right font-extrabold text-slate-800" dir="ltr">{{ q.number }}</div>
+                                    <div class="text-right text-[11px] text-slate-500" dir="ltr">{{ q.date }} · {{ q.time }}</div>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="text-xs font-bold text-slate-700">{{ q.client ?? '—' }}</div>
@@ -239,7 +253,7 @@ const changeStatus = (status: string) => {
         <Teleport to="body">
         <div v-if="activeQuotation" class="invoice-overlay fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" @click.self="closeDetails">
             <div class="invoice-sheet my-auto w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
-                <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-6 py-3">
+                <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-6 py-3 print:hidden">
                     <div class="flex items-center gap-2">
                         <h2 class="text-lg font-bold text-slate-800">عرض سعر {{ activeQuotation.number }}</h2>
                         <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="statusClass(activeQuotation.status)">
@@ -247,7 +261,10 @@ const changeStatus = (status: string) => {
                         </span>
                     </div>
                     <div class="flex items-center gap-2">
-                        <a :href="`/admin/quotations/${activeQuotation.id}/pdf?download=1`" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">تحميل PDF</a>
+                        <button type="button" @click="printQuotation" :disabled="!details" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60">
+                            <Printer class="h-4 w-4" /> طباعة
+                        </button>
+                        <a :href="`/admin/quotations/${activeQuotation.id}/pdf?download=1`" class="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">تحميل PDF</a>
                         <button type="button" @click="closeDetails" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
                     </div>
                 </div>
@@ -255,18 +272,52 @@ const changeStatus = (status: string) => {
                 <p v-if="detailsLoading" class="py-16 text-center text-sm text-slate-500">جارٍ التحميل…</p>
 
                 <div v-else-if="details" class="invoice-body space-y-5 px-8 py-6">
-                    <div class="grid grid-cols-2 gap-4">
+                    <!-- Header: logo and business identity on the right, client and offer meta on the left -->
+                    <header class="invoice-head grid gap-6 border-b-2 border-slate-800 pb-4 sm:grid-cols-2">
                         <div>
-                            <p class="text-sm font-bold text-slate-600">العميل: <span class="font-extrabold text-slate-900">{{ details.quotation.client ?? '—' }}</span></p>
-                            <p class="text-sm font-bold text-slate-600">الجوال: <span dir="ltr">{{ details.quotation.client_mobile ?? '—' }}</span></p>
+                            <img v-if="details.issuer.logo_url" :src="details.issuer.logo_url" alt="" class="mb-3 h-16 w-auto object-contain" />
+                            <h2 class="text-xl font-extrabold text-slate-900">{{ details.issuer.business_name }}</h2>
+                            <div class="mt-1 space-y-0.5 text-[11px] font-medium text-slate-500">
+                                <p v-if="details.issuer.address">{{ details.issuer.address }}</p>
+                                <p v-if="details.issuer.phone">هاتف: <span dir="ltr">{{ details.issuer.phone }}</span></p>
+                                <p v-if="details.issuer.email"><span dir="ltr">{{ details.issuer.email }}</span></p>
+                                <p v-if="details.issuer.tax_number">الرقم الضريبي: <span dir="ltr">{{ details.issuer.tax_number }}</span></p>
+                                <p v-if="details.issuer.commercial_register">س.ت: <span dir="ltr">{{ details.issuer.commercial_register }}</span></p>
+                            </div>
                         </div>
+
                         <div class="text-left">
-                            <p class="text-sm font-bold text-slate-600">تاريخ الإصدار: <span dir="ltr">{{ details.quotation.date }}</span></p>
-                            <p class="text-sm font-bold text-slate-600">صالح حتى: <span dir="ltr">{{ details.quotation.valid_until ?? 'غير محدد' }}</span></p>
+                            <div class="mb-2 inline-block rounded-lg bg-slate-800 px-3 py-1 text-sm font-extrabold text-white">
+                                عرض سعر
+                            </div>
+                            <dl class="space-y-1 text-xs">
+                                <div class="flex justify-between gap-3">
+                                    <dt class="font-bold text-slate-500">رقم العرض</dt>
+                                    <dd class="font-extrabold text-slate-800" dir="ltr">{{ details.quotation.number }}</dd>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <dt class="font-bold text-slate-500">تاريخ الإصدار</dt>
+                                    <dd class="font-bold text-slate-700" dir="ltr">{{ details.quotation.date }}</dd>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <dt class="font-bold text-slate-500">صالح حتى</dt>
+                                    <dd class="font-bold text-slate-700" dir="ltr">{{ details.quotation.valid_until ?? 'غير محدد' }}</dd>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <dt class="font-bold text-slate-500">العميل</dt>
+                                    <dd class="font-extrabold text-slate-800">{{ details.quotation.client ?? '—' }}</dd>
+                                </div>
+                                <div v-if="details.quotation.client_mobile" class="flex justify-between gap-3">
+                                    <dt class="font-bold text-slate-500">الجوال</dt>
+                                    <dd class="font-bold text-slate-700" dir="ltr">{{ details.quotation.client_mobile }}</dd>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <dt class="font-bold text-slate-500">الحالة</dt>
+                                    <dd class="font-bold text-slate-700">{{ details.quotation.status_label }}</dd>
+                                </div>
+                            </dl>
                         </div>
-                    </div>
-
-
+                    </header>
 
                     <table class="w-full border border-slate-300 text-xs">
                         <thead class="bg-slate-100">
@@ -291,7 +342,7 @@ const changeStatus = (status: string) => {
                         </tbody>
                     </table>
 
-                    <div class="grid items-start gap-6 sm:grid-cols-2">
+                    <div class="invoice-totals grid items-start gap-6 sm:grid-cols-2">
                         <div class="order-2 sm:order-1"></div>
                         <dl class="order-1 space-y-1 text-xs sm:order-2">
                             <div class="flex justify-between border-b border-slate-100 py-1">
@@ -313,8 +364,12 @@ const changeStatus = (status: string) => {
                         </dl>
                     </div>
 
-                    <p v-if="details.quotation.notes" class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <p v-if="details.quotation.notes" class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 print:bg-transparent print:px-0">
                         ملاحظات وشروط العرض: {{ details.quotation.notes }}
+                    </p>
+
+                    <p class="pt-2 text-center text-[10px] font-bold text-slate-400">
+                        {{ details.issuer.business_name }} — أصدره {{ details.quotation.user ?? '—' }}
                     </p>
                 </div>
             </div>
@@ -322,3 +377,105 @@ const changeStatus = (status: string) => {
         </Teleport>
     </AppLayout>
 </template>
+
+<style>
+/*
+ * Printing emits the quotation sheet alone.
+ *
+ * The preview is teleported to <body>, so it is a sibling of the app root:
+ * hiding the other <body> children and returning the sheet to normal page
+ * flow is enough. It then spills across several pages when its lines run
+ * long, instead of being clipped at the screen edge.
+ */
+@media print {
+    @page {
+        size: A4;
+        margin: 10mm;
+    }
+
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+    }
+
+    body:has(.invoice-overlay) > *:not(.invoice-overlay) {
+        display: none !important;
+    }
+
+    .invoice-overlay {
+        position: static !important;
+        display: block !important;
+        overflow: visible !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+
+    .invoice-sheet {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+
+        /*
+         * Browsers drop background colors when printing to save ink, which
+         * would render the totals bar and the document-type badge white on
+         * white. This rule forces them to print as they appear.
+         */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /*
+     * Padding on the sheet itself, not on @page alone: some browsers print
+     * with margins set to "none" per the user's setting, which would glue
+     * the header to the paper edge.
+     */
+    .invoice-body {
+        box-sizing: border-box;
+        padding: 4mm 6mm !important;
+    }
+
+    /* No horizontal overflow to clip the client column at the paper edge. */
+    .invoice-sheet,
+    .invoice-body,
+    .invoice-body * {
+        max-width: 100%;
+    }
+
+    .invoice-body td,
+    .invoice-body th {
+        overflow-wrap: anywhere;
+    }
+
+    /*
+     * Header and totals stay two columns on paper. This is not left to the
+     * sm: breakpoint because the reported print width differs between
+     * browsers, so the two columns could needlessly stack on an A4 sheet.
+     */
+    .invoice-head,
+    .invoice-totals {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        align-items: start !important;
+    }
+
+    .invoice-head > :last-child,
+    .invoice-totals > :first-child {
+        order: 0 !important;
+    }
+
+    /* Table rows and images never split across pages; the thead repeats atop each one. */
+    .invoice-body tr,
+    .invoice-body img,
+    .invoice-body header {
+        break-inside: avoid;
+    }
+
+    .invoice-body thead {
+        display: table-header-group;
+    }
+}
+</style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { computed, type Component } from 'vue';
 
 type Variant = 'danger' | 'edit' | 'view' | 'success' | 'primary' | 'warning' | 'dark' | 'muted';
@@ -9,6 +10,13 @@ const props = withDefaults(
         icon?: Component;
         label?: string;
         title?: string;
+        /**
+         * Renders the action as a link instead of a button, carrying the same
+         * size and colour. An action that navigates was otherwise hand-rolled
+         * as a styled <Link> on each page, and those copies drifted smaller
+         * than the buttons beside them in the same actions cell.
+         */
+        href?: string;
     }>(),
     { variant: 'primary' },
 );
@@ -32,16 +40,20 @@ const classes = computed(
 </script>
 
 <template>
-    <button
-        type="button"
+    <component
+        :is="href ? Link : 'button'"
+        :type="href ? undefined : 'button'"
+        :href="href"
         :title="title"
         :class="[
-            'inline-flex items-center justify-center gap-1.5 rounded-lg text-white shadow-sm transition',
+            // `table-action` is what exempts the link form from the global rule
+            // that paints anchors inside table cells dark — see app.css.
+            'table-action inline-flex items-center justify-center gap-1.5 rounded-lg text-white shadow-sm transition',
             label ? 'px-3 py-2 text-xs font-bold' : 'h-9 w-9',
             classes,
         ]"
     >
         <component :is="icon" v-if="icon" class="h-4 w-4" />
         <span v-if="label">{{ label }}</span>
-    </button>
+    </component>
 </template>

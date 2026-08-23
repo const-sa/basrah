@@ -195,11 +195,18 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     */
     Route::middleware('system:contracts')->group(function () {
         Route::get('contracts', [ContractsController::class, 'index'])->middleware('perm:contracts.view')->name('contracts.index');
+        // The pools activity's own contract register — the same screen narrowed
+        // to what was drawn from that activity's quotations. Its own path, not
+        // a query string, so the menu keeps highlighting it while filtering.
+        Route::get('pools/contracts', [ContractsController::class, 'poolsIndex'])->middleware('perm:contracts.view')->name('contracts.pools');
         // «pdf» قبل {contract} لا يلزم هنا لأنه مقطع ثانٍ، لكن ترتيبه قبل
         // show يبقي المسارات النوعية مجتمعة كما في بقية الملف.
         Route::get('contracts/{contract}/pdf', [ContractsController::class, 'pdf'])->middleware('perm:contracts.export')->name('contracts.pdf');
         Route::get('contracts/{contract}', [ContractsController::class, 'show'])->middleware('perm:contracts.view')->name('contracts.show');
         Route::post('contracts', [ContractsController::class, 'store'])->middleware('perm:contracts.create')->name('contracts.store');
+        // Pools contracts are drawn from a quotation, not a booking — a separate
+        // endpoint keeps each source's validation to its own fields.
+        Route::post('contracts/from-quotation', [ContractsController::class, 'storeFromQuotation'])->middleware('perm:contracts.create')->name('contracts.from_quotation');
         Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->middleware('perm:contracts.edit')->name('contracts.refresh');
         Route::post('contracts/{contract}/send', [ContractsController::class, 'send'])->middleware('perm:contracts.send')->name('contracts.send');
         Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->middleware('perm:contracts.edit')->name('contracts.status');

@@ -11,8 +11,12 @@ class Quotation extends Model
 {
     use SoftDeletes;
 
+    // `status` was missing here, so every write to it was silently dropped by
+    // mass-assignment guarding: quotations stayed «pending» forever on the
+    // column default, and marking one accepted did nothing. Contracts are now
+    // drawn from accepted quotations, which made the dead status visible.
     protected $fillable = [
-        'number', 'client_id', 'user_id', 'department_id',
+        'number', 'client_id', 'user_id', 'department_id', 'status',
         'subtotal', 'discount_amount', 'tax_amount', 'total_amount',
         'valid_until', 'notes',
     ];
@@ -46,5 +50,10 @@ class Quotation extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function contracts(): HasMany
+    {
+        return $this->hasMany(Contract::class);
     }
 }
