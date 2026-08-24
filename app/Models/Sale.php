@@ -29,7 +29,7 @@ class Sale extends Model
 
     protected $fillable = [
         'number', 'user_id', 'client_id', 'unit_id', 'department_id', 'booking_id',
-        'type', 'original_sale_id', 'subtotal', 'discount_amount', 'tax_amount',
+        'quotation_id', 'type', 'original_sale_id', 'subtotal', 'discount_amount', 'tax_amount',
         'total_amount', 'cost_amount', 'payment_method_id', 'paid_amount', 'notes',
     ];
 
@@ -68,6 +68,11 @@ class Sale extends Model
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    public function quotation(): BelongsTo
+    {
+        return $this->belongsTo(Quotation::class);
     }
 
     public function user(): BelongsTo

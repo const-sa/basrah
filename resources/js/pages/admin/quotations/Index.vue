@@ -4,7 +4,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Eye, Printer, FileText, Search, X, Pencil, Trash2 } from 'lucide-vue-next';
+import { Eye, Printer, FileText, Search, X, Pencil, Trash2, ReceiptText } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface QuotationRow {
@@ -14,6 +14,7 @@ interface QuotationRow {
     subtotal: number; tax_amount: number; discount_amount: number;
     total: number;
     status: string; status_label: string;
+    invoice: { id: number; number: string } | null;
 }
 
 interface QuotationLine {
@@ -41,6 +42,7 @@ const props = defineProps<{
     };
     filters: Record<string, string | null>;
     clients: { id: number; name: string }[];
+    methods: { id: number; code: string; label: string; is_credit: boolean }[];
 }>();
 
 const { can } = usePermissions();
@@ -106,6 +108,36 @@ const destroy = (q: QuotationRow) => {
     if (confirm(`هل أنت متأكد من حذف عرض السعر رقم ${q.number}؟`)) {
         router.delete(`/admin/quotations/${q.id}`, { preserveScroll: true });
     }
+};
+
+const invoicing = ref<QuotationRow | null>(null);
+const invoiceForm = ref({ payment_method_id: null as number | null, paid_amount: null as number | null });
+const invoiceSubmitting = ref(false);
+
+const openInvoice = (q: QuotationRow) => {
+    invoicing.value = q;
+    invoiceForm.value = { payment_method_id: props.methods[0]?.id ?? null, paid_amount: null };
+};
+
+const closeInvoice = () => {
+    invoicing.value = null;
+};
+
+const selectedMethod = computed(() => props.methods.find((m) => m.id === invoiceForm.value.payment_method_id) ?? null);
+
+const submitInvoice = () => {
+    if (!invoicing.value || !invoiceForm.value.payment_method_id || invoiceSubmitting.value) return;
+    invoiceSubmitting.value = true;
+    router.post(`/admin/quotations/${invoicing.value.id}/invoice`, {
+        payment_method_id: invoiceForm.value.payment_method_id,
+        paid_amount: invoiceForm.value.paid_amount,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            invoiceSubmitting.value = false;
+            closeInvoice();
+        },
+    });
 };
 
 const changeStatus = (status: string) => {
@@ -230,6 +262,20 @@ const changeStatus = (status: string) => {
                                         <a :href="`/admin/quotations/${q.id}/pdf`" target="_blank" title="عرض PDF" class="rounded-lg bg-blue-500 p-1.5 text-white hover:bg-blue-600 inline-block">
                                             <Printer class="h-3.5 w-3.5" />
                                         </a>
+                                        <Link
+                                            v-if="q.invoice" :href="`/admin/sales/${q.invoice.id}`"
+                                            :title="`الفاتورة ${q.invoice.number}`"
+                                            class="rounded-lg bg-indigo-600 p-1.5 text-white hover:bg-indigo-700"
+                                        >
+                                            <ReceiptText class="h-3.5 w-3.5" />
+                                        </Link>
+                                        <button
+                                            v-else-if="can('sales.create') && q.status !== 'rejected'" type="button"
+                                            @click="openInvoice(q)" title="إنشاء فاتورة"
+                                            class="rounded-lg bg-indigo-100 p-1.5 text-indigo-700 hover:bg-indigo-200"
+                                        >
+                                            <ReceiptText class="h-3.5 w-3.5" />
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -371,6 +417,61 @@ const changeStatus = (status: string) => {
                     <p class="pt-2 text-center text-[10px] font-bold text-slate-400">
                         {{ details.issuer.business_name }} — أصدره {{ details.quotation.user ?? '—' }}
                     </p>
+                </div>
+            </div>
+        </div>
+        </Teleport>
+
+        <Teleport to="body">
+        <div v-if="invoicing" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden" @click.self="closeInvoice">
+            <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                    <h2 class="text-base font-bold text-slate-800">إنشاء فاتورة من عرض السعر {{ invoicing.number }}</h2>
+                    <button type="button" @click="closeInvoice" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
+                </div>
+
+                <div class="space-y-4 px-5 py-4">
+                    <div class="rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">
+                        <div class="flex items-center justify-between">
+                            <span>العميل</span><span class="text-slate-800">{{ invoicing.client ?? '—' }}</span>
+                        </div>
+                        <div class="mt-1 flex items-center justify-between">
+                            <span>إجمالي العرض</span><span class="text-slate-800" dir="ltr">{{ money(invoicing.total) }}</span>
+                        </div>
+                        <p class="mt-2 text-[11px] font-medium text-slate-500">
+                            تُصدر الفاتورة بنفس الأصناف والكميات والأسعار والخصم، ويُخصم المباع من المخزون.
+                        </p>
+                    </div>
+
+                    <label class="block">
+                        <span class="mb-1 block text-xs font-bold text-slate-600">طريقة الدفع</span>
+                        <select v-model="invoiceForm.payment_method_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                            <option v-for="m in methods" :key="m.id" :value="m.id">{{ m.label }}</option>
+                        </select>
+                    </label>
+
+                    <label class="block">
+                        <span class="mb-1 block text-xs font-bold text-slate-600">المقبوض الآن (اختياري)</span>
+                        <input
+                            v-model.number="invoiceForm.paid_amount" type="number" min="0" step="0.01"
+                            :placeholder="selectedMethod?.is_credit ? '0.00 — آجل بلا سداد' : money(invoicing.total)"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" dir="ltr"
+                        />
+                        <span class="mt-1 block text-[11px] font-medium text-slate-500">
+                            اتركه فارغًا ليُسجَّل السداد المعتاد لطريقة الدفع المختارة.
+                        </span>
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
+                    <button type="button" @click="closeInvoice" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">إلغاء</button>
+                    <button
+                        type="button" @click="submitInvoice"
+                        :disabled="!invoiceForm.payment_method_id || invoiceSubmitting"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                        <ReceiptText class="h-4 w-4" /> {{ invoiceSubmitting ? 'جارٍ الإصدار…' : 'إصدار الفاتورة' }}
+                    </button>
                 </div>
             </div>
         </div>

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Quotation extends Model
@@ -55,5 +56,15 @@ class Quotation extends Model
     public function contracts(): HasMany
     {
         return $this->hasMany(Contract::class);
+    }
+
+    public function invoice(): HasOne
+    {
+        return $this->hasOne(Sale::class)->where('type', 'sale');
+    }
+
+    public function isInvoiced(): bool
+    {
+        return $this->invoice()->exists();
     }
 }

@@ -30,7 +30,7 @@ class SalesService
      *
      * @param  array{
      *     lines: list<array{item_id:int, quantity:float, unit_price?:float, discount_amount?:float}>,
-     *     client_id?:int|null, unit_id?:int|null, booking_id?:int|null,
+     *     client_id?:int|null, unit_id?:int|null, booking_id?:int|null, quotation_id?:int|null,
      *     payment_method_id?:int|null, discount_amount?:float, paid_amount?:float|null, notes?:string|null
      * }  $data
      *
@@ -55,6 +55,7 @@ class SalesService
                 'unit_id' => $data['unit_id'] ?? null,
                 'department_id' => $data['department_id'] ?? null,
                 'booking_id' => $data['booking_id'] ?? null,
+                'quotation_id' => $data['quotation_id'] ?? null,
                 'type' => 'sale',
                 'payment_method_id' => $method->id,
                 'notes' => $data['notes'] ?? null,
