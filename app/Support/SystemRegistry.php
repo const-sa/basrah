@@ -56,11 +56,12 @@ class SystemRegistry
         'chalets' => [
             'label' => 'الشاليهات',
             'icon' => 'Home',
-            'description' => 'حجوزات الشاليهات بالليالي وتقويمها وملفات الوحدات',
+            'description' => 'حجوزات الشاليهات بالليالي وتقويمها وملفات الوحدات وقالب العقد',
             'modules' => [
                 'chalet_bookings' => ['label' => 'حجوزات الشاليهات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'chalet_calendar' => ['label' => 'تقويم الشاليهات', 'actions' => ['view']],
                 'chalets' => ['label' => 'الشاليهات ومساحات عملها', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'chalet_contract' => ['label' => 'قالب عقد الشاليهات', 'actions' => ['view', 'edit']],
             ],
         ],
 
@@ -189,9 +190,9 @@ class SystemRegistry
         'bookings.delete' => ['hall_bookings.delete', 'chalet_bookings.delete'],
         'bookings.approve' => ['hall_bookings.approve', 'chalet_bookings.approve'],
         'calendar.view' => ['hall_calendar.view', 'chalet_calendar.view'],
-        'units.view' => ['halls.view', 'chalets.view', 'hall_contract.view'],
+        'units.view' => ['halls.view', 'chalets.view', 'hall_contract.view', 'chalet_contract.view'],
         'units.create' => ['halls.create', 'chalets.create'],
-        'units.edit' => ['halls.edit', 'chalets.edit', 'hall_contract.edit'],
+        'units.edit' => ['halls.edit', 'chalets.edit', 'hall_contract.edit', 'chalet_contract.edit'],
         'units.delete' => ['halls.delete', 'chalets.delete'],
         // A screen that never had a route — it drops with no replacement.
         // (addons.* used to be listed here for the same reason; the add-ons

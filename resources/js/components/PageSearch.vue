@@ -116,6 +116,13 @@ const allPages = computed<Page[]>(() => [
         perm: 'hall_contract.view',
         keywords: ['contract', 'form', 'نموذج', 'العقد', 'عقد', 'شروط', 'احكام', 'قاعات'],
     },
+    {
+        href: '/admin/units/chalet-contract-template',
+        icon: FileText,
+        title: t('nav.chalet_contract_template'),
+        perm: 'chalet_contract.view',
+        keywords: ['contract', 'form', 'نموذج', 'العقد', 'عقد', 'ايجار', 'يومي', 'شروط', 'احكام', 'شاليهات'],
+    },
 
     // العقود والواتساب
     { href: '/admin/contracts', icon: FileSignature, title: t('nav.contracts_list'), perm: 'contracts.view', keywords: ['contracts', 'عقد', 'عقود'] },

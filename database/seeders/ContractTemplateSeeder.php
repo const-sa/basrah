@@ -3,12 +3,13 @@
 namespace Database\Seeders;
 
 use App\Models\ContractTemplate;
+use App\Support\ChaletContractTemplate;
 use App\Support\HallContractTemplate;
 use Illuminate\Database\Seeder;
 
 /**
- * قوالب العقود المثبّتة: القالب القياسي، ونموذج عقد القاعات المعتمد.
- * ⚠️ الصياغة القانونية اجتهادية وتُراجع مع مستشار قانوني قبل الاعتماد (§4.5).
+ * The pinned contract templates: the standard one, plus the hall and chalet forms.
+ * ⚠️ The legal wording is a draft, reviewed with counsel before use (§4.5).
  */
 class ContractTemplateSeeder extends Seeder
 {
@@ -21,6 +22,13 @@ class ContractTemplateSeeder extends Seeder
         ContractTemplate::firstOrCreate(
             ['name' => HallContractTemplate::NAME],
             HallContractTemplate::attributes(),
+        );
+
+        // The chalets' daily-rental form. Picked automatically for every chalet
+        // booking, so it never has to be promoted to the default template.
+        ContractTemplate::firstOrCreate(
+            ['name' => ChaletContractTemplate::NAME],
+            ChaletContractTemplate::attributes(),
         );
 
         ContractTemplate::updateOrCreate(

@@ -62,7 +62,7 @@ class RolesSeeder extends Seeder
                     'chalet_bookings.view', 'chalet_bookings.create', 'chalet_bookings.edit',
                     'packages.view', 'packages.create', 'packages.edit',
                     'event_types.view', 'event_types.create', 'event_types.edit',
-                    'hall_contract.view',
+                    'hall_contract.view', 'chalet_contract.view',
                     'contracts.view', 'contracts.create', 'contracts.send', 'contracts.export',
                     'contract_templates.view',
                     'whatsapp.view', 'whatsapp.send',

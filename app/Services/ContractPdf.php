@@ -38,7 +38,13 @@ class ContractPdf
      */
     public function render(Contract $contract): string
     {
-        $html = View::make('pdf.contract', $this->viewData($contract))->render();
+        $data = $this->viewData($contract);
+
+        // The chalet's daily-rental form is a different document from the hall
+        // and pools contract, not a variant of it, so it has its own view.
+        $view = $data['isChaletForm'] ? 'pdf.contract-stay' : 'pdf.contract';
+
+        $html = View::make($view, $data)->render();
 
         try {
             $mpdf = new Mpdf([
@@ -131,6 +137,9 @@ class ContractPdf
             'contract' => $contract,
             'data' => $data,
             'isStay' => $isStay,
+            // Only a chalet is let on the daily-rental form; a hall booked
+            // overnight is still a hall contract.
+            'isChaletForm' => $contract->booking?->unit?->type === 'chalet',
             // A pools contract prints its priced lines where a rental contract
             // prints unit, period and guest count — different documents behind
             // the same letterhead, numbering and signatures.
@@ -141,9 +150,13 @@ class ContractPdf
             'periodLabel' => $data['period'] ?? ($contract->booking ? BookingPeriod::label($contract->booking->period) : null),
             // العقود المولّدة قبل فصل الشروط تحمل نصها كاملًا في body.
             'terms' => $contract->terms ?: $contract->body,
+            'unitCode' => $contract->booking?->unit?->code,
             'issuer' => [
                 'business_name' => $data['org_name'] ?? ($settings->business_name ?: config('app.name')),
                 'phone' => $settings->phone,
+                // The rental form's header carries two numbers — shown only
+                // when the second is genuinely a different one.
+                'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
                 'address' => $settings->address,
                 'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
                 'manager_name' => $settings->manager_name,

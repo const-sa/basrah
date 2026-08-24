@@ -12,6 +12,15 @@ interface Placeholder {
     token: string;
 }
 
+interface Screen {
+    title: string;
+    subtitle: string;
+    back_href: string;
+    back_label: string;
+    endpoint: string;
+    edit_perm: string;
+}
+
 const props = defineProps<{
     template: {
         id: number;
@@ -24,14 +33,17 @@ const props = defineProps<{
         contracts_count: number;
     };
     placeholders: Placeholder[];
+    // Halls and chalets share this screen and differ only in which form it
+    // edits, so the activity is described by the controller.
+    screen: Screen;
 }>();
 
 const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
-    { title: 'القاعات', href: '/admin/units/halls' },
-    { title: 'نموذج العقد', href: '/admin/units/contract-template' },
+    { title: props.screen.back_label, href: props.screen.back_href },
+    { title: props.screen.title, href: props.screen.endpoint },
 ];
 
 // عرض أولاً: النموذج نص يُقرأ أكثر مما يُعدّل، والتحرير خطوة واعية.
@@ -54,14 +66,14 @@ const startEdit = () => {
 };
 
 const submit = () =>
-    form.put('/admin/units/contract-template', {
+    form.put(props.screen.endpoint, {
         preserveScroll: true,
         onSuccess: () => (editing.value = false),
     });
 
 const resetToDefault = () => {
     if (confirm('استعادة النص الأصلي للنموذج؟ سيُستبدل النص الحالي بالصياغة المثبّتة في النظام.')) {
-        router.post('/admin/units/contract-template/reset', {}, { preserveScroll: true });
+        router.post(`${props.screen.endpoint}/reset`, {}, { preserveScroll: true });
     }
 };
 
@@ -78,28 +90,28 @@ const print = () => window.print();
 </script>
 
 <template>
-    <Head title="نموذج العقد" />
+    <Head :title="screen.title" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-full space-y-5 bg-slate-100 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3 print:hidden">
                 <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900">نموذج العقد</h1>
+                    <h1 class="text-2xl font-extrabold text-slate-900">{{ screen.title }}</h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">
-                        {{ template.description ?? 'نموذج عقد إيجار القاعات — البيانات والشروط والأحكام' }}
+                        {{ template.description ?? screen.subtitle }}
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <Link href="/admin/units/halls" class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                        القاعات
+                    <Link :href="screen.back_href" class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                        {{ screen.back_label }}
                     </Link>
                     <button type="button" @click="print" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
                         <Printer class="h-4 w-4" /> طباعة
                     </button>
-                    <button v-if="can('hall_contract.edit') && editing" type="button" @click="resetToDefault" class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100">
+                    <button v-if="can(screen.edit_perm) && editing" type="button" @click="resetToDefault" class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100">
                         <RotateCcw class="h-4 w-4" /> استعادة الأصل
                     </button>
-                    <button v-if="can('hall_contract.edit')" type="button" @click="editing ? (editing = false) : startEdit()" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                    <button v-if="can(screen.edit_perm)" type="button" @click="editing ? (editing = false) : startEdit()" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
                         <component :is="editing ? Eye : Pencil" class="h-4 w-4" />
                         {{ editing ? 'عرض النموذج' : 'تعديل النموذج' }}
                     </button>

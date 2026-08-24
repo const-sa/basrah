@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StayContractDocument from '@/components/contracts/StayContractDocument.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -10,16 +11,22 @@ const props = defineProps<{
     contract: {
         id: number; number: string; body: string; terms: string | null;
         status: string; status_label: string;
-        contract_date: string | null;
+        contract_date: string | null; contract_date_hijri: string | null;
         client_name: string | null; client_mobile: string | null; client_id_number: string | null;
+        client_address: string | null;
         booking_id: number | null; booking_reference: string | null;
-        unit_name: string | null; unit_logo_url: string | null; unit_type: string | null;
+        unit_name: string | null; unit_code: string | null; unit_logo_url: string | null; unit_type: string | null;
         event_name: string | null;
         sections: string | null;
-        booking_date: string | null; last_day_date: string | null; days_count: string | null;
+        booking_date: string | null; booking_date_hijri: string | null;
+        last_day_date: string | null; last_day_date_hijri: string | null;
+        days_count: string | null; duration_label: string | null;
+        check_in_day: string | null; check_out_day: string | null;
+        check_in_time: string | null; check_out_time: string | null;
         period: string | null; starts_at: string | null; ends_at: string | null;
         guests_count: string | null;
-        total_amount: string | null; deposit_amount: string | null; remaining_amount: string | null;
+        total_amount: string | null; total_amount_words: string | null;
+        deposit_amount: string | null; remaining_amount: string | null; security_deposit: string | null;
         // Quotation contracts (pools): the priced lines are the scope of work.
         from_quotation: boolean; subject: string | null;
         quotation_id: number | null; quotation_number: string | null;
@@ -32,6 +39,7 @@ const props = defineProps<{
         business_name: string;
         logo_url: string | null;
         phone: string | null;
+        whatsapp: string | null;
         address: string | null;
         tax_number: string | null;
         manager_name: string | null;
@@ -170,8 +178,12 @@ const print = () => window.print();
                 <pre class="whitespace-pre-wrap font-sans text-xs leading-7 text-slate-700">{{ contract.body }}</pre>
             </div>
 
+            <!-- A chalet is let on its own daily-rental form, the same document the PDF prints. -->
+            <StayContractDocument v-if="isStay" :contract="contract" :issuer="issuer" />
+
             <!-- العقد نفسه — ما يُطبع ويُوقَّع -->
             <div
+                v-else
                 class="mx-auto max-w-4xl rounded-xl border border-slate-900 bg-white p-7 print:max-w-none print:rounded-none print:border-0 print:p-0 print:text-[11.5px]"
             >
                 <!-- الترويسة: موضوع العقد ورقمه وتاريخه.

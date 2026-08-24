@@ -19,10 +19,14 @@ class ContractTemplate extends Model
     public const PLACEHOLDERS = [
         'contract_number' => 'رقم العقد',
         'contract_date' => 'تاريخ العقد',
+        // The rental form prints «التاريخ» and «الموافق» together, so every
+        // Gregorian key carries a Hijri twin.
+        'contract_date_hijri' => 'تاريخ العقد هجريًا',
         'org_name' => 'اسم المؤسسة',
         'client_name' => 'اسم العميل',
         'client_mobile' => 'جوال العميل',
         'client_id_number' => 'رقم هوية العميل',
+        'client_address' => 'عنوان العميل',
         // موضوع العقد يملؤه الموظف في العقد اليدوي (المسابح)، وفي عقد الحجز
         // يُملأ باسم الوحدة فيبقى القالب الواحد صالحًا للاثنين.
         'subject' => 'موضوع العقد',
@@ -30,15 +34,26 @@ class ContractTemplate extends Model
         'unit_name' => 'اسم الوحدة',
         'sections' => 'الأقسام المحجوزة',
         'booking_date' => 'تاريخ الحجز',
+        'booking_date_hijri' => 'تاريخ الحجز هجريًا',
         'days_count' => 'عدد الأيام (أو الليالي في الشاليه)',
+        'duration_label' => 'مدة الحجز مكتوبة',
         'last_day_date' => 'تاريخ آخر يوم (أو الخروج)',
+        'last_day_date_hijri' => 'تاريخ آخر يوم هجريًا',
+        // The daily-rental form reads as a sentence — «تبدأ من يوم الخميس …
+        // وقت الدخول الساعة …» — so day names and hours are their own fields.
+        'check_in_day' => 'يوم الدخول',
+        'check_out_day' => 'يوم الخروج',
+        'check_in_time' => 'وقت الدخول',
+        'check_out_time' => 'وقت الخروج',
         'period' => 'الفترة',
         'starts_at' => 'بداية الفترة',
         'ends_at' => 'نهاية الفترة',
         'guests_count' => 'عدد الضيوف',
         'total_amount' => 'الإجمالي',
+        'total_amount_words' => 'الإجمالي كتابةً',
         'deposit_amount' => 'العربون',
         'remaining_amount' => 'المتبقي',
+        'security_deposit' => 'مبلغ التأمين المسترد',
     ];
 
     protected $fillable = [

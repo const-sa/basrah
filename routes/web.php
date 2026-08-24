@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\BookingsController;
 use App\Http\Controllers\Admin\BookingTimesController;
 use App\Http\Controllers\Admin\ChaletBookingsController;
 use App\Http\Controllers\Admin\ChaletCalendarController;
+use App\Http\Controllers\Admin\ChaletContractTemplateController;
 use App\Http\Controllers\Admin\CitiesController;
 use App\Http\Controllers\Admin\ClientsController;
 use App\Http\Controllers\Admin\ContractsController;
@@ -101,10 +102,15 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     | الوسيط system:halls|chalets يحرس النشاطين، ثم تفصل صلاحية الإجراء داخلهما.
     */
     Route::middleware('system:halls|chalets')->group(function () {
-        // نموذج العقد المعتمد للقاعات — قبل units/{type?} حتى لا يُلتقط كمقطع نوع
+        // The approved contract forms — before units/{type?} so they are not read as a type
         Route::get('units/contract-template', [HallContractTemplateController::class, 'show'])->middleware('perm:hall_contract.view')->name('units.contract_template');
         Route::put('units/contract-template', [HallContractTemplateController::class, 'update'])->middleware('perm:hall_contract.edit')->name('units.contract_template.update');
         Route::post('units/contract-template/reset', [HallContractTemplateController::class, 'reset'])->middleware('perm:hall_contract.edit')->name('units.contract_template.reset');
+
+        // The chalets' daily-rental form
+        Route::get('units/chalet-contract-template', [ChaletContractTemplateController::class, 'show'])->middleware('perm:chalet_contract.view')->name('units.chalet_contract_template');
+        Route::put('units/chalet-contract-template', [ChaletContractTemplateController::class, 'update'])->middleware('perm:chalet_contract.edit')->name('units.chalet_contract_template.update');
+        Route::post('units/chalet-contract-template/reset', [ChaletContractTemplateController::class, 'reset'])->middleware('perm:chalet_contract.edit')->name('units.chalet_contract_template.reset');
 
         // الوحدات والأقسام
         // شاشة واحدة بثلاث مداخل: القاعات، الشاليهات، والكل — يفصلها المقطع {type}

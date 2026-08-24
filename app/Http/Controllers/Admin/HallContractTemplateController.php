@@ -2,82 +2,46 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Controller;
-use App\Models\ContractTemplate;
 use App\Support\HallContractTemplate;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 
-/**
- * شاشة «نموذج العقد» داخل القاعات.
- *
- * تعرض نموذج العقد المعتمد وتسمح بتحريره في مكانه، بدل الدوران
- * على شاشة قوالب العقود العامة في نظام العقود.
- */
-class HallContractTemplateController extends Controller
+/** The halls' approved contract form. */
+class HallContractTemplateController extends UnitContractTemplateController
 {
-    public function show(): Response
+    protected function name(): string
     {
-        $template = $this->template();
-
-        return Inertia::render('admin/units/ContractTemplate', [
-            'template' => [
-                'id' => $template->id,
-                'name' => $template->name,
-                'description' => $template->description,
-                'body' => $template->body,
-                'terms' => $template->terms,
-                'is_default' => $template->is_default,
-                'is_active' => $template->is_active,
-                'contracts_count' => $template->contracts()->count(),
-            ],
-            'placeholders' => ContractTemplate::placeholdersForView(),
-        ]);
+        return HallContractTemplate::NAME;
     }
 
-    public function update(Request $request): RedirectResponse
+    protected function pinnedBody(): string
     {
-        $data = $request->validate([
-            'body' => ['required', 'string'],
-            'terms' => ['nullable', 'string'],
-            'is_default' => ['boolean'],
-            'is_active' => ['boolean'],
-        ]);
+        return HallContractTemplate::BODY;
+    }
 
-        $template = $this->template();
-        $template->update($data);
-
-        // قالب افتراضي واحد فقط — وجود أكثر من واحد يجعل الاختيار عشوائيًا.
-        if ($template->is_default) {
-            ContractTemplate::whereKeyNot($template->id)->update(['is_default' => false]);
-        }
-
-        return back()->with('success', 'تم حفظ نموذج العقد');
+    protected function pinnedTerms(): string
+    {
+        return HallContractTemplate::TERMS;
     }
 
     /**
-     * إعادة النص إلى الصياغة المثبّتة في السيدر.
+     * @return array<string, mixed>
      */
-    public function reset(): RedirectResponse
+    protected function pinnedAttributes(): array
     {
-        $this->template()->update([
-            'body' => HallContractTemplate::BODY,
-            'terms' => HallContractTemplate::TERMS,
-        ]);
-
-        return back()->with('success', 'تمت استعادة النص الأصلي للنموذج');
+        return HallContractTemplate::attributes();
     }
 
     /**
-     * سجل النموذج — يُنشأ من النص المثبّت إن لم يكن السيدر قد شُغّل بعد.
+     * @return array<string, string>
      */
-    private function template(): ContractTemplate
+    protected function screen(): array
     {
-        return ContractTemplate::firstOrCreate(
-            ['name' => HallContractTemplate::NAME],
-            HallContractTemplate::attributes(),
-        );
+        return [
+            'title' => 'نموذج العقد',
+            'subtitle' => HallContractTemplate::DESCRIPTION,
+            'back_href' => '/admin/units/halls',
+            'back_label' => 'القاعات',
+            'endpoint' => '/admin/units/contract-template',
+            'edit_perm' => 'hall_contract.edit',
+        ];
     }
 }
