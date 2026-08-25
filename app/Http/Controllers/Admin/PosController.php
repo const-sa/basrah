@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Department;
+use App\Http\Resources\ItemGroupOptionResource;
 use App\Models\Item;
+use App\Models\ItemGroup;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\SalesService;
@@ -34,15 +36,17 @@ class PosController extends Controller
         $departmentId = $request->integer('department_id')
             ?: ($departments->first()->id ?? null);
 
+        // أصناف القسم المختار فقط — مستودع كل نشاط مستقل عن غيره
+        $items = Item::where('is_active', true)
+            ->when($departmentId, fn ($q, $id) => $q->where('department_id', $id))
+            ->with(['category:id,name', 'measureUnit:id,name,allows_fraction'])
+            ->orderBy('name')
+            ->get();
+
         return Inertia::render('admin/pos/Index', [
             'departments' => $departments,
             'departmentId' => $departmentId,
-            // أصناف القسم المختار فقط — مستودع كل نشاط مستقل عن غيره
-            'items' => Item::where('is_active', true)
-                ->when($departmentId, fn ($q, $id) => $q->where('department_id', $id))
-                ->with(['category:id,name', 'measureUnit:id,name,allows_fraction'])
-                ->orderBy('name')
-                ->get()
+            'items' => $items
                 ->map(fn (Item $i) => [
                     'id' => $i->id,
                     'code' => $i->code,
@@ -60,6 +64,17 @@ class PosController extends Controller
                     'fractional' => $i->allowsFractionalQuantity(),
                     'low_stock' => $i->isBelowReorderPoint(),
                 ]),
+            // المجموعات المحفوظة — تُملأ بها سطور الفاتورة دفعةً واحدة.
+            //
+            // أعضاؤها مقصورون على أصناف القسم المعروض: الشاشة لا تعرف غيرها،
+            // فصنفٌ من قسم آخر يدخل سطرًا بلا وحدة ولا ضريبة ولا سعر يُحرَّر.
+            // والمجموعة التي لا يبقى منها شيء لا تُعرض أصلًا.
+            'groups' => ItemGroupOptionResource::list(
+                ItemGroup::active()->with('items:id,code,name,item_category_id,price,tax_rate,is_active')
+                    ->with('items.category:id,name')
+                    ->orderBy('sort_order')->orderBy('id')->get(),
+                allowedItemIds: $items->pluck('id')->all(),
+            ),
             // العميل النقدي أولًا في القائمة لأنه المختار افتراضيًا وأكثرها استعمالًا.
             'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')
                 ->limit(300)->get(['id', 'name', 'mobile']),

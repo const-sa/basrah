@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import AsyncSelect from '@/components/AsyncSelect.vue';
+import ItemGroupPicker from '@/components/ItemGroupPicker.vue';
 import ItemQuickAdd from '@/components/ItemQuickAdd.vue';
 import SupplierQuickAdd from '@/components/SupplierQuickAdd.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
+import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Plus, Trash2, Save, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -23,6 +25,8 @@ const props = defineProps<{
     suppliers: { id: number; name: string }[];
     methods: PaymentMethodOption[];
     items: ItemOption[];
+    /** Saved groups — the invoice is filled from one in a single pick. */
+    groups: ItemGroupOption[];
     itemTypes: { key: string; label: string }[];
     itemUnits: { key: string; label: string }[];
     defaultTaxRate: number;
@@ -111,6 +115,38 @@ const addItem = (item: ItemOption) => {
 
 const removeItem = (index: number) => {
     form.items.splice(index, 1);
+};
+
+// ── Saved groups ────────────────────────────────────────────
+/** What the last pick did — confirms the click landed. */
+const lastGroup = ref<GroupInsertion | null>(null);
+
+/**
+ * Append a whole group's items at once.
+ *
+ * An item already on the invoice gains a unit instead of gaining a second
+ * line: two lines for one item are a receiving error waiting to happen, since
+ * stock is posted per line and the duplicate reads as a separate delivery.
+ */
+const addGroup = (group: ItemGroupOption) => {
+    let added = 0;
+    let merged = 0;
+
+    for (const member of group.items) {
+        const existing = form.items.find((l) => l.item_id === member.id);
+
+        if (existing) {
+            existing.quantity += 1;
+            merged++;
+
+            continue;
+        }
+
+        addItem(member as ItemOption);
+        added++;
+    }
+
+    lastGroup.value = { name: group.name, added, merged };
 };
 
 // Calculations
@@ -213,11 +249,14 @@ const submit = () => {
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             الأصناف المشتراة
                         </h2>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- Saved groups: items that recur together, added in one pick -->
+                            <ItemGroupPicker :groups="groups" @select="addGroup" />
+
                             <div class="relative w-72">
                                 <AsyncSelect
                                     v-model="selectedItemId"
-                                    api-url="/admin/api/search?type=items"
+                                    api-url="/admin/api/search?type=items&with_cost=1"
                                     placeholder="إضافة صنف بالبحث..."
                                     @change="handleItemSelect"
                                     :clearable="false"
@@ -281,6 +320,12 @@ const submit = () => {
                             </tbody>
                         </table>
                     </div>
+                    <p v-if="lastGroup" class="mt-2 inline-block rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+                        «{{ lastGroup.name }}»:
+                        <template v-if="lastGroup.added">أُضيف {{ lastGroup.added }} صنف</template>
+                        <template v-if="lastGroup.added && lastGroup.merged"> و</template>
+                        <template v-if="lastGroup.merged">زادت كمية {{ lastGroup.merged }} صنف مضاف سلفًا</template>
+                    </p>
                     <p v-if="form.errors.items" class="mt-2 text-xs font-bold text-red-500">{{ form.errors.items }}</p>
                     <p v-for="(err, key) in form.errors" :key="key" class="text-xs text-red-500 text-left" dir="ltr">
                         <span v-if="key.startsWith('items.')">{{ key }}: {{ err }}</span>

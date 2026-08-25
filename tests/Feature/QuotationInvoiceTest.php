@@ -58,6 +58,55 @@ class QuotationInvoiceTest extends TestCase
         );
     }
 
+    /**
+     * التحويل كان يقصد `sales.show`، وهي نقطة JSON تخدم النافذة المنبثقة ولا
+     * صفحة خلفها — فتسقط Inertia على «All Inertia requests must receive a
+     * valid Inertia response». الفاتورة تُصدَر ثم لا يرى المستخدم إلا الخطأ.
+     */
+    public function test_the_invoice_lands_on_a_renderable_page(): void
+    {
+        $response = $this->convert();
+
+        $sale = Sale::latest('id')->first();
+
+        $response->assertRedirect(route('sales.index', ['invoice' => $sale->id]));
+
+        // ومتابعة التحويل تُجيب بصفحة Inertia لا بـ JSON خام.
+        $this->actingAs($this->owner)
+            ->get(route('sales.index', ['invoice' => $sale->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('admin/sales/Index')
+                ->where('openSale.id', $sale->id)
+                ->where('openSale.number', $sale->number));
+    }
+
+    /**
+     * صفحة العرض تحمل زرّ الإصدار — هي الصفحة التي تُفتح عند موافقة العميل.
+     */
+    public function test_the_quotation_page_can_issue_the_invoice(): void
+    {
+        $this->actingAs($this->owner)
+            ->get("/admin/quotations/{$this->quotation->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('admin/quotations/Show')
+                ->where('quotation.invoice', null)
+                ->has('methods'));
+
+        $this->convert();
+
+        $sale = Sale::latest('id')->firstOrFail();
+
+        // وبعد الإصدار يصير الزرّ إحالةً إلى الفاتورة، فلا تُصدَر مرتين.
+        $this->actingAs($this->owner)
+            ->get("/admin/quotations/{$this->quotation->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('quotation.invoice.id', $sale->id)
+                ->where('quotation.invoice.number', $sale->number));
+    }
+
     public function test_an_invoice_is_issued_from_the_quotation(): void
     {
         $this->convert()->assertRedirect();

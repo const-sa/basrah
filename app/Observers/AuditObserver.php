@@ -106,17 +106,32 @@ class AuditObserver
 
     /**
      * وصف السجل كما يفهمه المراجع.
+     *
+     * الاسم يُقرأ من الأعمدة الخام لا بـ `$model->x`: القيد المحاسبي له علاقة
+     * `reference` من نوع MorphTo، فكان قراءتها تُرجِع نموذجًا كاملًا يتحوّل
+     * نصًّا إلى JSON ويتجاوز طول العمود، فيسقط سجل المراجعة لكل قيد — أي لكل
+     * فاتورة ودفعة. والقصّ الأخير يحمي العمود من أي اسم طويل مهما كان مصدره.
      */
     private function label(Model $model): string
     {
         $subject = AuditLog::SUBJECTS[$model::class] ?? class_basename($model);
+        $attributes = $model->getAttributes();
 
-        $name = $model->reference
-            ?? $model->number
-            ?? $model->name
-            ?? ($model->getKey() !== null ? '#'.$model->getKey() : null);
+        $name = null;
 
-        return trim($subject.' '.($name ?? ''));
+        foreach (['reference', 'number', 'name'] as $key) {
+            $value = $attributes[$key] ?? null;
+
+            if (is_scalar($value) && filled($value)) {
+                $name = (string) $value;
+
+                break;
+            }
+        }
+
+        $name ??= $model->getKey() !== null ? '#'.$model->getKey() : '';
+
+        return mb_substr(trim($subject.' '.$name), 0, 255);
     }
 
     /**

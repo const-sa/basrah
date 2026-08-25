@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ItemGroupOptionResource;
 use App\Http\Resources\ItemOptionResource;
+use App\Models\ItemGroup;
 use App\Models\Client;
 use App\Models\PaymentMethod;
 use App\Models\Quotation;
@@ -64,6 +66,13 @@ class QuotationController extends Controller
             'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')->limit(300)->get(['id', 'name']),
             'items' => ItemOptionResource::list(
                 \App\Models\Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+            ),
+            // المجموعات المحفوظة — بنود العرض تُملأ بها دفعةً واحدة.
+            'groups' => ItemGroupOptionResource::list(
+                ItemGroup::active()
+                    ->with(['items:id,code,name,item_category_id,cost,price,tax_rate,is_active', 'items.category:id,name'])
+                    ->orderBy('sort_order')->orderBy('id')->get(),
+                withCost: false,
             ),
         ]);
     }
@@ -143,6 +152,13 @@ class QuotationController extends Controller
             'items' => ItemOptionResource::list(
                 \App\Models\Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
             ),
+            // المجموعات المحفوظة — بنود العرض تُملأ بها دفعةً واحدة.
+            'groups' => ItemGroupOptionResource::list(
+                ItemGroup::active()
+                    ->with(['items:id,code,name,item_category_id,cost,price,tax_rate,is_active', 'items.category:id,name'])
+                    ->orderBy('sort_order')->orderBy('id')->get(),
+                withCost: false,
+            ),
         ]);
     }
 
@@ -214,9 +230,11 @@ class QuotationController extends Controller
     public function show(Request $request, Quotation $quotation)
     {
         $quotation->load([
-            'items.item:id,name,code',
+            'items.item:id,name,code,tax_rate',
             'client:id,name,mobile',
-            'user:id,name'
+            'user:id,name',
+            // الفاتورة الصادرة عن العرض — بها يعرف الزر: يُصدر أو يُحيل.
+            'invoice:id,quotation_id,number',
         ]);
         
         $data = [
@@ -234,7 +252,7 @@ class QuotationController extends Controller
                 'quantity' => (float) $l->quantity,
                 'unit_price' => (float) $l->unit_price,
                 'total_price' => (float) $l->total_price,
-                'tax_amount' => round((float) $l->quantity * (float) $l->unit_price * (($l->item?->tax_rate ?? 15) / 100), 2),
+                'tax_amount' => round((float) $l->quantity * (float) $l->unit_price * (((float) ($l->item?->tax_rate ?? 0)) / 100), 2),
             ]),
         ];
 
@@ -245,7 +263,11 @@ class QuotationController extends Controller
             return response()->json($data + ['issuer' => $this->issuer()]);
         }
 
-        return Inertia::render('admin/quotations/Show', $data);
+        // العرض يُرسَل للعميل ثم يُفتح عند موافقته، فزرّ إصدار الفاتورة مكانه
+        // هذه الصفحة أيضًا لا سجلّ العروض وحده.
+        return Inertia::render('admin/quotations/Show', $data + [
+            'methods' => PaymentMethod::options(),
+        ]);
     }
 
     /**
@@ -318,7 +340,10 @@ class QuotationController extends Controller
             $quotation->update(['status' => 'accepted']);
         }
 
-        return redirect()->route('sales.show', $sale)
+        // `sales.show` نقطة JSON تخدم النافذة المنبثقة ولا صفحة خلفها، فالتحويل
+        // إليها كان يُسقط Inertia على «استجابة JSON غير صالحة». القائمة هي
+        // الصفحة، وتُفتح على الفاتورة الجديدة مباشرة.
+        return redirect()->route('sales.index', ['invoice' => $sale->id])
             ->with('success', "تم إصدار الفاتورة {$sale->number} من عرض السعر {$quotation->number}");
     }
 

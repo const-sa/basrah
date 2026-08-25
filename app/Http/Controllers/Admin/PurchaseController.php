@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ItemGroupOptionResource;
 use App\Http\Resources\ItemOptionResource;
 use App\Models\Department;
 use App\Models\Item;
+use App\Models\ItemGroup;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
@@ -81,6 +83,14 @@ class PurchaseController extends Controller
             'methods' => PaymentMethod::options(),
             'items' => ItemOptionResource::list(
                 Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+                withCost: true,
+            ),
+            // Saved groups — the invoice is filled from one in a single pick.
+            // Priced by cost here, the same way a hand-picked purchase line is.
+            'groups' => ItemGroupOptionResource::list(
+                ItemGroup::active()
+                    ->with(['items:id,code,name,item_category_id,cost,price,tax_rate,is_active', 'items.category:id,name'])
+                    ->orderBy('sort_order')->orderBy('id')->get(),
                 withCost: true,
             ),
             // A bundle is assembled from other items and holds no stock of its

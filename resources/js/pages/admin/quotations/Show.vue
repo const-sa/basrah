@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
-import { Printer, ChevronRight, FileText, CheckCircle2, Clock, XCircle } from 'lucide-vue-next';
+import { usePermissions } from '@/composables/usePermissions';
+import { type PaymentMethodOption } from '@/types';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Printer, ChevronRight, FileText, CheckCircle2, Clock, XCircle, ReceiptText, X } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface QuotationItem {
     id: number;
@@ -30,12 +33,17 @@ interface QuotationData {
     status: string;
     status_label: string;
     notes: string | null;
+    /** الفاتورة الصادرة عن العرض، إن صدرت. */
+    invoice: { id: number; number: string } | null;
 }
 
 const props = defineProps<{
     quotation: QuotationData;
     items: QuotationItem[];
+    methods: PaymentMethodOption[];
 }>();
+
+const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -47,6 +55,45 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumF
 const qty = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 3 }).format(n ?? 0);
 
 const print = () => window.print();
+
+// ── إصدار الفاتورة من العرض ───────────────────
+/**
+ * العرض يُرسَل للعميل، فإذا وافق فُتحت صفحته وصدرت الفاتورة منها — بنفس
+ * الأصناف والأسعار والعميل والقسم. وهذا هو الزرّ الذي يُنتظر عند الموافقة،
+ * فوجوده في سجلّ العروض وحده كان يُلزم العودة إليه بلا سبب.
+ */
+const invoicing = ref(false);
+const paymentMethodId = ref<number | null>(props.methods[0]?.id ?? null);
+const paidAmount = ref<number | null>(null);
+const submitting = ref(false);
+
+const selectedMethod = computed(() => props.methods.find((m) => m.id === paymentMethodId.value) ?? null);
+
+const canInvoice = computed(
+    () => can('sales.create') && !props.quotation.invoice && props.quotation.status !== 'rejected',
+);
+
+const openInvoice = () => {
+    paymentMethodId.value = props.methods[0]?.id ?? null;
+    paidAmount.value = null;
+    invoicing.value = true;
+};
+
+const submitInvoice = () => {
+    if (!paymentMethodId.value || submitting.value) return;
+
+    submitting.value = true;
+    router.post(`/admin/quotations/${props.quotation.id}/invoice`, {
+        payment_method_id: paymentMethodId.value,
+        paid_amount: paidAmount.value,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            submitting.value = false;
+            invoicing.value = false;
+        },
+    });
+};
 </script>
 
 <template>
@@ -74,6 +121,22 @@ const print = () => window.print();
                         <FileText class="h-4 w-4" />
                         <span>تعديل العرض</span>
                     </Link>
+
+                    <!-- الفاتورة إن صدرت، وإلا زرّ إصدارها -->
+                    <Link
+                        v-if="quotation.invoice" :href="`/admin/sales?invoice=${quotation.invoice.id}`"
+                        class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-indigo-700"
+                    >
+                        <ReceiptText class="h-4 w-4" />
+                        <span>الفاتورة <span dir="ltr">{{ quotation.invoice.number }}</span></span>
+                    </Link>
+                    <button
+                        v-else-if="canInvoice" type="button" @click="openInvoice"
+                        class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-indigo-700"
+                    >
+                        <ReceiptText class="h-4 w-4" />
+                        <span>إنشاء فاتورة</span>
+                    </button>
                 </div>
             </div>
 
@@ -190,6 +253,58 @@ const print = () => window.print();
                 <div class="h-4 w-full bg-emerald-900/5 print:hidden"></div>
             </div>
         </div>
+
+        <Teleport to="body">
+            <div v-if="invoicing" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden" @click.self="invoicing = false">
+                <div class="w-full max-w-md rounded-2xl bg-white shadow-xl">
+                    <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                        <h2 class="text-base font-bold text-slate-800">إنشاء فاتورة من عرض السعر <span dir="ltr">{{ quotation.number }}</span></h2>
+                        <button type="button" @click="invoicing = false" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="submitInvoice" class="space-y-4 p-5">
+                        <dl class="space-y-1.5 rounded-xl bg-slate-50 p-3 text-sm">
+                            <div class="flex justify-between"><dt class="text-slate-500">العميل</dt><dd class="font-bold text-slate-800">{{ quotation.client ?? '—' }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">عدد الأصناف</dt><dd class="font-bold text-slate-800">{{ items.length }}</dd></div>
+                            <div class="flex justify-between"><dt class="text-slate-500">إجمالي العرض</dt><dd class="font-bold text-slate-800" dir="ltr">{{ money(quotation.total) }}</dd></div>
+                        </dl>
+
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-slate-700">طريقة الدفع</label>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button
+                                    v-for="m in methods" :key="m.id" type="button" @click="paymentMethodId = m.id"
+                                    class="flex-1 rounded-lg py-2 text-xs font-extrabold transition"
+                                    :class="paymentMethodId === m.id ? 'bg-emerald-700 text-white shadow' : 'border-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-100'"
+                                >{{ m.label }}</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="mb-1.5 block text-sm font-bold text-slate-700">المقبوض عند الإصدار</label>
+                            <input
+                                v-model.number="paidAmount" type="number" min="0" :max="quotation.total" step="0.01"
+                                :placeholder="selectedMethod?.is_credit ? '0.00 — آجل بلا سداد' : money(quotation.total)"
+                                class="w-full rounded-xl border-2 border-slate-300 px-3 py-2.5 text-sm font-bold focus:border-emerald-700 focus:outline-none"
+                            />
+                            <p class="mt-1 text-[11px] text-slate-500">اتركه فارغًا ليأخذ تلقائيّ طريقة الدفع.</p>
+                        </div>
+
+                        <div class="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                            <button type="button" @click="invoicing = false" class="rounded-lg border-2 border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">إلغاء</button>
+                            <button
+                                type="submit" :disabled="submitting || !paymentMethodId"
+                                class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-extrabold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                            >
+                                <ReceiptText class="h-4 w-4" /> {{ submitting ? 'جارٍ الإصدار…' : 'إصدار الفاتورة' }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
 

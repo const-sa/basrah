@@ -44,10 +44,19 @@ class SalesController extends Controller
 
         // الشاشة تُفتح على قسم واحد (المسابح افتراضًا) لأن المطلوب استعراض
         // فواتير النشاط وحده. القيمة 'all' تفتحها على كل الأقسام عمدًا.
+        // الفاتورة المطلوب فتحها فور دخول الشاشة — يأتي بها التحويل من عرض
+        // السعر. `sales.show` تُجيب بـ JSON للنافذة المنبثقة ولا صفحة خلفها،
+        // فالتحويل يقصد هذه القائمة ويُشير إلى فاتورته.
+        $openSale = $request->integer('invoice')
+            ? Sale::with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name'])
+                ->find($request->integer('invoice'))
+            : null;
+
         $departmentParam = $request->string('department_id')->toString();
         $departmentId = $departmentParam === 'all'
             ? null
-            : ((int) $departmentParam ?: ($departments->first()->id ?? null));
+            // القائمة تُفتح على قسم الفاتورة المقصودة، وإلا اختفت من خلفها.
+            : ((int) $departmentParam ?: ($openSale?->department_id ?? $departments->first()->id ?? null));
 
         $filters = [
             'department_id' => $departmentParam === 'all' ? 'all' : (string) ($departmentId ?? ''),
@@ -93,6 +102,7 @@ class SalesController extends Controller
                     'balance' => $t->balance(),
                 ]),
             'voucherMethods' => PaymentMethod::options(),
+            'openSale' => $openSale ? $this->summarize($openSale) : null,
         ]);
     }
 

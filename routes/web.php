@@ -27,6 +27,7 @@ use App\Http\Controllers\Admin\HallCalendarController;
 use App\Http\Controllers\Admin\HallContractTemplateController;
 use App\Http\Controllers\Admin\HallMonthCalendarController;
 use App\Http\Controllers\Admin\HrController;
+use App\Http\Controllers\Admin\ItemGroupsController;
 use App\Http\Controllers\Admin\ItemsController;
 use App\Http\Controllers\Admin\MeasureUnitsController;
 use App\Http\Controllers\Admin\NotificationsController;
@@ -261,6 +262,14 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::delete('items/{item}', [ItemsController::class, 'destroy'])->middleware('perm:items.delete')->name('items.destroy');
 
         Route::post('inventory/items/{item}/adjust', [ItemsController::class, 'adjustStock'])->middleware('perm:items.edit')->name('items.adjust');
+
+        // مجموعات الأصناف — تحديد محفوظ يُملأ به الفاتورة أو عرض السعر دفعةً واحدة
+        Route::get('item-groups', [ItemGroupsController::class, 'index'])->middleware('perm:item_groups.view')->name('item_groups.index');
+        Route::post('item-groups', [ItemGroupsController::class, 'store'])->middleware('perm:item_groups.create')->name('item_groups.store');
+        Route::put('item-groups/{itemGroup}', [ItemGroupsController::class, 'update'])->middleware('perm:item_groups.edit')->name('item_groups.update');
+        Route::patch('item-groups/{itemGroup}/toggle', [ItemGroupsController::class, 'toggle'])->middleware('perm:item_groups.edit')->name('item_groups.toggle');
+        Route::post('item-groups/{itemGroup}/duplicate', [ItemGroupsController::class, 'duplicate'])->middleware('perm:item_groups.create')->name('item_groups.duplicate');
+        Route::delete('item-groups/{itemGroup}', [ItemGroupsController::class, 'destroy'])->middleware('perm:item_groups.delete')->name('item_groups.destroy');
 
         // فواتير المشتريات
         Route::get('purchases', [PurchaseController::class, 'index'])->middleware('perm:purchases.view')->name('purchases.index');

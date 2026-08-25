@@ -5,7 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Eye, Printer, Receipt, RotateCcw, Search, Wallet, X } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 interface SaleRow {
     id: number; number: string; type: string; type_label: string;
@@ -59,6 +59,8 @@ const props = defineProps<{
     paymentStatuses: { key: string; label: string }[];
     treasuries: { id: number; name: string; type_label: string; balance: number }[];
     voucherMethods: PaymentMethodOption[];
+    /** فاتورة تُفتح نافذتها فور دخول الشاشة — يأتي بها التحويل من عرض السعر. */
+    openSale: SaleRow | null;
 }>();
 
 const { can } = usePermissions();
@@ -111,6 +113,16 @@ const loadDetails = async (sale: SaleRow) => {
         detailsLoading.value = false;
     }
 };
+
+/**
+ * إصدار الفاتورة من عرض السعر يُنزل المستخدم هنا مشيرًا إلى فاتورته، فتُفتح
+ * نافذتها من فورها: هي حصيلة الضغطة، لا صفٌّ يُبحث عنه في القائمة.
+ *
+ * الصف يأتي من الخادم لا من `sales.data`، فالفاتورة قد تقع خارج الصفحة الأولى.
+ */
+onMounted(() => {
+    if (props.openSale) openDetails(props.openSale);
+});
 
 const openDetails = (sale: SaleRow) => {
     activeSale.value = sale;
@@ -348,7 +360,7 @@ const submitRefund = () => {
 
                 <div v-if="sales.links.length > 3" class="flex flex-wrap justify-center gap-1 border-t border-slate-100 p-3">
                     <Link
-                        v-for="l in sales.links" :key="l.label" :href="l.url ?? '#'"
+                        v-for="(l, li) in sales.links" :key="`${li}-${l.label}`" :href="l.url ?? '#'"
                         :class="['rounded-lg px-3 py-1.5 text-xs font-bold', l.active ? 'bg-blue-600 text-white' : l.url ? 'bg-white text-slate-600 ring-1 ring-slate-200' : 'text-slate-300']"
                         v-html="l.label"
                     />

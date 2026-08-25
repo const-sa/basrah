@@ -263,7 +263,7 @@ const changeStatus = (status: string) => {
                                             <Printer class="h-3.5 w-3.5" />
                                         </a>
                                         <Link
-                                            v-if="q.invoice" :href="`/admin/sales/${q.invoice.id}`"
+                                            v-if="q.invoice" :href="`/admin/sales?invoice=${q.invoice.id}`"
                                             :title="`الفاتورة ${q.invoice.number}`"
                                             class="rounded-lg bg-indigo-600 p-1.5 text-white hover:bg-indigo-700"
                                         >
@@ -288,7 +288,7 @@ const changeStatus = (status: string) => {
 
                 <div v-if="quotations.links.length > 3" class="flex flex-wrap justify-center gap-1 border-t border-slate-100 p-3">
                     <Link
-                        v-for="l in quotations.links" :key="l.label" :href="l.url ?? '#'"
+                        v-for="(l, li) in quotations.links" :key="`${li}-${l.label}`" :href="l.url ?? '#'"
                         :class="['rounded-lg px-3 py-1.5 text-xs font-bold', l.active ? 'bg-blue-600 text-white' : l.url ? 'bg-white text-slate-600 ring-1 ring-slate-200' : 'text-slate-300']"
                         v-html="l.label"
                     />

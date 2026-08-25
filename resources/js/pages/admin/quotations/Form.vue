@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import AsyncSelect from '@/components/AsyncSelect.vue';
+import ItemGroupPicker from '@/components/ItemGroupPicker.vue';
 import { type BreadcrumbItem } from '@/types';
+import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Plus, Trash2, Save, X } from 'lucide-vue-next';
+import { Trash2, FileText } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 interface ItemOption {
@@ -19,6 +21,8 @@ const props = defineProps<{
     departments: { id: number; name: string }[];
     clients: { id: number; name: string }[];
     items: ItemOption[];
+    /** المجموعات المحفوظة — بنود العرض تُملأ بها دفعةً واحدة. */
+    groups: ItemGroupOption[];
     quotation?: {
         id: number;
         client_id: number;
@@ -58,7 +62,7 @@ const form = useForm({
         item: i.item,
         quantity: i.quantity,
         unit_price: i.unit_price,
-        tax_amount: i.tax_amount ?? (i.quantity * i.unit_price * ((i.item?.tax_rate ?? 15) / 100))
+        tax_amount: i.tax_amount ?? (i.quantity * i.unit_price * ((i.item?.tax_rate ?? 0) / 100))
     })) : [] as FormLine[],
 });
 
@@ -83,6 +87,37 @@ const addItem = (item: ItemOption) => {
 
 const removeItem = (index: number) => {
     form.items.splice(index, 1);
+};
+
+// ── المجموعات المحفوظة ──────────────────────────────────────
+/** آخر مجموعة أُضيفت — يُطمئن أن الاختيار وقع. */
+const lastGroup = ref<GroupInsertion | null>(null);
+
+/**
+ * إضافة أصناف مجموعة دفعةً واحدة.
+ *
+ * الصنف الموجود في العرض تزيد كميته ولا يُكرَّر بندًا: بندان بالصنف نفسه
+ * يقرؤهما العميل سطرين متطابقين بلا سبب، والجمع أوضح.
+ */
+const addGroup = (group: ItemGroupOption) => {
+    let added = 0;
+    let merged = 0;
+
+    for (const member of group.items) {
+        const existing = form.items.find((l) => l.item_id === member.id);
+
+        if (existing) {
+            existing.quantity += 1;
+            merged++;
+
+            continue;
+        }
+
+        addItem(member);
+        added++;
+    }
+
+    lastGroup.value = { name: group.name, added, merged };
 };
 
 // Calculations
@@ -166,14 +201,19 @@ const submit = () => {
                 <div class="relative z-50 rounded-2xl border-2 border-slate-300 bg-white p-5 shadow-sm">
                     <div class="mb-4 flex items-center justify-between">
                         <h2 class="text-lg font-bold text-slate-800">بنود العرض</h2>
-                        <div class="relative w-72">
-                            <AsyncSelect
-                                v-model="selectedItemId"
-                                api-url="/admin/api/search?type=items"
-                                placeholder="إضافة صنف بالبحث..."
-                                @change="handleItemSelect"
-                                :clearable="false"
-                            />
+                        <div class="flex flex-wrap items-center gap-3">
+                            <!-- المجموعات المحفوظة: أصناف تتكرّر معًا تُضاف دفعةً واحدة -->
+                            <ItemGroupPicker :groups="groups" @select="addGroup" />
+
+                            <div class="relative w-72">
+                                <AsyncSelect
+                                    v-model="selectedItemId"
+                                    api-url="/admin/api/search?type=items"
+                                    placeholder="إضافة صنف بالبحث..."
+                                    @change="handleItemSelect"
+                                    :clearable="false"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -214,6 +254,12 @@ const submit = () => {
                             </tbody>
                         </table>
                     </div>
+                    <p v-if="lastGroup" class="mt-2 inline-block rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+                        «{{ lastGroup.name }}»:
+                        <template v-if="lastGroup.added">أُضيف {{ lastGroup.added }} صنف</template>
+                        <template v-if="lastGroup.added && lastGroup.merged"> و</template>
+                        <template v-if="lastGroup.merged">زادت كمية {{ lastGroup.merged }} صنف مضاف سلفًا</template>
+                    </p>
                     <p v-if="form.errors.items" class="mt-2 text-xs font-bold text-red-500">{{ form.errors.items }}</p>
                 </div>
 

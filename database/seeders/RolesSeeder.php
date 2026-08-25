@@ -83,6 +83,8 @@ class RolesSeeder extends Seeder
                     'dashboard.view',
                     'pos.view', 'pos.create',
                     'items.view',
+                    // المجموعات اختصار في شاشة البيع، فالكاشير يراها ولا ينشئها
+                    'item_groups.view',
                     'inventory.view',
                     'sales.view', 'sales.create',
                     'clients.view', 'clients.create',

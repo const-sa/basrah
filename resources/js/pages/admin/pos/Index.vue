@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import ItemGroupPicker from '@/components/ItemGroupPicker.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
+import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, Plus, Receipt, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, Plus, Receipt, Trash2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface PosItem {
@@ -27,6 +29,8 @@ const props = defineProps<{
     departments: { id: number; name: string; code: string | null }[];
     departmentId: number | null;
     items: PosItem[];
+    /** المجموعات المحفوظة المتاحة لهذا القسم — أعضاؤها من أصناف `items` وحدها. */
+    groups: ItemGroupOption[];
     clients: { id: number; name: string; mobile: string | null }[];
     /** العميل النقدي — المختار تلقائيًا ما لم يُحدَّد غيره. */
     defaultClientId: number;
@@ -88,6 +92,48 @@ const onItemChange = (line: Line, item: PosItem | null) => {
 
 /** كل الأصناف مضافة: لا معنى لسطر فارغ لا يجد ما يُختار فيه. */
 const canAddLine = computed(() => chosenIds.value.size < props.items.length);
+
+// ── المجموعات المحفوظة ──────────────────────────────────────
+/** آخر مجموعة أُضيفت — يُطمئن الكاشير أن الاختيار وقع، ثم يزول عند الحفظ. */
+const lastGroup = ref<GroupInsertion | null>(null);
+
+/**
+ * إضافة أصناف مجموعة دفعةً واحدة.
+ *
+ * الصنف الموجود في الفاتورة تزيد كميته ولا يُكرَّر سطرًا: الشاشة تمنع أصلًا
+ * اختيار الصنف مرتين (`optionsFor`)، فسطرٌ مكرّر يقع خارج قائمته ولا يُحرَّر.
+ * والسطر الفارغ الذي بدأت به الفاتورة يُستهلك قبل إنشاء سطور جديدة.
+ */
+const addGroup = (group: ItemGroupOption) => {
+    let added = 0;
+    let merged = 0;
+
+    for (const member of group.items) {
+        const existing = lines.value.find((l) => l.item_id === member.id);
+
+        if (existing) {
+            existing.quantity += 1;
+            normalizeQuantity(existing);
+            merged++;
+
+            continue;
+        }
+
+        const blank = lines.value.find((l) => l.item_id === null);
+        const line = blank ?? emptyLine();
+
+        line.item_id = member.id;
+        line.unit_price = member.price;
+        line.quantity = 1;
+        line.discount_amount = 0;
+
+        if (!blank) lines.value.push(line);
+
+        added++;
+    }
+
+    lastGroup.value = { name: group.name, added, merged };
+};
 
 /** الصنف غير المقاس لا يقبل الكسور — نفس القاعدة المطبَّقة على الخادم. */
 const normalizeQuantity = (line: Line) => {
@@ -183,6 +229,7 @@ const submit = () => {
         preserveScroll: true,
         onSuccess: () => {
             lines.value = [emptyLine()];
+            lastGroup.value = null;
             paidInput.value = null;
             form.reset('discount_amount', 'notes');
             form.client_id = props.defaultClientId;
@@ -361,13 +408,24 @@ const numField =
                             </table>
                         </div>
 
-                        <div class="flex items-center gap-3 border-t border-slate-100 p-3">
+                        <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 p-3">
                             <button
                                 type="button" @click="addLine" :disabled="!canAddLine"
                                 class="inline-flex items-center gap-1.5 rounded-lg border-2 border-dashed border-slate-500 px-4 py-2 text-sm font-extrabold text-slate-900 transition hover:border-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-500 disabled:hover:bg-transparent"
                             >
                                 <Plus class="h-3.5 w-3.5" /> إضافة سطر
                             </button>
+
+                            <!-- المجموعات المحفوظة: أصناف تتكرّر معًا تُضاف دفعةً واحدة -->
+                            <ItemGroupPicker :groups="groups" @select="addGroup" />
+
+                            <span v-if="lastGroup" class="rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+                                «{{ lastGroup.name }}»:
+                                <template v-if="lastGroup.added">أُضيف {{ lastGroup.added }} صنف</template>
+                                <template v-if="lastGroup.added && lastGroup.merged"> و</template>
+                                <template v-if="lastGroup.merged">زادت كمية {{ lastGroup.merged }} صنف مضاف سلفًا</template>
+                            </span>
+
                             <span v-if="!canAddLine" class="text-xs font-bold text-slate-600">كل الأصناف مضافة — زِد الكمية في سطر الصنف.</span>
                         </div>
                     </div>

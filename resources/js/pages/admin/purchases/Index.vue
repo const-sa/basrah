@@ -250,7 +250,7 @@ const destroy = (p: PurchaseRow) => {
 
                 <div v-if="purchases.links.length > 3" class="flex flex-wrap justify-center gap-1 border-t border-slate-100 p-3">
                     <Link
-                        v-for="l in purchases.links" :key="l.label" :href="l.url ?? '#'"
+                        v-for="(l, li) in purchases.links" :key="`${li}-${l.label}`" :href="l.url ?? '#'"
                         :class="['rounded-lg px-3 py-1.5 text-xs font-bold', l.active ? 'bg-blue-600 text-white' : l.url ? 'bg-white text-slate-600 ring-1 ring-slate-200' : 'text-slate-300']"
                         v-html="l.label"
                     />
