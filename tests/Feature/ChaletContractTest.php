@@ -52,7 +52,7 @@ class ChaletContractTest extends TestCase
         $client = Client::create(['name' => 'نزيل الشاليه', 'mobile' => '0559876543', 'city' => 'الرياض']);
 
         return app(ChaletBookingService::class)->create([
-            'unit_id' => Unit::where('type', 'chalet')->value('id'),
+            'unit_id' => $this->chaletLetWhole()->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-05',

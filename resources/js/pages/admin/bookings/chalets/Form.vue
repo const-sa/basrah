@@ -12,10 +12,13 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
-interface SectionOption { id: number; name: string; gender: string }
+interface SectionOption { id: number; name: string; gender: string; is_active: boolean }
 interface UnitOption {
     id: number; name: string; code: string; type: string;
     bookable_mode: 'whole' | 'sections' | 'both';
+    /** Derived on the server from the chalet's rooms — never a free choice. */
+    allows_whole: boolean;
+    allows_sections: boolean;
     privacy_mode: 'open' | 'exclusive';
     /** Day periods this chalet is priced for — empty means stays only. */
     day_use_periods: string[];
@@ -166,8 +169,28 @@ const checkOutDay = computed(() => weekdayName(form.check_out_date));
 const nights = computed(() => nightsBetween(form.booking_date, form.check_out_date));
 const overMaxNights = computed(() => nights.value > props.meta.stay.max_nights);
 
-const canBookWhole = computed(() => ['whole', 'both'].includes(selectedUnit.value?.bookable_mode ?? 'both'));
-const canBookSections = computed(() => ['sections', 'both'].includes(selectedUnit.value?.bookable_mode ?? 'both'));
+/**
+ * The rooms this chalet can be let by.
+ *
+ * A stopped room is left out — availability refuses it anyway — except one
+ * this booking already holds, so an older booking opens with its room still
+ * selected instead of with nothing.
+ */
+const bookableSections = computed<SectionOption[]>(() => {
+    const held = props.booking?.section_ids ?? [];
+
+    return (selectedUnit.value?.sections ?? []).filter((s) => s.is_active || held.includes(s.id));
+});
+
+/**
+ * Whether this chalet is let by the room.
+ *
+ * Not a choice the clerk makes: a chalet with rooms is let by the room, and
+ * one without is let whole. The server derives the same answer from the same
+ * fact (Unit::allowsSectionBooking), so the form states the scope instead of
+ * asking for it and cannot post one the save would refuse.
+ */
+const letByRoom = computed(() => selectedUnit.value?.allows_sections ?? false);
 
 // ── إقامة بليالٍ أم حجز نهاري ───────────────────────────────
 
@@ -214,11 +237,19 @@ watch(() => form.unit_id, () => {
     if (hydrating.value) return;
 
     form.section_ids = [];
-    form.scope = canBookWhole.value ? 'whole' : 'sections';
     // Each chalet has its own deposit, so switching chalets brings its amount
     // rather than carrying the previous one across.
     form.security_deposit_amount = selectedUnit.value?.security_deposit ?? 0;
 });
+
+// The scope follows the chalet rather than the clerk. Immediate, so an edit
+// opened on a chalet whose rooms have changed since is corrected on arrival
+// instead of posting a scope that unit no longer accepts.
+watch(letByRoom, (byRoom) => {
+    form.scope = byRoom ? 'sections' : 'whole';
+
+    if (!byRoom) form.section_ids = [];
+}, { immediate: true });
 
 // A unit change can drop the period that was picked — fall back to a stay
 // rather than posting a period this chalet has no price for.
@@ -244,9 +275,14 @@ const setNights = (count: number) => {
     form.check_out_date = addDays(form.booking_date, count);
 };
 
-const toggleSection = (id: number) => {
-    const i = form.section_ids.indexOf(id);
-    i === -1 ? form.section_ids.push(id) : form.section_ids.splice(i, 1);
+/**
+ * A chalet is let one section at a time. What the client calls a «قسم» is a
+ * room inside the chalet, and a booking takes one room — a guest who wants
+ * two is sold the chalet whole. So picking another replaces the choice rather
+ * than adding to it, and picking the chosen one clears it.
+ */
+const pickSection = (id: number) => {
+    form.section_ids = form.section_ids[0] === id ? [] : [id];
 };
 
 const toggleAddon = (id: number) => {
@@ -735,35 +771,30 @@ const submit = () => {
                         </p>
                     </div>
 
-                    <!-- النطاق -->
+                    <!-- النطاق — يتبع الشاليه لا اختيار الموظف: بأقسام يُحجز بالقسم، وبلا أقسام يُحجز كاملًا -->
                     <div v-if="selectedUnit" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <h2 class="mb-3 text-sm font-extrabold text-slate-800">نطاق الحجز</h2>
 
-                        <div class="grid gap-2 sm:grid-cols-2">
-                            <label v-if="canBookWhole" class="cursor-pointer rounded-xl border-2 p-3 text-center transition" :class="form.scope === 'whole' ? 'border-teal-400 bg-teal-50' : 'border-slate-200 hover:border-slate-300'">
-                                <input v-model="form.scope" type="radio" value="whole" class="sr-only" />
-                                <div class="text-sm font-extrabold text-slate-800">الشاليه كاملًا</div>
-                                <div class="mt-0.5 text-[11px] font-medium text-slate-500">تُقفل جميع الأقسام</div>
-                            </label>
-                            <label v-if="canBookSections" class="cursor-pointer rounded-xl border-2 p-3 text-center transition" :class="form.scope === 'sections' ? 'border-teal-400 bg-teal-50' : 'border-slate-200 hover:border-slate-300'">
-                                <input v-model="form.scope" type="radio" value="sections" class="sr-only" />
-                                <div class="text-sm font-extrabold text-slate-800">أقسام محددة</div>
-                                <div class="mt-0.5 text-[11px] font-medium text-slate-500">حجز قسم دون بقية الشاليه</div>
-                            </label>
+                        <!-- شاليه بلا أقسام: يُحجز بكامله، ولا شيء يُختار -->
+                        <div v-if="!letByRoom" class="rounded-xl border-2 border-teal-400 bg-teal-50 p-3 text-center">
+                            <div class="text-sm font-extrabold text-slate-800">الشاليه كاملًا</div>
+                            <div class="mt-0.5 text-[11px] font-medium text-slate-500">لا أقسام في هذا الشاليه — يُحجز بكامله</div>
                         </div>
 
-                        <div v-if="form.scope === 'sections'" class="mt-2">
-                            <div class="mb-1 text-[11px] font-bold text-slate-600">اختر الأقسام</div>
+                        <!-- شاليه بأقسام: يُحجز بالقسم وحده، والشاليه كاملًا غير مطروح -->
+                        <div v-else>
+                            <div class="mb-1.5 text-[11px] font-bold text-slate-600">اختر القسم — قسم واحد لكل حجز</div>
                             <div class="flex flex-wrap gap-1.5">
                                 <button
-                                    v-for="s in selectedUnit.sections"
+                                    v-for="s in bookableSections"
                                     :key="s.id"
                                     type="button"
-                                    @click="toggleSection(s.id)"
+                                    @click="pickSection(s.id)"
                                     class="rounded-lg px-3 py-1.5 text-xs font-bold transition"
                                     :class="form.section_ids.includes(s.id) ? 'bg-teal-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
                                 >{{ s.name }}</button>
                             </div>
+                            <p class="mt-1.5 text-[11px] font-medium text-slate-500">هذا الشاليه مقسَّم، فيُحجز القسم لا الشاليه كاملًا.</p>
                             <p v-if="form.errors.section_ids" class="mt-1 text-xs text-red-500">{{ form.errors.section_ids }}</p>
                         </div>
                     </div>

@@ -66,7 +66,7 @@ class UnitManagementTest extends TestCase
 
     public function test_re_enabling_the_unit_allows_booking_again(): void
     {
-        $unit = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        $unit = $this->chaletLetWhole();
         $unit->update(['is_active' => false]);
 
         $this->actingAs($this->owner)
@@ -102,7 +102,7 @@ class UnitManagementTest extends TestCase
 
     public function test_existing_bookings_survive_disabling_the_unit(): void
     {
-        $unit = Unit::where('code', 'CH-LULU')->firstOrFail();
+        $unit = $this->chaletLetWhole('CH-LULU');
 
         $booking = app(BookingService::class)->create([
             'unit_id' => $unit->id, 'scope' => 'whole',

@@ -29,7 +29,10 @@ class BookingConflictTest extends TestCase
 
         $this->seed([RolesSeeder::class, UnitsSeeder::class]);
         $this->service = app(BookingService::class);
-        $this->unit = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        // A hall, not a chalet: these are the whole-versus-section rules, and
+        // a chalet no longer holds both — it is let by the room when it has
+        // rooms and whole when it has none (Unit::allowsWholeBooking).
+        $this->unit = Unit::where('code', 'HALL-02')->firstOrFail();
     }
 
     private function client(string $name): Client

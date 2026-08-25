@@ -32,7 +32,9 @@ class PublicSiteBookingTest extends TestCase
         $this->seed([RolesSeeder::class, UnitsSeeder::class, BookingSetupSeeder::class]);
 
         $this->hall = Unit::where('code', 'HALL-01')->firstOrFail();
-        $this->chalet = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        // Let whole, so the site tests can book it without a room: a chalet
+        // that has rooms is let by the room (Unit::allowsWholeBooking).
+        $this->chalet = $this->chaletLetWhole();
     }
 
     // ── صفحات العرض ──────────────────────────────────────────

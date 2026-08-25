@@ -10,7 +10,6 @@ use App\Models\Item;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Role;
-use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingService;
 use App\Services\ContractPdf;
@@ -230,7 +229,7 @@ class QuotationContractTest extends TestCase
     private function makeBooking(): Booking
     {
         return app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-BSR1')->value('id'),
+            'unit_id' => $this->chaletLetWhole()->id,
             'client_id' => Client::create(['name' => 'خالد المطيري', 'mobile' => '0559876543'])->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-10',

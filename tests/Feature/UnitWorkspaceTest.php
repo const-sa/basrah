@@ -50,12 +50,12 @@ class UnitWorkspaceTest extends TestCase
             'has_all_units' => true,
         ]);
 
-        $this->unit = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        $this->unit = $this->chaletLetWhole();
     }
 
     public function test_the_workspace_shows_the_units_own_bookings_only(): void
     {
-        $other = Unit::where('code', 'CH-LULU')->firstOrFail();
+        $other = $this->chaletLetWhole('CH-LULU');
         $service = app(BookingService::class);
 
         $service->create([

@@ -6,7 +6,6 @@ use App\Models\Booking;
 use App\Models\Client;
 use App\Models\PaymentMethod;
 use App\Models\Role;
-use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingService;
 use App\Services\ChaletBookingService;
@@ -46,7 +45,7 @@ class ChaletBookingsLedgerColumnsTest extends TestCase
         $client = Client::create(['name' => 'نزيل الشاليه', 'mobile' => '0559876543']);
 
         $this->booking = app(ChaletBookingService::class)->create([
-            'unit_id' => Unit::where('type', 'chalet')->value('id'),
+            'unit_id' => $this->chaletLetWhole()->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'booking_date' => '2026-10-05',

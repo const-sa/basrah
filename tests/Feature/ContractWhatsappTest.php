@@ -47,7 +47,7 @@ class ContractWhatsappTest extends TestCase
         $client = Client::create(['name' => 'خالد المطيري', 'mobile' => '0551234567']);
 
         $this->booking = app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-BSR1')->value('id'),
+            'unit_id' => $this->chaletLetWhole('CH-BSR1')->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
@@ -147,7 +147,7 @@ class ContractWhatsappTest extends TestCase
         ContractTemplate::query()->delete();
 
         $booking = app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-BSR1')->value('id'),
+            'unit_id' => $this->chaletLetWhole('CH-BSR1')->id,
             'scope' => 'whole',
             'booking_date' => '2026-11-20',
             'period' => 'full_day',
@@ -185,7 +185,7 @@ class ContractWhatsappTest extends TestCase
     {
         $client = Client::create(['name' => 'تجربة', 'mobile' => '0501112222']);
         $booking = app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-BSR2')->value('id'),
+            'unit_id' => $this->chaletLetWhole('CH-BSR2')->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-20',
@@ -201,7 +201,7 @@ class ContractWhatsappTest extends TestCase
     {
         $client = Client::create(['name' => 'بلا جوال']);
         $booking = app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-MOON')->value('id'),
+            'unit_id' => $this->chaletLetWhole('CH-MOON')->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-21',
@@ -228,7 +228,7 @@ class ContractWhatsappTest extends TestCase
     {
         $other = Client::create(['name' => 'عميل آخر', 'mobile' => '0559998888']);
         $second = app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-FOUR')->value('id'),
+            'unit_id' => $this->chaletLetWhole('CH-FOUR')->id,
             'client_id' => $other->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-22',

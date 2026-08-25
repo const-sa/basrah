@@ -123,7 +123,18 @@ watch(
     },
 );
 
+/**
+ * A hall may go out in several sections at once; a chalet section is a room
+ * and a stay takes one of them, so picking another there replaces the choice
+ * instead of adding to it.
+ */
 const toggleSection = (id: number) => {
+    if (props.unit.type === 'chalet') {
+        form.section_ids = form.section_ids[0] === id ? [] : [id];
+
+        return;
+    }
+
     form.section_ids = form.section_ids.includes(id)
         ? form.section_ids.filter((s) => s !== id)
         : [...form.section_ids, id];

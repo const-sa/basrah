@@ -54,7 +54,9 @@ class SecurityDepositTest extends TestCase
             'has_all_units' => true,
         ]);
 
-        $this->chalet = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        // Let whole, since every booking here is of the whole chalet: one
+        // with rooms is let by the room (Unit::allowsWholeBooking).
+        $this->chalet = $this->chaletLetWhole();
         $this->chalet->update(['security_deposit' => 500]);
     }
 

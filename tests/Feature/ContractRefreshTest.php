@@ -4,10 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Booking;
 use App\Models\Client;
-use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Role;
-use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingService;
 use App\Services\ContractService;
@@ -47,7 +45,7 @@ class ContractRefreshTest extends TestCase
         $client = Client::create(['name' => 'خالد المطيري', 'mobile' => '0551234567']);
 
         $this->booking = app(BookingService::class)->create([
-            'unit_id' => Unit::where('code', 'CH-BSR1')->value('id'),
+            'unit_id' => $this->chaletLetWhole()->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-10',

@@ -237,6 +237,11 @@ class OnlineBookingController extends Controller
 
         if ($isStay) {
             $rules['check_out_date'] = ['required', 'date', 'after:booking_date'];
+            // A chalet section is a room inside the chalet, and a stay takes
+            // one of them — the visitor who wants two books the chalet whole.
+            // Same rule the admin screen applies, applied here as well so the
+            // site cannot record a booking that screen would refuse to edit.
+            $rules['section_ids'] = ['array', 'max:1'];
         } else {
             $rules['period'] = ['required', Rule::in(BookingPeriod::hallKeys())];
             $rules['days_count'] = ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS];
@@ -250,7 +255,9 @@ class OnlineBookingController extends Controller
             $rules['agreed'] = ['accepted'];
         }
 
-        $data = $request->validate($rules);
+        $data = $request->validate($rules, [
+            'section_ids.max' => 'يُحجز قسم واحد فقط — لحجز أكثر من قسم اختر الشاليه كاملًا.',
+        ]);
 
         // النطاق المطلوب يُفحص هنا لا في الخدمة وحدها: رسالة «هذه الوحدة
         // تُحجز كاملة» تصل الزائر أوضح من رفضٍ عام بعد ملء النموذج كله.

@@ -49,7 +49,7 @@ class ChaletDayUseBookingTest extends TestCase
             'has_all_units' => true,
         ]);
 
-        $this->chalet = Unit::where('code', 'CH-BSR1')->firstOrFail();
+        $this->chalet = $this->chaletLetWhole();
     }
 
     private function priceDayPeriod(string $period, float $amount = 400): void

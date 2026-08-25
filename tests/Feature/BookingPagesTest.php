@@ -180,7 +180,7 @@ class BookingPagesTest extends TestCase
     public function test_each_screen_lists_only_its_own_bookings(): void
     {
         $hall = Unit::where('type', 'hall')->firstOrFail();
-        $chalet = Unit::where('type', 'chalet')->firstOrFail();
+        $chalet = $this->chaletLetWhole();
 
         app(BookingService::class)->create([
             'unit_id' => $hall->id, 'scope' => 'whole',
@@ -244,7 +244,7 @@ class BookingPagesTest extends TestCase
      */
     public function test_chalet_calendar_places_the_stay_as_a_span(): void
     {
-        $chalet = Unit::where('type', 'chalet')->firstOrFail();
+        $chalet = $this->chaletLetWhole();
 
         app(ChaletBookingService::class)->create([
             'unit_id' => $chalet->id, 'scope' => 'whole',
@@ -273,7 +273,7 @@ class BookingPagesTest extends TestCase
      */
     public function test_a_stay_crossing_the_month_boundary_is_clipped_and_flagged(): void
     {
-        $chalet = Unit::where('type', 'chalet')->firstOrFail();
+        $chalet = $this->chaletLetWhole();
 
         app(ChaletBookingService::class)->create([
             'unit_id' => $chalet->id, 'scope' => 'whole',

@@ -369,7 +369,10 @@ abstract class BaseBookingsController extends Controller
         return Unit::visibleTo($user)
             ->where('is_active', true)
             ->where('type', $this->unitType())
-            ->with(['sections:id,unit_id,name,gender', 'prices'])
+            // is_active on the sections is not decoration: a chalet's scope is
+            // derived from whether it has a room that can be let, and the form
+            // must not offer a stopped one.
+            ->with(['sections:id,unit_id,name,gender,is_active', 'prices'])
             ->orderBy('sort_order')
             ->get()
             ->map(fn (Unit $u) => [
@@ -378,6 +381,11 @@ abstract class BaseBookingsController extends Controller
                 'code' => $u->code,
                 'type' => $u->type,
                 'bookable_mode' => $u->bookable_mode,
+                // What this unit may actually be booked as. A hall reads it
+                // off bookable_mode; a chalet has it derived from its rooms,
+                // so the form states the scope rather than asking for it.
+                'allows_whole' => $u->allowsWholeBooking(),
+                'allows_sections' => $u->allowsSectionBooking(),
                 'privacy_mode' => $u->privacy_mode,
                 // Which day periods this unit may be booked for. A hall is
                 // always sold by period; a chalet only offers the ones that
@@ -388,6 +396,7 @@ abstract class BaseBookingsController extends Controller
                 'security_deposit' => $u->securityDeposit(),
                 'sections' => $u->sections->map(fn ($s) => [
                     'id' => $s->id, 'name' => $s->name, 'gender' => $s->gender,
+                    'is_active' => (bool) $s->is_active,
                 ])->values(),
             ]);
     }

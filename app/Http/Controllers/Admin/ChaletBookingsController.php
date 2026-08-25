@@ -43,6 +43,17 @@ class ChaletBookingsController extends BaseBookingsController
         parent::__construct($availability, $pricing, $bookings, $whatsapp);
     }
 
+    /**
+     * A chalet is let one section at a time.
+     *
+     * What the screens call a «قسم» is a room inside the chalet, not a wing of
+     * it: a booking takes one room, and a guest who wants two is sold the
+     * chalet whole. The rule is applied on every endpoint that accepts a
+     * selection — quote, diary and save alike — so none of them can accept a
+     * booking another would refuse.
+     */
+    private const ONE_SECTION = 'يُحجز قسم واحد فقط في الحجز الواحد — لحجز أكثر من قسم اختر «الشاليه كاملًا».';
+
     protected function unitType(): string
     {
         return 'chalet';
@@ -182,7 +193,7 @@ class ChaletBookingsController extends BaseBookingsController
         $data = $request->validate([
             'unit_id' => ['required', 'exists:units,id'],
             'scope' => ['required', Rule::in(['whole', 'sections'])],
-            'section_ids' => ['array'],
+            'section_ids' => ['array', 'max:1'],
             'section_ids.*' => ['integer', 'exists:unit_sections,id'],
             'booking_date' => ['required', 'date'],
             'period' => ['nullable', Rule::in(StayPeriod::pricingKeys())],
@@ -199,7 +210,7 @@ class ChaletBookingsController extends BaseBookingsController
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'ignore_booking_id' => ['nullable', 'integer'],
-        ]);
+        ], ['section_ids.max' => self::ONE_SECTION]);
 
         $unit = Unit::with(['sections', 'prices'])->findOrFail($data['unit_id']);
         $sectionIds = $data['scope'] === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
@@ -317,13 +328,13 @@ class ChaletBookingsController extends BaseBookingsController
         $data = $request->validate([
             'unit_id' => ['required', 'exists:units,id'],
             'scope' => ['required', Rule::in(['whole', 'sections'])],
-            'section_ids' => ['array'],
+            'section_ids' => ['array', 'max:1'],
             'section_ids.*' => ['integer', 'exists:unit_sections,id'],
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'ignore_booking_id' => ['nullable', 'integer'],
-        ]);
+        ], ['section_ids.max' => self::ONE_SECTION]);
 
         $unit = Unit::with(['sections', 'prices'])->findOrFail($data['unit_id']);
         $this->authorizeUnit($request, $unit->id);
@@ -410,7 +421,7 @@ class ChaletBookingsController extends BaseBookingsController
             'unit_id' => ['required', 'exists:units,id'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'scope' => ['required', Rule::in(['whole', 'sections'])],
-            'section_ids' => ['array', Rule::requiredIf(fn () => $request->input('scope') === 'sections')],
+            'section_ids' => ['array', 'max:1', Rule::requiredIf(fn () => $request->input('scope') === 'sections')],
             'section_ids.*' => ['integer', 'exists:unit_sections,id'],
             // booking_date هو تاريخ الدخول؛ سُمّي كذلك ليبقى عمودًا واحدًا
             // يفهمه التقويم والتقارير في النوعين.
@@ -434,6 +445,6 @@ class ChaletBookingsController extends BaseBookingsController
             'security_deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'guests_count' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
-        ]);
+        ], ['section_ids.max' => self::ONE_SECTION]);
     }
 }

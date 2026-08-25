@@ -282,10 +282,17 @@ const emptyDayPrices = (): Record<number, number | null> =>
 
 /** صفوف التسعير: الوحدة كاملة ثم كل قسم — مبدوءة بما هو محفوظ أو بصفر. */
 const buildPriceRows = (u: Unit): PriceRow[] => {
-    const targets: (number | null)[] = [
-        ...(u.bookable_mode === 'sections' ? [] : [null]),
-        ...(u.bookable_mode === 'whole' ? [] : u.sections.map((s) => s.id as number)),
-    ];
+    // A chalet is priced whole and by room both, whichever it is let by today.
+    // Its scope is derived from its rooms (Unit::allowsSectionBooking), so
+    // narrowing the rows to the scope in force would leave the other side
+    // unpriceable — and adding a room to a whole-priced chalet would silently
+    // put it on sale at nothing.
+    const targets: (number | null)[] = u.type === 'chalet'
+        ? [null, ...u.sections.map((s) => s.id as number)]
+        : [
+            ...(u.bookable_mode === 'sections' ? [] : [null]),
+            ...(u.bookable_mode === 'whole' ? [] : u.sections.map((s) => s.id as number)),
+        ];
 
     return targets.flatMap((sectionId) =>
         pricedPeriods(u).map((p) => {
@@ -371,6 +378,19 @@ const priceGroups = computed(() => {
         rows: priceForm.prices.filter((r) => r.unit_section_id === sectionId),
     }));
 });
+
+/**
+ * How this unit is let, as its card states it.
+ *
+ * A hall reads it off bookable_mode. A chalet has no such setting to read: it
+ * is let by the room when it has rooms and whole when it has none, so the
+ * badge says which rather than repeating a field that no longer governs it.
+ */
+const scopeLabel = (u: Unit): string => {
+    if (u.type !== 'chalet') return labelOf(props.options.bookable_modes, u.bookable_mode);
+
+    return u.sections.some((s) => s.is_active) ? 'يُحجز بالأقسام' : 'يُحجز كاملًا';
+};
 
 const periodLabel = (key: string) =>
     [...props.options.periods, ...props.options.stay_periods].find((p) => p.key === key)?.label ?? key;
@@ -595,7 +615,7 @@ const destroy = (u: Unit) => {
                         <div class="mb-3 flex flex-wrap gap-1.5 text-[11px] font-bold">
                             <!-- النوع مفهوم ضمنًا في الشاشة المقصورة على نوع واحد -->
                             <span v-if="!type" class="rounded-md bg-slate-100 px-2 py-0.5 text-slate-700">{{ labelOf(options.types, u.type) }}</span>
-                            <span class="rounded-md bg-sky-100 px-2 py-0.5 text-sky-700">{{ labelOf(options.bookable_modes, u.bookable_mode) }}</span>
+                            <span class="rounded-md bg-sky-100 px-2 py-0.5 text-sky-700">{{ scopeLabel(u) }}</span>
                             <span
                                 class="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
                                 :class="u.privacy_mode === 'exclusive' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'"

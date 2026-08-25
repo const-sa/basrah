@@ -123,18 +123,52 @@ class Unit extends Model
     }
 
     /**
+     * Has this unit any section that can actually be let?
+     *
+     * A stopped section is not one of them — availability refuses it anyway,
+     * so counting it here would offer a room nobody can book. Reads the loaded
+     * relation when there is one, since the unit lists map every row.
+     */
+    public function hasBookableSections(): bool
+    {
+        return $this->relationLoaded('sections')
+            ? $this->sections->contains(fn (UnitSection $s) => (bool) $s->is_active)
+            : $this->sections()->where('is_active', true)->exists();
+    }
+
+    /**
      * هل يجوز حجز الوحدة كاملة؟
+     *
+     * A chalet is not sold two ways, so bookable_mode has no say over one: its
+     * rooms answer the question instead. What the client calls a «قسم» is a
+     * room inside the chalet — a chalet that has rooms is let by the room, and
+     * one that has none is let whole. Deriving it rather than storing it is
+     * what keeps the two from disagreeing: adding the first room to a chalet
+     * must close whole-chalet booking in the same movement, and no separate
+     * field has to be remembered for that.
      */
     public function allowsWholeBooking(): bool
     {
+        if ($this->type === 'chalet') {
+            return ! $this->hasBookableSections();
+        }
+
         return in_array($this->bookable_mode, ['whole', 'both'], true);
     }
 
     /**
      * هل يجوز حجز قسم منفرد؟
+     *
+     * Derived for a chalet — see allowsWholeBooking(). A hall is different in
+     * kind: it genuinely goes out whole or in sections, and that is a decision
+     * about the hall rather than a consequence of having sections at all.
      */
     public function allowsSectionBooking(): bool
     {
+        if ($this->type === 'chalet') {
+            return $this->hasBookableSections();
+        }
+
         return in_array($this->bookable_mode, ['sections', 'both'], true);
     }
 
