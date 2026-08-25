@@ -21,7 +21,9 @@ return new class extends Migration
             $table->decimal('discount_amount', 15, 2)->default(0);
             $table->decimal('tax_amount', 15, 2)->default(0);
             $table->decimal('total_amount', 15, 2)->default(0);
-            $table->foreignId('payment_method_id')->nullable()->constrained('payment_methods')->nullOnDelete();
+            // The foreign key lands later: payment_methods is only created further
+            // down the migration order, so the column waits for its constraint.
+            $table->foreignId('payment_method_id')->nullable();
             $table->decimal('paid_amount', 15, 2)->default(0);
             $table->text('notes')->nullable();
             $table->timestamps();
