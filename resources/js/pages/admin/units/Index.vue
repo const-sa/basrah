@@ -380,6 +380,23 @@ const priceGroups = computed(() => {
 });
 
 /**
+ * The colour a section chip carries on the card.
+ *
+ * A hall's sections are a men's side and a women's side, and the colour is the
+ * quickest way to read that off the card. A chalet's are rooms, which carry no
+ * such division, so they take one neutral colour instead.
+ */
+const sectionChipClass = (u: Unit, s: Section): string => {
+    if (u.type === 'chalet') return 'bg-teal-100 text-teal-700';
+
+    return {
+        men: 'bg-blue-100 text-blue-700',
+        women: 'bg-pink-100 text-pink-700',
+        mixed: 'bg-violet-100 text-violet-700',
+    }[s.gender];
+};
+
+/**
  * How this unit is let, as its card states it.
  *
  * A hall reads it off bookable_mode. A chalet has no such setting to read: it
@@ -616,7 +633,9 @@ const destroy = (u: Unit) => {
                             <!-- النوع مفهوم ضمنًا في الشاشة المقصورة على نوع واحد -->
                             <span v-if="!type" class="rounded-md bg-slate-100 px-2 py-0.5 text-slate-700">{{ labelOf(options.types, u.type) }}</span>
                             <span class="rounded-md bg-sky-100 px-2 py-0.5 text-sky-700">{{ scopeLabel(u) }}</span>
+                            <!-- الخصوصية شأن القاعة وحدها: غرف الشاليه تُؤجَّر مستقلة (Unit::isExclusive) -->
                             <span
+                                v-if="u.type !== 'chalet'"
                                 class="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
                                 :class="u.privacy_mode === 'exclusive' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'"
                             >
@@ -634,11 +653,7 @@ const destroy = (u: Unit) => {
                                 <div v-for="s in u.sections" :key="s.id ?? s.name" class="flex flex-wrap items-center gap-1">
                                     <span
                                         class="rounded-md px-2 py-0.5 text-[11px] font-bold"
-                                        :class="{
-                                            'bg-blue-100 text-blue-700': s.gender === 'men',
-                                            'bg-pink-100 text-pink-700': s.gender === 'women',
-                                            'bg-violet-100 text-violet-700': s.gender === 'mixed',
-                                        }"
+                                        :class="sectionChipClass(u, s)"
                                     >{{ s.name }}</span>
                                     <span v-if="!s.is_active" class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">موقوف</span>
                                     <span v-for="n in (s.facility_names ?? [])" :key="n" class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{{ n }}</span>
@@ -790,12 +805,16 @@ const destroy = (u: Unit) => {
 
                             <div class="space-y-2">
                                 <div v-for="(s, i) in sectionRows" :key="i" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                    <div class="grid items-end gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+                                    <div
+                                        class="grid items-end gap-2"
+                                        :class="form.type === 'chalet' ? 'sm:grid-cols-[1fr_auto_auto]' : 'sm:grid-cols-[1fr_auto_auto_auto]'"
+                                    >
                                         <div>
                                             <label class="mb-1 block text-[11px] font-bold text-slate-600">اسم القسم</label>
                                             <input v-model="s.name" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" />
                                         </div>
-                                        <div>
+                                        <!-- الفئة تقسم القاعة رجالًا ونساءً؛ قسم الشاليه غرفة لا فئة لها -->
+                                        <div v-if="form.type !== 'chalet'">
                                             <label class="mb-1 block text-[11px] font-bold text-slate-600">الفئة</label>
                                             <select v-model="s.gender" class="rounded-lg border border-slate-200 px-2.5 py-2 text-sm">
                                                 <option v-for="g in options.genders" :key="g.key" :value="g.key">{{ g.label }}</option>

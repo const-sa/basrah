@@ -175,7 +175,7 @@ const removeLogo = () => {
                             <span v-if="unit.capacity" class="inline-flex items-center gap-1 font-bold text-slate-700">
                                 <Users class="h-3.5 w-3.5" /> السعة {{ unit.capacity }}
                             </span>
-                            <span v-if="unit.privacy_mode === 'exclusive'" class="inline-flex items-center gap-1 rounded-md bg-amber-200 px-2 py-0.5 font-bold text-amber-900">
+                            <span v-if="unit.type !== 'chalet' && unit.privacy_mode === 'exclusive'" class="inline-flex items-center gap-1 rounded-md bg-amber-200 px-2 py-0.5 font-bold text-amber-900">
                                 <Lock class="h-3 w-3" /> خصوصية مغلقة
                             </span>
                         </div>

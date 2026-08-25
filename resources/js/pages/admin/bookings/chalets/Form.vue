@@ -525,6 +525,20 @@ const securityChanged = computed(() =>
     unitSecurityDeposit.value > 0 && Number(form.security_deposit_amount) !== unitSecurityDeposit.value,
 );
 
+/**
+ * The statuses this form may set.
+ *
+ * A chalet has no check-in step any more — a confirmed stay goes straight to
+ * check-out — so «تم الدخول» is not offered. It stays on the list for a
+ * booking already sitting in it, so an older one can still be opened and
+ * corrected instead of quietly changing status the moment it is saved.
+ */
+const statusOptions = computed(() =>
+    props.meta.statuses.filter(
+        (s) => s.key !== 'checked_in' || props.booking?.status === 'checked_in',
+    ),
+);
+
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
 const suggestedDeposit = computed(() => pricing.value?.deposit_amount ?? 0);
 const suggestedTotal = computed(() => pricing.value?.total_amount ?? 0);
@@ -826,7 +840,7 @@ const submit = () => {
                             <div>
                                 <label class="mb-1 block text-sm font-bold text-slate-700">الحالة</label>
                                 <select v-model="form.status" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                                    <option v-for="s in meta.statuses" :key="s.key" :value="s.key">{{ s.label }}</option>
+                                    <option v-for="s in statusOptions" :key="s.key" :value="s.key">{{ s.label }}</option>
                                 </select>
                             </div>
                         </div>

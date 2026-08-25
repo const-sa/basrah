@@ -502,15 +502,12 @@ const generateContract = (b: Booking) => {
                                             title="تأكيد الحجز"
                                             @click="changeStatus(b, 'confirmed')"
                                         />
+                                        <!--
+                                            لا تسجيل دخول في الشاليهات: الحجز المؤكد يمضي إلى الخروج مباشرة.
+                                            و«تم الدخول» تبقى مقبولة هنا من أجل حجوزات سُجِّلت بها من قبل.
+                                        -->
                                         <TableActionButton
-                                            v-if="can('chalet_bookings.edit') && b.status === 'confirmed'"
-                                            variant="primary"
-                                            :icon="LogIn"
-                                            title="تسجيل الدخول"
-                                            @click="changeStatus(b, 'checked_in')"
-                                        />
-                                        <TableActionButton
-                                            v-if="can('chalet_bookings.edit') && b.status === 'checked_in'"
+                                            v-if="can('chalet_bookings.edit') && ['confirmed', 'checked_in'].includes(b.status)"
                                             variant="success"
                                             :icon="LogOut"
                                             title="تسجيل الخروج"

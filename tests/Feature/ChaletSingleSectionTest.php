@@ -160,6 +160,33 @@ class ChaletSingleSectionTest extends TestCase
             });
     }
 
+    /**
+     * Two guests, two rooms, the same night.
+     *
+     * A chalet carries no privacy lock, so one room being taken does not shut
+     * the rest. With one it could never be let by the room at all — the first
+     * booking would close the whole chalet to everybody else.
+     */
+    public function test_two_guests_may_take_two_rooms_on_the_same_night(): void
+    {
+        [$first, $second] = $this->sectionIds();
+
+        $other = Client::create(['name' => 'نزيل آخر', 'mobile' => '0551112222']);
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->stayPayload([$first]))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', [
+                ...$this->stayPayload([$second]),
+                'client_id' => $other->id,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(2, Booking::count());
+    }
+
     public function test_a_hall_still_takes_several_sections(): void
     {
         $hall = Unit::where('type', 'hall')->with('sections')->firstOrFail();

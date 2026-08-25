@@ -174,9 +174,20 @@ class Unit extends Model
 
     /**
      * هل حجز قسم واحد يحجب بقية الأقسام عن العملاء الآخرين؟
+     *
+     * A chalet carries no such lock. Its rooms are let one at a time, and an
+     * exclusive unit closes every other room the moment one is taken — which
+     * would leave a divided chalet unsellable to two guests on the same night,
+     * the very thing letting it by the room is for. A hall keeps the setting:
+     * there, one occasion taking the men's side really can mean the women's
+     * side is not on offer to a stranger.
      */
     public function isExclusive(): bool
     {
+        if ($this->type === 'chalet') {
+            return false;
+        }
+
         return $this->privacy_mode === 'exclusive';
     }
 
