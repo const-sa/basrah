@@ -106,7 +106,7 @@ class ChaletBookingsController extends BaseBookingsController
 
         return Inertia::render('admin/bookings/chalets/Index', [
             'bookings' => $bookings,
-            'filters' => $request->only(['status', 'unit_id', 'from', 'to', 'search']),
+            'filters' => $this->filterState($request, ['status', 'unit_id', 'from', 'to', 'search']),
             'units' => $this->unitOptions($user),
             'meta' => static::meta(),
             'stats' => $this->stats($query),

@@ -330,6 +330,59 @@ class BookingPagesTest extends TestCase
             );
     }
 
+    /**
+     * الفلتر الذي لم يُختر يصل الشاشة معلنًا فارغًا لا غائبًا: القائمة
+     * المربوطة بقيمةٍ لا خيار لها تظهر صندوقًا بلا عنوان.
+     */
+    public function test_an_unchosen_filter_reaches_the_screen_as_null_not_missing(): void
+    {
+        foreach (['halls', 'chalets'] as $screen) {
+            $this->actingAs($this->owner)
+                ->get("/admin/bookings/{$screen}")
+                ->assertOk()
+                ->assertInertia(fn ($page) => $page
+                    ->where('filters.status', null)
+                    ->where('filters.unit_id', null)
+                    ->where('filters.from', null)
+                    ->where('filters.to', null)
+                    ->where('filters.search', null)
+                    ->etc(),
+                );
+        }
+
+        $this->actingAs($this->owner)
+            ->get('/admin/bookings/halls')
+            ->assertInertia(fn ($page) => $page->where('filters.event_type_id', null)->etc());
+    }
+
+    /**
+     * والمختار يعود بنوعه: رقم الوحدة عددٌ كخيارها، وإلا وقف بجانبه نصًّا
+     * فبقيت القائمة بلا عنوان بعد الفلترة نفسها.
+     */
+    public function test_a_chosen_unit_comes_back_as_the_number_its_option_carries(): void
+    {
+        $hall = Unit::where('type', 'hall')->firstOrFail();
+        $chalet = Unit::where('type', 'chalet')->firstOrFail();
+
+        $this->actingAs($this->owner)
+            ->get("/admin/bookings/halls?unit_id={$hall->id}&status=confirmed")
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.unit_id', $hall->id)
+                ->where('filters.status', 'confirmed')
+                ->etc(),
+            );
+
+        // The cleared filter travels back as an empty string, and that is no
+        // more selectable than a missing one.
+        $this->actingAs($this->owner)
+            ->get("/admin/bookings/chalets?unit_id={$chalet->id}&status=")
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.unit_id', $chalet->id)
+                ->where('filters.status', null)
+                ->etc(),
+            );
+    }
+
     public function test_units_page_only_shows_units_within_the_users_scope(): void
     {
         $supervisor = User::factory()->create([

@@ -103,7 +103,7 @@ class HallBookingsController extends BaseBookingsController
 
         return Inertia::render('admin/bookings/halls/Index', [
             'bookings' => $bookings,
-            'filters' => $request->only(['status', 'unit_id', 'event_type_id', 'from', 'to', 'search']),
+            'filters' => $this->filterState($request, ['status', 'unit_id', 'event_type_id', 'from', 'to', 'search']),
             'units' => $this->unitOptions($user),
             // القائمة تحتاج الأنواع للفلتر وحده — النموذج له شاشته وبياناتها.
             'eventTypes' => $this->eventTypeOptions($user),

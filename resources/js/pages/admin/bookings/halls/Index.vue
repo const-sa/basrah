@@ -136,7 +136,14 @@ interface PaymentSummary {
 
 const props = defineProps<{
     bookings: { data: Booking[]; links: { url: string | null; label: string; active: boolean }[] };
-    filters: Record<string, string | null>;
+    filters: {
+        status: string | null;
+        unit_id: number | null;
+        event_type_id: number | null;
+        from: string | null;
+        to: string | null;
+        search: string | null;
+    };
     units: UnitOption[];
     eventTypes: EventTypeOption[];
     meta: {

@@ -107,6 +107,33 @@ abstract class BaseBookingsController extends Controller
     }
 
     /**
+     * The filter values as the screen must receive them back. A key absent from
+     * the query string used to be absent from the payload too, and a <select>
+     * bound to a value it holds no option for renders as an empty box instead
+     * of the option that reads «all» — which is every filter on first load.
+     * So every key is stated, a cleared one as null, and a key ending in _id
+     * comes back an int, matching the option that carries the id rather than
+     * standing beside it as a string.
+     *
+     * @param  list<string>  $keys
+     * @return array<string, string|int|null>
+     */
+    protected function filterState(Request $request, array $keys): array
+    {
+        return collect($keys)
+            ->mapWithKeys(function (string $key) use ($request) {
+                if (str_ends_with($key, '_id')) {
+                    return [$key => $request->integer($key) ?: null];
+                }
+
+                $value = $request->string($key)->toString();
+
+                return [$key => $value === '' ? null : $value];
+            })
+            ->all();
+    }
+
+    /**
      * @return array<string, int>
      */
     protected function stats(Builder $query): array
