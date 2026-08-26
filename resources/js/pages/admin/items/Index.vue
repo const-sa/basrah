@@ -23,7 +23,7 @@ interface Option { key: string; label: string }
 
 const props = defineProps<{
     items: { data: Item[]; links: { url: string | null; label: string; active: boolean }[] };
-    filters: Record<string, string | null>;
+    filters: { type: string | null; category_id: number | null; department_id: number | null; search: string | null; low_stock: boolean };
     categories: { id: number; name: string }[];
     departments: { id: number; name: string }[];
     types: Option[];

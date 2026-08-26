@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\StatesFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ItemOptionResource;
 use App\Models\Department;
@@ -22,6 +23,8 @@ use Inertia\Response;
  */
 class ItemsController extends Controller
 {
+    use StatesFilters;
+
     public function __construct(private readonly InventoryService $inventory) {}
 
     public function index(Request $request): Response
@@ -65,7 +68,12 @@ class ItemsController extends Controller
                         'id' => $c->id, 'name' => $c->name, 'quantity' => (float) $c->pivot->quantity,
                     ])->values(),
                 ]),
-            'filters' => $request->only(['type', 'category_id', 'department_id', 'search', 'low_stock']),
+            'filters' => [
+                ...$this->filterState($request, ['type', 'category_id', 'department_id', 'search']),
+                // The tick reads a real boolean. Returned as the string "true"
+                // it would sit unticked while the filter it names is in force.
+                'low_stock' => $request->boolean('low_stock'),
+            ],
             'categories' => ItemCategory::orderBy('name')->get(['id', 'name']),
             'departments' => Department::where('is_active', true)->orderBy('sort_order')->get(['id', 'name']),
             'types' => collect(Item::TYPES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
@@ -247,7 +255,7 @@ class ItemsController extends Controller
 
         return Inertia::render('admin/items/Movements', [
             'movements' => $movements,
-            'filters' => $request->only(['item_id', 'type']),
+            'filters' => $this->filterState($request, ['item_id', 'type']),
             'items' => Item::orderBy('name')->get(['id', 'name']),
             'types' => collect(StockMovement::TYPES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
         ]);

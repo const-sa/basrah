@@ -14,7 +14,7 @@ interface Movement {
 
 const props = defineProps<{
     movements: { data: Movement[]; links: { url: string | null; label: string; active: boolean }[] };
-    filters: Record<string, string | number | null>;
+    filters: { item_id: number | null; type: string | null };
     items: { id: number; name: string }[];
     types: { key: string; label: string }[];
 }>();
