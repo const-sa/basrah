@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { StatPill, TableActionButton } from '@/components/data-table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
@@ -9,7 +10,6 @@ import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     Bell,
-    CalendarClock,
     Check,
     Eye,
     FileSignature,
@@ -18,6 +18,7 @@ import {
     LogIn,
     LogOut,
     Moon,
+    MoreVertical,
     Pencil,
     Plus,
     Receipt,
