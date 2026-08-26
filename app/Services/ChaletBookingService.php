@@ -166,7 +166,11 @@ class ChaletBookingService
                     && $data['security_deposit_amount'] !== null
                         ? round((float) $data['security_deposit_amount'], 2)
                         : (float) $booking->security_deposit_amount,
-                'guests_count' => $data['guests_count'] ?? $booking->guests_count,
+                // A cleared count is a change, not an omission: ?? would put
+                // back the number the operator had just deleted.
+                'guests_count' => array_key_exists('guests_count', $data)
+                    ? $data['guests_count']
+                    : $booking->guests_count,
                 'notes' => $data['notes'] ?? $booking->notes,
             ]);
 

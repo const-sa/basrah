@@ -130,6 +130,9 @@ const form = useForm({
     status: props.booking?.status ?? 'confirmed',
     addons: { ...(props.booking?.addons ?? {}) } as Record<number, number>,
     discount_amount: props.booking?.discount_amount ?? 0,
+    // The contract prints it. Left empty it prints «—», which is the honest
+    // answer when nobody was asked how many were coming.
+    guests_count: props.booking?.guests_count ?? (null as number | null),
     notes: props.booking?.notes ?? '',
 
     // The security deposit: money held against damage, entirely outside the
@@ -840,7 +843,7 @@ const submit = () => {
 
 
                     <div class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
-                        <div class="grid gap-3 sm:grid-cols-2">
+                        <div class="grid gap-3 sm:grid-cols-3">
                             <div>
                                 <label class="mb-1 block text-sm font-extrabold text-slate-900">الخصم</label>
                                 <input v-model.number="form.discount_amount" type="number" min="0" step="0.01" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
@@ -850,6 +853,14 @@ const submit = () => {
                                 <select v-model="form.status" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm">
                                     <option v-for="s in statusOptions" :key="s.key" :value="s.key">{{ s.label }}</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">
+                                    عدد الضيوف <span class="text-[11px] font-bold text-slate-500">(اختياري)</span>
+                                </label>
+                                <input v-model.number="form.guests_count" type="number" min="1" placeholder="—" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
+                                <p class="mt-1 text-[11px] font-semibold text-slate-600">يُطبع في العقد.</p>
+                                <p v-if="form.errors.guests_count" class="mt-1 text-xs text-red-500">{{ form.errors.guests_count }}</p>
                             </div>
                         </div>
 
