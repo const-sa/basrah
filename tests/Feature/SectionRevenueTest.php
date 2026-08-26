@@ -210,6 +210,46 @@ class SectionRevenueTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('stats.total', fn ($sum) => (float) $sum === $total)->etc());
     }
 
+    /**
+     * الإقامة في غرفةٍ واحدة هي عين ما يُسأل عنه، فلا يجوز أن تبقى على
+     * الشاليه بحجّة أنّ سطرها لم ينقسم.
+     */
+    public function test_a_single_room_stay_is_moved_off_the_chalet_too(): void
+    {
+        $section = $this->chalet->sections()->firstOrFail();
+        $this->priceSection($section->id, 500);
+
+        $booking = $this->stayInRoom($section->id, '2027-08-10', '2027-08-11');
+        app(BookingService::class)->checkOut($booking);
+
+        $account = Account::where('code', Ledger::BOOKING_REVENUE)->value('id');
+        $entry = JournalEntry::where('reference_type', Booking::class)
+            ->where('reference_id', $booking->id)
+            ->where('source', 'booking')
+            ->firstOrFail();
+
+        // Back to how the ledger held it before rooms had centres.
+        $unitCentre = CostCenter::where('unit_id', $this->chalet->id)->value('id');
+        $total = round((float) $entry->lines()->where('account_id', $account)->sum('credit'), 2);
+        $entry->lines()->where('account_id', $account)->delete();
+        $entry->lines()->create([
+            'account_id' => $account, 'cost_center_id' => $unitCentre, 'debit' => 0, 'credit' => $total,
+        ]);
+
+        $moved = app(SectionRevenueAttribution::class)->apply();
+
+        $this->assertSame(['entries' => 1, 'lines' => 1], $moved);
+
+        $centre = CostCenter::where('unit_section_id', $section->id)->value('id');
+        $byCentre = $this->revenueByCenter();
+
+        $this->assertSame($total, $byCentre[$centre] ?? 0.0);
+        $this->assertArrayNotHasKey($unitCentre, $byCentre);
+
+        // Already where it belongs — a second run leaves it be.
+        $this->assertSame(['entries' => 0, 'lines' => 0], app(SectionRevenueAttribution::class)->apply());
+    }
+
     public function test_revenue_posted_before_the_split_is_moved_onto_its_rooms(): void
     {
         $sections = $this->chalet->sections()->orderBy('id')->take(2)->get();

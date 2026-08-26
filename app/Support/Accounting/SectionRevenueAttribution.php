@@ -120,7 +120,15 @@ class SectionRevenueAttribution
             ];
         }
 
-        if (count($rows) < 2) {
+        if ($rows === []) {
+            return 0;
+        }
+
+        // A stay in a single room still moves — off the chalet and onto the
+        // room that was let, which is the whole question being asked. Only a
+        // line already sitting on the centre it belongs to is left alone,
+        // which is what makes a second run a no-op.
+        if (count($rows) === 1 && (int) $rows[0]['cost_center_id'] === (int) $line->cost_center_id) {
             return 0;
         }
 
