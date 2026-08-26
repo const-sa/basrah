@@ -265,7 +265,7 @@ const CARD = 'rounded-xl border border-slate-200 bg-white shadow-[0_10px_30px_-2
                 <div :class="CARD" class="overflow-hidden">
                     <h2 class="flex items-center gap-2 border-b px-4 py-3 text-sm font-extrabold" :style="{ color: NAVY, borderColor: BLUE + '26' }">
                         <span class="grid h-7 w-7 place-items-center rounded-md" :style="halo(BLUE)"><Building2 class="h-4 w-4" /></span>
-                        من أيّ وحدة؟
+                        من أيّ وحدة أو قسم؟
                     </h2>
                     <div v-if="byCenter.length" class="space-y-1 p-3">
                         <button
@@ -336,7 +336,7 @@ const CARD = 'rounded-xl border border-slate-200 bg-white shadow-[0_10px_30px_-2
                     v-model="filters.cost_center_id"
                     class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#0FA396]"
                 >
-                    <option value="">كل الوحدات</option>
+                    <option value="">كل الوحدات والأقسام</option>
                     <option v-for="c in visibleCenters" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
                 </select>
                 <select

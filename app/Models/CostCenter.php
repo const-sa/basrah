@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class CostCenter extends Model
 {
-    protected $fillable = ['code', 'name', 'unit_id', 'department_id', 'is_active'];
+    protected $fillable = ['code', 'name', 'unit_id', 'unit_section_id', 'department_id', 'is_active'];
 
     protected function casts(): array
     {
@@ -22,6 +22,11 @@ class CostCenter extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class);
+    }
+
+    public function section(): BelongsTo
+    {
+        return $this->belongsTo(UnitSection::class, 'unit_section_id');
     }
 
     public function lines(): HasMany
@@ -67,6 +72,28 @@ class CostCenter extends Model
         return static::firstOrCreate(
             ['unit_id' => $unit->id],
             ['code' => 'CC-'.$unit->code, 'name' => $unit->name, 'is_active' => true],
+        );
+    }
+
+    /**
+     * The centre of one section of a unit — a room of a chalet, a side of a
+     * hall. Without it a unit let by the section reports one figure for all
+     * of them, and which room earned the money is unanswerable.
+     */
+    public static function forSection(UnitSection $section): self
+    {
+        $section->loadMissing('unit');
+
+        return static::firstOrCreate(
+            ['unit_section_id' => $section->id],
+            [
+                'code' => 'CC-'.($section->unit?->code ?: 'U'.$section->unit_id).'-S'.$section->id,
+                // The unit's name travels with it: «شاليه ١» alone names nothing
+                // on a screen listing every unit's sections together.
+                'name' => $section->unit?->name ? $section->unit->name.' — '.$section->name : $section->name,
+                'unit_id' => null,
+                'is_active' => true,
+            ],
         );
     }
 

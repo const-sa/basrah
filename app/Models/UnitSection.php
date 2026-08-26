@@ -31,6 +31,17 @@ class UnitSection extends Model
         ];
     }
 
+    /**
+     * A room earns money of its own, so it carries a cost centre of its own
+     * from the moment it exists. Waiting for its first booking would leave it
+     * off «الإيرادات» until then — and a room that cannot be picked reads as a
+     * room that earns nothing.
+     */
+    protected static function booted(): void
+    {
+        static::created(fn (self $section) => CostCenter::forSection($section));
+    }
+
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class);

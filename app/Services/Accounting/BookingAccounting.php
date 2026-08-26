@@ -92,7 +92,7 @@ class BookingAccounting
             ],
             default => [
                 ['account' => Ledger::REFUNDABLE_DEPOSITS, 'debit' => $amount, 'cost_center_id' => $costCenter],
-                ['account' => Ledger::BOOKING_REVENUE, 'credit' => $amount, 'cost_center_id' => $costCenter],
+                ...$this->revenueLines($booking, $amount, $costCenter),
             ],
         };
 
@@ -141,7 +141,7 @@ class BookingAccounting
         $lines = [
             ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $collected, 'cost_center_id' => $costCenter],
             ['account' => Ledger::RECEIVABLES, 'debit' => $outstanding, 'cost_center_id' => $costCenter],
-            ['account' => Ledger::BOOKING_REVENUE, 'credit' => $total, 'cost_center_id' => $costCenter],
+            ...$this->revenueLines($booking, $total, $costCenter),
         ];
 
         return $this->ledger->post(
@@ -160,5 +160,61 @@ class BookingAccounting
     private function costCenter(Booking $booking): ?int
     {
         return $booking->unit ? CostCenter::forUnit($booking->unit)->id : null;
+    }
+
+    /**
+     * The revenue credit, carried by the rooms that earned it.
+     *
+     * A unit taken whole earned it whole, and stays one line on the unit. A
+     * unit taken by the room is a different sale in each room, and one line
+     * on the unit makes «كم دخل من شاليه ٢» unanswerable — the figure exists
+     * in the books but not separably. So the credit is apportioned by the
+     * price each room was let at, frozen on the booking the day it was made,
+     * which is the only per-room number the booking actually holds: the
+     * total also carries addons, a discount and tax, and none of those are
+     * recorded room by room.
+     *
+     * The last room takes the remainder rather than its own rounded share,
+     * so three rooms splitting an odd riyal still credit the total exactly —
+     * an unbalanced entry is refused outright, and a booking that cannot be
+     * posted is worse than one reported coarsely.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function revenueLines(Booking $booking, float $amount, ?int $unitCenter): array
+    {
+        $booking->loadMissing('sections');
+        $sections = $booking->sections;
+
+        if ($booking->scope !== 'sections' || $sections->isEmpty()) {
+            return [['account' => Ledger::BOOKING_REVENUE, 'credit' => $amount, 'cost_center_id' => $unitCenter]];
+        }
+
+        $prices = $sections->map(fn ($s) => (float) ($s->pivot->price ?? 0));
+        $base = round($prices->sum(), 2);
+
+        $lines = [];
+        $left = round($amount, 2);
+        $last = $sections->count() - 1;
+
+        foreach ($sections->values() as $i => $section) {
+            // Priced at nothing — a comped room, or a day rate the sections
+            // never carried — the rooms share it evenly rather than the first
+            // one taking the lot.
+            $share = $i === $last
+                ? $left
+                : round($base > 0 ? $amount * ((float) $section->pivot->price / $base) : $amount / $sections->count(), 2);
+
+            $left = round($left - $share, 2);
+
+            $lines[] = [
+                'account' => Ledger::BOOKING_REVENUE,
+                'credit' => $share,
+                'cost_center_id' => CostCenter::forSection($section)->id,
+                'description' => $section->name,
+            ];
+        }
+
+        return $lines;
     }
 }
