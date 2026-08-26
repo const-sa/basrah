@@ -1,14 +1,31 @@
 <script setup lang="ts">
 import { StatPill, TableActionButton } from '@/components/data-table';
-import PageShortcuts from '@/components/PageShortcuts.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
-import { toHijri } from '@/lib/hijri';
 import { formatTime12, todayString } from '@/lib/dates';
+import { toHijri } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Bell, CalendarClock, Check, Eye, FileSignature, FileText, Loader2, LogIn, LogOut, Moon, Pencil, Plus, Receipt, Search, Trash2, Wallet, X } from 'lucide-vue-next';
+import {
+    Bell,
+    CalendarClock,
+    Check,
+    Eye,
+    FileSignature,
+    FileText,
+    Loader2,
+    LogIn,
+    LogOut,
+    Moon,
+    Pencil,
+    Plus,
+    Receipt,
+    Search,
+    Trash2,
+    Wallet,
+    X,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface SectionOption {
@@ -169,9 +186,7 @@ const isSecurity = computed(() => SECURITY_TYPES.includes(payForm.type));
 /** What is held right now — from the summary once it lands, else from the row. */
 const securityHeld = computed(() => paySummary.value?.security_held ?? payBooking.value?.security_held ?? 0);
 
-const securityAgreed = computed(
-    () => paySummary.value?.security_deposit_amount ?? payBooking.value?.security_deposit_amount ?? 0,
-);
+const securityAgreed = computed(() => paySummary.value?.security_deposit_amount ?? payBooking.value?.security_deposit_amount ?? 0);
 
 /**
  * The amount each type opens with: the rest of what is due, or the rest of
@@ -301,8 +316,6 @@ const generateContract = (b: Booking) => {
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <!-- اختصارات شاشات الشاليهات — تُشتق من القائمة فلا تحتاج صيانة -->
-                    <PageShortcuts />
                     <Link
                         v-if="can('chalet_bookings.create')"
                         href="/admin/bookings/chalets/create"
@@ -374,7 +387,9 @@ const generateContract = (b: Booking) => {
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النزيل</th>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الدخول والخروج</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
-                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المالية</th>
+                                <th class="whitespace-nowrap px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                                <th class="whitespace-nowrap px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المدفوع</th>
+                                <th class="whitespace-nowrap px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المتبقي</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
@@ -426,14 +441,25 @@ const generateContract = (b: Booking) => {
                                         b.status_label
                                     }}</span>
                                 </td>
-                                <td class="px-4 py-3">
-                                    <div class="font-extrabold text-slate-800">{{ money(b.total_amount) }}</div>
-                                    <div class="text-[11px] font-bold" :class="b.remaining_amount > 0 ? 'text-red-600' : 'text-emerald-600'">
-                                        {{ b.remaining_amount > 0 ? `متبقٍ ${money(b.remaining_amount)}` : 'مسدَّد بالكامل' }}
-                                    </div>
+                                <!-- المال ثلاثة أعمدة كسجل القاعات: ما عليه، وما قبض منه، وما بقي -->
+                                <td class="whitespace-nowrap px-4 py-3 text-center font-extrabold text-slate-800" dir="ltr">
+                                    {{ money(b.total_amount) }}
+                                </td>
+                                <td
+                                    class="whitespace-nowrap px-4 py-3 text-center font-bold"
+                                    :class="b.paid_amount > 0 ? 'text-emerald-600' : 'text-slate-400'"
+                                >
+                                    <span dir="ltr">{{ money(b.paid_amount) }}</span>
                                     <div v-if="!b.is_deposit_settled && b.deposit_amount > 0" class="mt-0.5 text-[10px] font-bold text-amber-600">
                                         العربون {{ money(b.deposit_amount) }} غير مستوفى
                                     </div>
+                                </td>
+                                <td
+                                    class="whitespace-nowrap px-4 py-3 text-center font-extrabold"
+                                    :class="b.remaining_amount > 0 ? 'text-red-600' : 'text-emerald-600'"
+                                    dir="ltr"
+                                >
+                                    {{ money(b.remaining_amount) }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center justify-center gap-1">
@@ -545,7 +571,7 @@ const generateContract = (b: Booking) => {
                                 </td>
                             </tr>
                             <tr v-if="!bookings.data.length">
-                                <td colspan="7" class="px-4 py-10 text-center text-sm font-medium text-slate-500">لا توجد إقامات مطابقة</td>
+                                <td colspan="9" class="px-4 py-10 text-center text-sm font-medium text-slate-500">لا توجد إقامات مطابقة</td>
                             </tr>
                         </tbody>
                     </table>
@@ -710,7 +736,8 @@ const generateContract = (b: Booking) => {
                         <!-- المقبوض موزّعًا على طرقه — يقرأ الموظف منه ما دخل الصندوق وما دخل البنك -->
                         <div class="mt-2 flex flex-wrap gap-1.5">
                             <span
-                                v-for="m in meta.payment_methods" :key="m.id"
+                                v-for="m in meta.payment_methods"
+                                :key="m.id"
                                 class="rounded-md px-2 py-0.5 text-[11px] font-bold"
                                 :class="previewBooking.paid_by_method[m.id] > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'"
                             >
@@ -938,8 +965,8 @@ const generateContract = (b: Booking) => {
                             </button>
 
                             <p v-if="isSecurity" class="text-[10px] font-medium leading-5 text-slate-500">
-                                التأمين يُقيَّد في حساب «تأمينات حجوزات مستردة» لا في العرابين، فلا يظهر إيرادًا. وما يُخصم منه
-                                للتلفيات وحده هو الذي يتحوّل إلى إيراد.
+                                التأمين يُقيَّد في حساب «تأمينات حجوزات مستردة» لا في العرابين، فلا يظهر إيرادًا. وما يُخصم منه للتلفيات وحده هو الذي
+                                يتحوّل إلى إيراد.
                             </p>
                             <p v-else class="text-[10px] font-medium leading-5 text-slate-500">
                                 العربون يُقيَّد التزامًا (إيراد غير مكتسب) لا إيرادًا، ويتحوّل إلى إيراد عند إنهاء الإقامة.
