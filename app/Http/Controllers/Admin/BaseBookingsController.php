@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Client;
 use App\Models\PaymentMethod;
-use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingAvailability;
@@ -333,7 +332,9 @@ abstract class BaseBookingsController extends Controller
             'subtotal_amount' => $subtotal,
             'discount_amount' => (float) $b->discount_amount,
             'addons_amount' => (float) $b->addons_amount,
-            'tax_amount' => $this->taxPortion($total),
+            // ضريبة الحجز كما حُسبت يوم إنشائه لا كما هي اليوم: حجزٌ سُجِّل
+            // والضريبة معطّلة يبقى بلا ضريبة وإن فُعِّلت بعده.
+            'tax_amount' => $b->taxAmount(),
             'paid_by_method' => $paidByMethod,
             'refunded_amount' => round((float) $payments->where('type', 'refund')->sum('amount'), 2),
             'payment_status' => match (true) {
@@ -342,21 +343,6 @@ abstract class BaseBookingsController extends Controller
                 default => 'غير مسدّدة',
             },
         ];
-    }
-
-    /**
-     * حصة الضريبة من إجمالي الحجز — مستخرجةً منه شاملًا لا مضافةً فوقه،
-     * كما تُحرَّر فاتورة الحجز. وبلا تسجيل ضريبي لا ضريبة على الصف.
-     */
-    protected function taxPortion(float $total): float
-    {
-        $settings = Setting::current();
-
-        if (! $settings->tax_enabled || blank($settings->tax_number) || (float) $settings->tax_rate <= 0) {
-            return 0.0;
-        }
-
-        return round($total - round($total / (1 + (float) $settings->tax_rate / 100), 2), 2);
     }
 
     /**
@@ -394,6 +380,10 @@ abstract class BaseBookingsController extends Controller
                 // The security deposit this unit usually takes — the booking
                 // form starts from it and lets the clerk change it.
                 'security_deposit' => $u->securityDeposit(),
+                // ساعات فترات هذه الوحدة سارية المفعول: ما كُتب لها في شاشة
+                // أسعارها، وإلا ساعات الإعدادات. الشاشة تعرض ساعة الوحدة
+                // المختارة لأنها الساعة التي سيُبنى عليها الحجز فعلًا.
+                'hours' => $u->effectiveHours(),
                 'sections' => $u->sections->map(fn ($s) => [
                     'id' => $s->id, 'name' => $s->name, 'gender' => $s->gender,
                     'is_active' => (bool) $s->is_active,

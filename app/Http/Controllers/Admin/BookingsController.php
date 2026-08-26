@@ -10,6 +10,7 @@ use App\Models\Setting;
 use App\Services\BookingService;
 use App\Services\WhatsappNotifier;
 use App\Services\ZatcaQr;
+use App\Support\Hijri;
 use App\Support\Tafqeet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -202,8 +203,14 @@ class BookingsController extends Controller
 
         // السند يُحرَّر على المقبوض فعلًا لا على إجمالي الحجز: العميل يستلم
         // إيصالًا بما دفعه، والمتبقي يُذكر تحته بيانًا لا مطالبةً في السند.
-        $paid = (float) $booking->paid_amount;
-        $lastPayment = $booking->payments()->where('type', '!=', 'refund')->latest('paid_on')->latest('id')->first();
+        $paid = round((float) $booking->paid_amount, 2);
+        $lastPayment = $booking->payments()
+            ->with('paymentMethod:id,code,name,deposits_to')
+            ->where('type', '!=', 'refund')
+            ->latest('paid_on')->latest('id')->first();
+
+        $issuedOn = $lastPayment?->paid_on?->toDateString()
+            ?? $booking->created_at?->format('Y-m-d');
 
         return Inertia::render('admin/bookings/Bond', [
             'bond' => [
@@ -215,15 +222,23 @@ class BookingsController extends Controller
                 'unit_type' => $booking->unit?->type,
                 // تاريخ السند تاريخ قبض المبلغ لا تاريخ إنشاء الحجز: الإيصال يشهد
                 // على واقعة الاستلام. وبلا دفعة يبقى تاريخ الحجز مرجعًا للورقة.
-                'issued_on' => $lastPayment?->paid_on?->toDateString()
-                    ?? $booking->created_at?->format('Y-m-d'),
+                'issued_on' => $issuedOn,
+                'issued_on_hijri' => Hijri::short($issuedOn),
                 'client_name' => $booking->client?->name,
                 'client_mobile' => $booking->client?->mobile,
                 'amount' => $paid,
+                // الخانتان في رأس السند ريال وهللة منفصلتين كما في الدفتر
+                // المطبوع — والتقريب قبل الفصل وإلا خرجت 0.999 هللة تسعةً وتسعين.
+                'amount_riyals' => (int) floor($paid),
+                'amount_halalas' => (int) round(($paid - floor($paid)) * 100),
                 'amount_words' => Tafqeet::money($paid),
                 'total_amount' => (float) $booking->total_amount,
                 'remaining_amount' => $booking->remainingAmount(),
                 'method_label' => $lastPayment?->methodLabel() ?? 'لا يوجد',
+                // مربّعا «نقدًا» و«شيك/حوالة» يُعلّمان من مقصد الطريقة لا من
+                // اسمها: طريقة يُضيفها المستخدم تأخذ مكانها بلا تعديل هنا.
+                'method_kind' => $lastPayment?->paymentMethod?->deposits_to,
+                'payment_reference' => $lastPayment?->reference,
                 'payment_type_label' => $lastPayment
                     ? (BookingPayment::TYPES[$lastPayment->type] ?? $lastPayment->type)
                     : null,
@@ -239,9 +254,14 @@ class BookingsController extends Controller
                 'business_name' => $settings->business_name ?: config('app.name'),
                 'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
                 'phone' => $settings->phone,
+                'whatsapp' => $settings->whatsapp,
+                'email' => $settings->email,
                 'address' => $settings->address,
                 'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
                 'manager_name' => $settings->manager_name,
+                'manager_signature_url' => $settings->manager_signature_path
+                    ? asset($settings->manager_signature_path)
+                    : null,
                 'stamp_url' => $settings->stamp_path ? asset($settings->stamp_path) : null,
             ],
         ]);
@@ -269,15 +289,15 @@ class BookingsController extends Controller
 
         // الرقم الضريبي شرط الفاتورة الضريبية: بلا تسجيل تخرج الورقة
         // فاتورةً عادية بلا ضريبة ولا رمز — لا فاتورةً ضريبية بحقول فارغة.
-        $taxable = (bool) $settings->tax_enabled && filled($settings->tax_number);
-        $rate = $taxable ? (float) $settings->tax_rate : 0.0;
-
-        // إجمالي الحجز هو ما يدفعه العميل فعلًا — عليه وُقّع العقد وحُرّرت
-        // سندات القبض وسُجّلت الدفعات. فالضريبة تُستخرج منه شاملًا لا تُضاف
-        // فوقه، وإلا خرجت الفاتورة بمبلغ يخالف العقد الذي بيد العميل.
+        //
+        // والضريبة أُضيفت فوق المُسعَّر يوم الحجز وخُزِّنت داخل الإجمالي، فتُقرأ
+        // من الحجز نفسه لا تُحتسب من جديد: حجزٌ سُجِّل والضريبة معطّلة يخرج
+        // بفاتورةٍ بلا ضريبة وإن فُعِّلت اليوم، وهو ما وقّع عليه العميل.
         $gross = (float) $booking->total_amount;
-        $net = $rate > 0 ? round($gross / (1 + $rate / 100), 2) : $gross;
-        $tax = round($gross - $net, 2);
+        $net = $booking->netAmount();
+        $tax = $booking->taxAmount();
+        $taxable = $tax > 0 && filled($settings->tax_number);
+        $rate = $taxable && $net > 0 ? round($tax / $net * 100, 2) : 0.0;
 
         $paid = (float) $booking->paid_amount;
 

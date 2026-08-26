@@ -9,6 +9,7 @@ use App\Models\Unit;
 use App\Models\UnitPrice;
 use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
+use App\Support\Vat;
 use App\Support\Weekdays;
 use Carbon\CarbonImmutable;
 
@@ -50,6 +51,7 @@ class BookingPricing
      *     base_amount: float, package_amount: float, event_fee_amount: float,
      *     priced_by_event: bool, addons_amount: float, discount_amount: float,
      *     total_amount: float, deposit_amount: float, is_weekend: bool, days: int,
+     *     is_taxable: bool, tax_rate: float, net_amount: float, tax_amount: float,
      *     package: array{id: int, name: string, price: float}|null,
      *     event_type: array{id: int, name: string, price: float}|null,
      *     lines: list<array<string, mixed>>
@@ -121,7 +123,12 @@ class BookingPricing
         $eventFee = 0.0;
 
         $discount = (float) max(0, round($discount, 2));
-        $total = (float) max(0, round($base + $packageTotal + $eventFee + $addonsTotal - $discount, 2));
+
+        // الضريبة تُضاف فوق المبلغ لا تُستخرج منه: الأسعار المُدخَلة صافية،
+        // فيُجمع الصافي أولًا ثم تُحتسب ضريبته وتُضاف، ويخرج الإجمالي شاملًا.
+        $net = (float) max(0, round($base + $packageTotal + $eventFee + $addonsTotal - $discount, 2));
+        $tax = Vat::breakdown($net);
+        $total = $tax['total_amount'];
 
         return [
             'base_amount' => $base,
@@ -131,7 +138,10 @@ class BookingPricing
             'priced_by_event' => (bool) $pricedByEvent,
             'addons_amount' => $addonsTotal,
             'discount_amount' => $discount,
-            'total_amount' => $total,
+            // تفصيل الضريبة يصحب الإجمالي ليرى الموظف على الشاشة ما ستحمله
+            // فاتورة العميل بالضبط، لا إجماليًا يفاجئه سطرٌ فيه بعد الحفظ.
+            ...$tax,
+            // والعربون يُحتسب على الإجمالي شاملًا: هو حصةٌ ممّا سيدفعه العميل.
             'deposit_amount' => $this->deposit($unit, $scope, $sectionIds, $period, $total),
             'is_weekend' => $isWeekend,
             'days' => $daysCount,
@@ -164,6 +174,7 @@ class BookingPricing
      *     base_amount: float, package_amount: float, event_fee_amount: float,
      *     addons_amount: float, discount_amount: float,
      *     total_amount: float, deposit_amount: float, is_weekend: bool,
+     *     is_taxable: bool, tax_rate: float, net_amount: float, tax_amount: float,
      *     nights: int, weekend_nights: int, average_night: float,
      *     package: null, event_type: null,
      *     lines: list<array<string, mixed>>
@@ -210,7 +221,9 @@ class BookingPricing
 
         $base = round($base, 2);
         $discount = (float) max(0, round($discount, 2));
-        $total = (float) max(0, round($base + $addonsTotal - $discount, 2));
+        $net = (float) max(0, round($base + $addonsTotal - $discount, 2));
+        $tax = Vat::breakdown($net);
+        $total = $tax['total_amount'];
         $count = count($nights);
 
         return [
@@ -219,7 +232,7 @@ class BookingPricing
             'event_fee_amount' => 0.0,
             'addons_amount' => $addonsTotal,
             'discount_amount' => $discount,
-            'total_amount' => $total,
+            ...$tax,
             'deposit_amount' => $this->deposit($unit, $scope, $sectionIds, StayPeriod::PERIOD, $total),
             'is_weekend' => $weekendNights > 0,
             'nights' => $count,
@@ -347,12 +360,16 @@ class BookingPricing
         $lines = [];
 
         foreach ($sections as $section) {
-            $price = $this->priceRow($unit->id, $section->id, $period);
+            [$price, $fromUnit] = $this->sectionPriceRow($unit, $section->id, $period);
             $amount = round($price?->priceFor($isWeekend, $dayOfWeek) ?? 0, 2);
 
             $total += $amount;
             $lines[] = [
-                'label' => "{$unit->name} — {$section->name}",
+                // السطر يقول من أين جاء السعر: الموظف يرى مبلغًا لم يُدخله على
+                // هذا القسم، فيُنسب إلى الشاليه صراحةً لا يُترك يُخمَّن.
+                'label' => $fromUnit
+                    ? "{$unit->name} — {$section->name} (بسعر الشاليه)"
+                    : "{$unit->name} — {$section->name}",
                 'amount' => $amount,
                 'section_id' => $section->id,
             ];
@@ -466,11 +483,36 @@ class BookingPricing
      */
     private function deposit(Unit $unit, string $scope, array $sectionIds, string $period, float $total): float
     {
-        $price = $scope === 'whole'
+        // العربون يتبع الصفّ الذي سُعِّر به الحجز نفسه: قسمٌ أخذ سعر الشاليه
+        // يأخذ شروط عربونه معه، فلا يُطالَب بعربون صفر على مبلغٍ غير صفر.
+        $price = $scope === 'whole' || $sectionIds === []
             ? $this->priceRow($unit->id, null, $period)
-            : $this->priceRow($unit->id, $sectionIds[0] ?? null, $period);
+            : $this->sectionPriceRow($unit, $sectionIds[0], $period)[0];
 
         return $price?->depositFor($total) ?? 0.0;
+    }
+
+    /**
+     * صفّ السعر الذي يُسعَّر به قسمٌ في فترة، ومعه هل جاء من الشاليه لا من القسم.
+     *
+     * القسم الذي لم يُسعَّر لفترةٍ يأخذ سعر الشاليه فيها: الفترات النهارية
+     * تُدخَل على الشاليه مرةً واحدة في الغالب، وحصرُ القسم على صفّه وحده كان
+     * يُخرِج إجمالي صفر لحجزٍ فترته مسعَّرة فعلًا. وسعر القسم — متى وُجد —
+     * يتقدّم على سعر الشاليه دائمًا.
+     *
+     * @return array{0: UnitPrice|null, 1: bool}
+     */
+    private function sectionPriceRow(Unit $unit, int $sectionId, string $period): array
+    {
+        $row = $this->priceRow($unit->id, $sectionId, $period);
+
+        if ($row?->hasAnyPrice()) {
+            return [$row, false];
+        }
+
+        $unitRow = $this->priceRow($unit->id, null, $period);
+
+        return $unitRow?->hasAnyPrice() ? [$unitRow, true] : [$row, false];
     }
 
     private function priceRow(int $unitId, ?int $sectionId, string $period): ?UnitPrice

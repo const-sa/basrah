@@ -192,7 +192,12 @@ class HallBookingsLedgerColumnsTest extends TestCase
                 ->where('totals.all.total', fn ($v) => (float) $v === (float) $this->booking->total_amount));
     }
 
-    public function test_vat_column_stays_empty_until_tax_is_registered(): void
+    /**
+     * عمود الضريبة يقرأ ما دخل إجمالي الحجز فعلًا: الحجز المُسعَّر قبل
+     * التسجيل الضريبي يبقى صفرًا وإن فُعِّلت الضريبة بعده، والمُسعَّر بعده
+     * يحمل ضريبته. وإلا انقلب سجلٌ قديم بتغيير إعدادٍ اليوم.
+     */
+    public function test_the_vat_column_reads_the_tax_that_was_priced_in(): void
     {
         $this->actingAs($this->owner)
             ->get('/admin/bookings/halls')
@@ -205,11 +210,26 @@ class HallBookingsLedgerColumnsTest extends TestCase
             'tax_rate' => 15,
         ]);
 
-        $total = (float) $this->booking->total_amount;
-        $expected = round($total - round($total / 1.15, 2), 2);
+        $taxed = app(BookingService::class)->create([
+            'unit_id' => $this->booking->unit_id,
+            'client_id' => $this->booking->client_id,
+            'scope' => 'whole',
+            'booking_date' => '2026-10-15',
+            'period' => 'full_day',
+            'status' => 'confirmed',
+        ]);
+
+        $net = $taxed->netAmount();
 
         $this->actingAs($this->owner)
-            ->get('/admin/bookings/halls')
-            ->assertInertia(fn ($page) => $page->where('bookings.data.0.tax_amount', fn ($v) => (float) $v === $expected));
+            ->get('/admin/bookings/halls?from=2026-10-01&to=2026-10-31')
+            ->assertInertia(fn ($page) => $page
+                ->where('bookings.data.0.tax_amount', fn ($v) => (float) $v === round($net * 0.15, 2))
+                ->where('bookings.data.0.total_amount', fn ($v) => (float) $v === round($net * 1.15, 2))
+                ->where('totals.all.tax', fn ($v) => (float) $v === round($net * 0.15, 2)));
+
+        $this->actingAs($this->owner)
+            ->get('/admin/bookings/halls?from=2026-09-01&to=2026-09-30')
+            ->assertInertia(fn ($page) => $page->where('bookings.data.0.tax_amount', fn ($v) => (float) $v === 0.0));
     }
 }

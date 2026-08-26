@@ -39,7 +39,7 @@ class BookingAvailability
         ?int $ignoreBookingId = null,
         int $days = 1,
     ): array {
-        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days);
+        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days, $unit);
 
         return $this->checkRange($unit, $scope, $startsAt, $endsAt, $sectionIds, $clientId, $ignoreBookingId);
     }

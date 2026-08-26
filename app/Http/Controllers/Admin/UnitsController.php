@@ -88,6 +88,10 @@ class UnitsController extends Controller
                     'facility_names' => $s->facilities->pluck('name')->values(),
                     'shared_facility_ids' => $s->facilities->where('pivot.is_shared', true)->pluck('id')->values(),
                 ])->values(),
+                // ساعات الفترات كما كُتبت على هذه الوحدة — الفترة الغائبة هنا
+                // تعمل بساعات الإعدادات، وتظهر في النافذة خانةً فارغة عليها
+                // ساعة النظام تلميحًا.
+                'period_hours' => $u->period_hours ?? [],
                 // صف لكل (قسم أو الوحدة كاملة) × فترة — تقرؤه نافذة الأسعار مباشرة.
                 'prices' => $u->prices->map(fn ($p) => [
                     'unit_section_id' => $p->unit_section_id,

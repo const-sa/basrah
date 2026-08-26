@@ -9,7 +9,7 @@ defineProps<{
         reference: string; unit_name: string | null; is_stay: boolean;
         scope: string; booking_date: string; check_out_date: string | null;
         schedule: string; status_label: string;
-        total_amount: number; deposit_amount: number;
+        total_amount: number; tax_amount: number; deposit_amount: number;
         client_name: string | null;
     };
 }>();
@@ -69,7 +69,7 @@ const print = () => window.print();
                         <dd class="rounded-md bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">{{ booking.status_label }}</dd>
                     </div>
                     <div class="flex justify-between gap-3 py-2">
-                        <dt class="text-slate-600">الإجمالي</dt>
+                        <dt class="text-slate-600">{{ booking.tax_amount > 0 ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</dt>
                         <dd class="font-extrabold text-slate-900" dir="ltr">{{ money(booking.total_amount) }} ريال</dd>
                     </div>
                     <div v-if="booking.deposit_amount > 0" class="flex justify-between gap-3 py-2">

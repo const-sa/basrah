@@ -179,7 +179,12 @@
             <div class="cell">
                 <div class="label">@if ($isQuotation) قيمة العقد @else قيمة الإيجار @endif</div>
                 <div class="value ltr">{{ $data['total_amount'] ?? '—' }}</div>
-                <div class="label">ريال</div>
+                {{-- عقد الحجز لا يفصّل سطورًا، فتُذكر ضريبته تحت قيمته --}}
+                @if (! $isQuotation && ! empty($data['is_taxable']))
+                    <div class="label">ريال — شامل ضريبة {{ $data['tax_rate'] }}%: {{ $data['tax_amount'] }}</div>
+                @else
+                    <div class="label">ريال</div>
+                @endif
             </div>
         </td>
         <td>

@@ -235,7 +235,7 @@ class ChaletBookingsController extends BaseBookingsController
             ]);
         }
 
-        [$startsAt, $endsAt] = StayPeriod::range($data['booking_date'], $data['check_out_date']);
+        [$startsAt, $endsAt] = StayPeriod::range($data['booking_date'], $data['check_out_date'], $unit);
 
         return response()->json([
             'availability' => $this->availability->checkRange(
@@ -280,7 +280,7 @@ class ChaletBookingsController extends BaseBookingsController
         }
 
         $days = BookingPeriod::days((int) ($data['days_count'] ?? 1));
-        [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $period, $days);
+        [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $period, $days, $unit);
 
         return response()->json([
             'availability' => $this->availability->checkRange(
@@ -349,7 +349,7 @@ class ChaletBookingsController extends BaseBookingsController
         $free = $this->availability->freeRanges(
             $unit,
             $data['scope'],
-            $this->calendarRanges($from, $to, $periods),
+            $this->calendarRanges($unit, $from, $to, $periods),
             $sectionIds,
             isset($data['client_id']) ? (int) $data['client_id'] : null,
             $data['ignore_booking_id'] ?? null,
@@ -379,21 +379,24 @@ class ChaletBookingsController extends BaseBookingsController
      * from the 5th to the 7th takes the nights of the 5th and 6th, and the 7th
      * is free again for someone arriving that afternoon.
      *
+     * الساعات المرسومة هي ساعات هذا الشاليه نفسه، فما يظهر في التقويم متاحًا
+     * هو ما يقبله عرض السعر عند اختياره لا مدًى آخر بساعات النظام.
+     *
      * @param  list<string>  $periods
      * @return list<array{key: string, starts_at: CarbonImmutable, ends_at: CarbonImmutable}>
      */
-    private function calendarRanges(CarbonImmutable $from, CarbonImmutable $to, array $periods): array
+    private function calendarRanges(Unit $unit, CarbonImmutable $from, CarbonImmutable $to, array $periods): array
     {
         $ranges = [];
 
         for ($day = $from; $day->lessThanOrEqualTo($to); $day = $day->addDay()) {
             $date = $day->toDateString();
 
-            [$starts, $ends] = StayPeriod::range($date, $day->addDay()->toDateString());
+            [$starts, $ends] = StayPeriod::range($date, $day->addDay()->toDateString(), $unit);
             $ranges[] = ['key' => StayPeriod::PERIOD."|{$date}", 'starts_at' => $starts, 'ends_at' => $ends];
 
             foreach ($periods as $period) {
-                [$starts, $ends] = BookingPeriod::range($date, $period);
+                [$starts, $ends] = BookingPeriod::range($date, $period, 1, $unit);
                 $ranges[] = ['key' => "{$period}|{$date}", 'starts_at' => $starts, 'ends_at' => $ends];
             }
         }

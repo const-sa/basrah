@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Unit;
 use Carbon\CarbonImmutable;
 
 /**
@@ -39,6 +40,46 @@ class BookingPeriod
     }
 
     /**
+     * The periods as a given unit runs them.
+     *
+     * A unit may write its own hours for a period from the pricing screen —
+     * one hall opens its morning at eight, another at ten — and those hours
+     * are what its bookings are built from. A unit that wrote none, or that
+     * is not given here at all, reads the client-wide hours unchanged.
+     *
+     * The overnight flag is re-derived from the hours in force rather than
+     * carried over: a period whose end no longer follows its start crosses
+     * midnight, whoever set it.
+     *
+     * @return array<string, array{label: string, start: string, end: string, overnight: bool}>
+     */
+    public static function periodsFor(?Unit $unit): array
+    {
+        $periods = self::periods();
+
+        if ($unit === null) {
+            return $periods;
+        }
+
+        foreach ($periods as $key => $meta) {
+            $hours = $unit->periodHours($key);
+
+            if ($hours === null) {
+                continue;
+            }
+
+            $periods[$key] = [
+                ...$meta,
+                'start' => $hours['start'],
+                'end' => $hours['end'],
+                'overnight' => $hours['end'] <= $hours['start'],
+            ];
+        }
+
+        return $periods;
+    }
+
+    /**
      * الفترة التي تُباع بها القاعة — يومٌ كامل لا غير.
      *
      * The morning/evening split is day-use, and day-use is a chalet
@@ -65,10 +106,10 @@ class BookingPeriod
      *
      * @return list<array{key: string, label: string, start: string, end: string}>
      */
-    public static function hallPeriods(): array
+    public static function hallPeriods(?Unit $unit = null): array
     {
         return array_values(array_filter(
-            self::forView(),
+            self::forView($unit),
             fn (array $p) => in_array($p['key'], self::HALL_KEYS, true),
         ));
     }
@@ -87,11 +128,12 @@ class BookingPeriod
      * وتاليه لا اليوم وما بعد غد.
      *
      * @param  int  $days  عدد أيام المناسبة — يوم واحد ما لم يُذكر غيره
+     * @param  Unit|null  $unit  الوحدة المحجوزة — ساعاتها تتقدّم على ساعات الإعدادات
      * @return array{0: CarbonImmutable, 1: CarbonImmutable}
      */
-    public static function range(string $date, string $period, int $days = 1): array
+    public static function range(string $date, string $period, int $days = 1, ?Unit $unit = null): array
     {
-        $periods = self::periods();
+        $periods = self::periodsFor($unit);
         $meta = $periods[$period] ?? $periods['full_day'];
 
         $day = CarbonImmutable::parse($date)->startOfDay();
@@ -163,9 +205,9 @@ class BookingPeriod
      *
      * @return list<array{key: string, label: string, start: string, end: string}>
      */
-    public static function forView(): array
+    public static function forView(?Unit $unit = null): array
     {
-        return collect(self::periods())->map(fn ($m, $key) => [
+        return collect(self::periodsFor($unit))->map(fn ($m, $key) => [
             'key' => $key,
             'label' => $m['label'],
             'start' => $m['start'],

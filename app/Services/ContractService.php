@@ -165,6 +165,12 @@ class ContractService
             'subtotal' => number_format((float) $quotation->subtotal, 2),
             'discount_amount' => number_format((float) $quotation->discount_amount, 2),
             'tax_amount' => number_format((float) $quotation->tax_amount, 2),
+            // النسبة تُقرأ من العرض نفسه فتتجمّد كما كانت يوم التوقيع،
+            // شأن المبلغ. وأصنافه قد تختلف نسبها، فتخرج النسبة الوسطى.
+            'is_taxable' => (float) $quotation->tax_amount > 0 ? '1' : '',
+            'tax_rate' => (float) $quotation->subtotal > 0
+                ? rtrim(rtrim(number_format(round((float) $quotation->tax_amount / (float) $quotation->subtotal * 100, 2), 2), '0'), '.')
+                : '—',
             'total_amount' => number_format($total, 2),
             'total_amount_words' => Tafqeet::money($total),
             // Nothing is paid at signing: the quotation prices the work, it does
@@ -247,6 +253,8 @@ class ContractService
         $checkIn = $booking->booking_date->toDateString();
         $checkOut = $booking->isStay() ? $booking->checkOutDate() : $booking->lastDayDate();
         $total = (float) $booking->total_amount;
+        $net = $booking->netAmount();
+        $tax = $booking->taxAmount();
 
         return [
             'contract_number' => $contractNumber,
@@ -294,6 +302,15 @@ class ContractService
             // Words stop a figure being altered after signing — the same
             // reason the receipt voucher carries them.
             'total_amount_words' => Tafqeet::money($total),
+            // الضريبة أُضيفت فوق المُسعَّر فصار الإجمالي شاملًا لها، فيذكرها
+            // العقد مفصَّلة تحت قيمته. وتُقرأ من الحجز نفسه فتتجمّد بما حُسب
+            // يوم إنشائه: تغيير النسبة بعده لا يمسّ ورقةً وقّعها العميل.
+            'is_taxable' => $tax > 0 ? '1' : '',
+            'tax_rate' => $tax > 0 && $net > 0
+                ? rtrim(rtrim(number_format(round($tax / $net * 100, 2), 2), '0'), '.')
+                : '—',
+            'tax_amount' => number_format($tax, 2),
+            'subtotal' => number_format($net, 2),
             'deposit_amount' => number_format((float) $booking->deposit_amount, 2),
             'remaining_amount' => number_format($booking->remainingAmount(), 2),
             'security_deposit' => number_format((float) ($booking->security_deposit_amount ?? 0), 2),

@@ -14,13 +14,18 @@ const props = defineProps<{
         unit_logo_url: string | null;
         unit_type: string | null;
         issued_on: string | null;
+        issued_on_hijri: string;
         client_name: string | null;
         client_mobile: string | null;
         amount: number;
+        amount_riyals: number;
+        amount_halalas: number;
         amount_words: string;
         total_amount: number;
         remaining_amount: number;
         method_label: string;
+        method_kind: 'cash' | 'bank' | null;
+        payment_reference: string | null;
         payment_type_label: string | null;
         event_name: string | null;
         booking_date: string;
@@ -32,9 +37,12 @@ const props = defineProps<{
         business_name: string;
         logo_url: string | null;
         phone: string | null;
+        whatsapp: string | null;
+        email: string | null;
         address: string | null;
         tax_number: string | null;
         manager_name: string | null;
+        manager_signature_url: string | null;
         stamp_url: string | null;
     };
 }>();
@@ -55,6 +63,26 @@ const logo = computed(() => props.bond.unit_logo_url ?? props.issuer.logo_url);
 const logoFailed = ref(false);
 
 watch(logo, () => (logoFailed.value = false));
+
+/** الهللات خانتان دائمًا — «50» لا «5» تحت عنوان الهللة. */
+const halalas = computed(() => String(props.bond.amount_halalas).padStart(2, '0'));
+
+/** سطر التواصل: الهاتف والواتساب معًا بلا تكرار إن كانا رقمًا واحدًا. */
+const phones = computed(() =>
+    [props.issuer.phone, props.issuer.whatsapp]
+        .filter((p): p is string => !!p)
+        .filter((p, i, all) => all.indexOf(p) === i),
+);
+
+/** ما قُبض المبلغ مقابله — سطر «وذلك قيمة» في الدفتر المطبوع. */
+const paidFor = computed(() => {
+    const what = props.bond.event_name
+        ? `مناسبة ${props.bond.event_name}`
+        : `حجز ${props.bond.unit_name ?? ''}`.trim();
+    const kind = props.bond.payment_type_label ? ` (${props.bond.payment_type_label})` : '';
+
+    return `${what}${kind} بتاريخ ${props.bond.booking_date} — ${props.bond.schedule_label}`;
+});
 
 const print = () => window.print();
 </script>
@@ -81,119 +109,179 @@ const print = () => window.print();
                 </div>
             </div>
 
-            <!-- السند نفسه — ما يُطبع ويُسلَّم للعميل -->
-            <div class="mx-auto max-w-3xl rounded-xl border border-slate-900 bg-white p-7 print:max-w-none print:rounded-none print:border print:p-4 print:shadow-none">
-                <!-- ترويسة: اسم القاعة وشعارها -->
-                <div class="mb-5 rounded-lg border border-slate-900 p-3">
-                    <div class="flex items-center justify-between gap-4">
-                        <div>
-                            <h2 class="text-xl font-extrabold text-slate-900">{{ bond.unit_name ?? issuer.business_name }}</h2>
-                            <p class="text-sm font-bold text-slate-700">
-                                للاحتفالات والمناسبات
-                                <span v-if="bond.unit_code" class="text-slate-600" dir="ltr">· {{ bond.unit_code }}</span>
-                            </p>
-                            <p v-if="issuer.address" class="text-xs font-medium text-slate-600">{{ issuer.address }}</p>
-                        </div>
-                        <img
-                            v-if="logo && !logoFailed"
-                            :src="logo"
-                            :alt="bond.unit_name ?? 'الشعار'"
-                            class="h-20 w-auto shrink-0 object-contain print:h-16"
-                            @error="logoFailed = true"
-                        />
+            <!--
+                السند على هيئة الدفتر المطبوع: ترويسة خارج الإطار، ثم إطارٌ يحمل
+                خانة المبلغ والعنوان والتاريخ فوق سطورٍ منقّطة، ثم العنوان تذييلًا.
+                الفرق أن السطور تخرج مملوءة من بيانات الحجز لا فارغةً تُكتب باليد.
+            -->
+            <div class="voucher mx-auto max-w-4xl bg-white p-6 text-black print:max-w-none print:p-0">
+                <!-- الترويسة: الهوية يمينًا، الشعار وسطًا، وسائل التواصل يسارًا -->
+                <div class="mb-2 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                    <div class="text-right">
+                        <div class="text-xl font-extrabold leading-tight">{{ bond.unit_name ?? issuer.business_name }}</div>
+                        <div v-if="bond.unit_name" class="text-xs font-bold text-neutral-700">{{ issuer.business_name }}</div>
+                        <div v-if="phones.length" class="mt-0.5 text-sm font-bold" dir="ltr">{{ phones.join(' - ') }}</div>
                     </div>
 
-                    <div class="mt-3 text-center">
-                        <h3 class="text-lg font-extrabold text-slate-900">سند قبض</h3>
-                        <p class="text-xs font-bold text-slate-600" dir="ltr">Receipt Voucher</p>
-                        <p class="mt-1 text-sm font-bold text-slate-800">
-                            رقم: <span dir="ltr">{{ bond.reference }}</span>
-                        </p>
-                    </div>
+                    <img
+                        v-if="logo && !logoFailed"
+                        :src="logo"
+                        :alt="bond.unit_name ?? 'الشعار'"
+                        class="h-20 w-auto object-contain print:h-16"
+                        @error="logoFailed = true"
+                    />
+                    <div v-else class="h-20 w-20 print:h-16"></div>
 
-                    <div class="mt-2 text-sm font-medium text-slate-800">
-                        <span class="font-extrabold">التاريخ:</span> <span dir="ltr">{{ bond.issued_on }}</span>
+                    <div class="text-left text-sm font-bold leading-tight" dir="ltr">
+                        <div v-if="issuer.email">{{ issuer.email }}</div>
+                        <div v-if="issuer.tax_number" class="text-xs">VAT {{ issuer.tax_number }}</div>
+                        <div v-if="bond.unit_code" class="text-xs">{{ bond.unit_code }}</div>
                     </div>
                 </div>
 
-                <!-- بنود السند: كل بند سطر عربي وما يقابله إنجليزيًا -->
-                <div class="space-y-3 text-sm text-slate-800">
-                    <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <span class="font-extrabold">استلمنا من المكرم:</span> {{ bond.client_name ?? '—' }}
-                            <span v-if="bond.client_mobile" class="text-slate-700" dir="ltr">({{ bond.client_mobile }})</span>
+                <!-- الإطار — جسم السند كما في الدفتر -->
+                <div class="border-2 border-black p-4">
+                    <!-- الصف الأول: خانة المبلغ · العنوان · التاريخ -->
+                    <div class="grid grid-cols-[1fr_auto_1fr] items-start gap-4 border-b border-black pb-3">
+                        <div class="flex items-end gap-2">
+                            <div>
+                                <div class="mb-0.5 text-center text-sm font-extrabold">ريال . <span dir="ltr">S.R</span></div>
+                                <div class="flex h-9 w-40 items-center justify-center border-2 border-black text-lg font-extrabold" dir="ltr">
+                                    {{ bond.amount_riyals.toLocaleString('en-US') }}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="mb-0.5 text-center text-sm font-extrabold">هـ <span dir="ltr">H.</span></div>
+                                <div class="flex h-9 w-12 items-center justify-center border-2 border-black text-lg font-extrabold" dir="ltr">
+                                    {{ halalas }}
+                                </div>
+                            </div>
                         </div>
-                        <div class="shrink-0 font-extrabold text-slate-600" dir="ltr">:Received From</div>
-                    </div>
 
-                    <div class="flex items-start justify-between gap-4">
-                        <div><span class="font-extrabold">مبلغ وقدره:</span> {{ bond.amount_words }}</div>
-                        <div class="shrink-0 font-extrabold text-slate-500" dir="ltr">:The Sum of</div>
-                    </div>
-
-                    <div class="flex items-start justify-between gap-4">
-                        <div><span class="font-extrabold">مبلغ وقدره:</span> {{ money(bond.amount) }} ريال</div>
-                        <div class="shrink-0 font-extrabold text-slate-500" dir="ltr">:The Sum of</div>
-                    </div>
-
-                    <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <span class="font-extrabold">طريقة الدفع:</span> {{ bond.method_label }}
-                            <span v-if="bond.payment_type_label" class="text-slate-700">— {{ bond.payment_type_label }}</span>
+                        <div class="text-center">
+                            <div class="inline-block border-b-2 border-black px-3 pb-0.5 text-2xl font-extrabold tracking-[0.3em]">سند قبض</div>
+                            <div class="mt-1 text-sm font-bold italic" dir="ltr">Receipt Voucher</div>
+                            <div class="mt-1 text-xs font-bold" dir="ltr">No. {{ bond.reference }}</div>
                         </div>
-                        <div class="shrink-0 font-extrabold text-slate-600" dir="ltr">:Payment Method</div>
-                    </div>
 
-                    <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <span class="font-extrabold">وذلك مقابل:</span>
-                            <template v-if="bond.event_name">مناسبة {{ bond.event_name }}</template>
-                            <template v-else>حجز {{ bond.unit_name }}</template>
-                            يوم <span dir="ltr">{{ bond.booking_date }}</span> — {{ bond.schedule_label }}
+                        <div class="space-y-1.5 text-sm font-extrabold">
+                            <div class="flex items-center gap-2">
+                                <span class="w-14 shrink-0">التاريخ</span>
+                                <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center" dir="ltr">{{ bond.issued_on_hijri || '—' }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="w-14 shrink-0">الموافق</span>
+                                <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center" dir="ltr">{{ bond.issued_on ?? '—' }}</span>
+                            </div>
                         </div>
-                        <div class="shrink-0 font-extrabold text-slate-500" dir="ltr">:Paid For</div>
                     </div>
 
-                    <!-- الإجمالي والمتبقي بيانٌ للعميل: السند إيصالُ ما قُبض، لا مطالبة -->
-                    <div class="flex flex-wrap gap-4 rounded-lg bg-slate-50 px-3 py-2 text-sm print:bg-white">
-                        <div><span class="font-extrabold">إجمالي الحجز:</span> {{ money(bond.total_amount) }} ريال</div>
-                        <div :class="bond.remaining_amount > 0 ? 'text-red-700' : 'text-emerald-700'">
-                            <span class="font-extrabold">المتبقي:</span> {{ money(bond.remaining_amount) }} ريال
+                    <!-- سطور السند -->
+                    <div class="space-y-3.5 pt-4 text-sm">
+                        <div class="flex items-end gap-2">
+                            <span class="shrink-0 font-extrabold">استلمنا من المكرم /</span>
+                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">
+                                {{ bond.client_name ?? '—' }}
+                                <span v-if="bond.client_mobile" class="text-neutral-700" dir="ltr">{{ bond.client_mobile }}</span>
+                            </span>
+                            <span class="shrink-0 font-bold italic" dir="ltr">Received From</span>
+                        </div>
+
+                        <div class="flex items-end gap-2">
+                            <span class="shrink-0 font-extrabold">مبلغ وقدره</span>
+                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">{{ bond.amount_words }}</span>
+                            <span class="shrink-0 font-bold italic" dir="ltr">The Sum Of</span>
+                        </div>
+
+                        <!-- صف الطريقة: المربّع المعلَّم هو ما قُبض به فعلًا -->
+                        <div class="flex items-end gap-2">
+                            <span class="flex shrink-0 items-center gap-1.5 font-extrabold">
+                                <span class="flex h-4 w-4 items-center justify-center border border-black text-[11px] leading-none">{{ bond.method_kind === 'cash' ? '✕' : '' }}</span>
+                                نقدًا
+                            </span>
+                            <span class="flex shrink-0 items-center gap-1.5 font-extrabold">
+                                <span class="flex h-4 w-4 items-center justify-center border border-black text-[11px] leading-none">{{ bond.method_kind === 'bank' ? '✕' : '' }}</span>
+                                شيك / حوالة رقم
+                            </span>
+                            <span class="w-24 shrink-0 border-b border-dotted border-black pb-0.5 text-center font-bold" dir="ltr">{{ bond.payment_reference ?? '' }}</span>
+                            <span class="shrink-0 font-extrabold">على بنك</span>
+                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">{{ bond.method_label }}</span>
+                            <span class="shrink-0 font-bold italic" dir="ltr">Cash / Cheque No. / Bank</span>
+                        </div>
+
+                        <div class="flex items-end gap-2">
+                            <span class="shrink-0 font-extrabold">وذلك قيمة</span>
+                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">{{ paidFor }}</span>
+                            <span class="shrink-0 font-bold italic" dir="ltr">For</span>
+                        </div>
+
+                        <!--
+                            السطر الذي يمتدّ به الكاتب في الدفتر يحمل هنا إجمالي
+                            الحجز والمتبقي: السند إيصالُ ما قُبض، وذكر المتبقي
+                            بيانٌ للعميل لا مطالبةً في هذه الورقة.
+                        -->
+                        <div class="flex items-end gap-2">
+                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">
+                                إجمالي الحجز {{ money(bond.total_amount) }} ريال — المتبقي {{ money(bond.remaining_amount) }} ريال
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- التواقيع -->
+                    <div class="mt-6 grid grid-cols-3 gap-4 text-center text-sm">
+                        <div>
+                            <div class="font-extrabold">المستلم</div>
+                            <div class="text-xs font-bold italic" dir="ltr">Received By</div>
+                            <div class="mx-auto mt-8 w-4/5 border-t border-dotted border-black pt-1 text-[11px] font-bold text-neutral-700">
+                                {{ bond.created_by ?? '' }}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="font-extrabold">الختم</div>
+                            <div class="text-xs font-bold italic" dir="ltr">Seal</div>
+                            <img v-if="issuer.stamp_url" :src="issuer.stamp_url" alt="الختم" class="mx-auto mt-1 h-16 w-auto object-contain print:h-14" />
+                            <div v-else class="mx-auto mt-8 w-4/5 border-t border-dotted border-black pt-1 text-[11px]">&nbsp;</div>
+                        </div>
+                        <div>
+                            <div class="font-extrabold">المدير</div>
+                            <div class="text-xs font-bold italic" dir="ltr">Manager</div>
+                            <img
+                                v-if="issuer.manager_signature_url"
+                                :src="issuer.manager_signature_url"
+                                alt="التوقيع"
+                                class="mx-auto mt-1 h-16 w-auto object-contain print:h-14"
+                            />
+                            <div
+                                class="mx-auto w-4/5 border-t border-dotted border-black pt-1 text-[11px] font-bold text-neutral-700"
+                                :class="issuer.manager_signature_url ? 'mt-1' : 'mt-8'"
+                            >
+                                {{ issuer.manager_name ?? '' }}
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="my-5 border-b border-slate-900"></div>
-
-                <!-- التواقيع -->
-                <div class="grid grid-cols-4 gap-3 text-center text-sm">
-                    <div>
-                        <div class="font-extrabold text-slate-800">المستلم</div>
-                        <div class="mt-2 text-slate-400">....................</div>
-                    </div>
-                    <div>
-                        <div class="font-extrabold text-slate-800">الختم</div>
-                        <img v-if="issuer.stamp_url" :src="issuer.stamp_url" alt="الختم" class="mx-auto mt-1 h-16 w-auto object-contain print:h-12" />
-                        <div v-else class="mt-2 text-slate-400">....................</div>
-                    </div>
-                    <div>
-                        <div class="font-extrabold text-slate-800">المدير</div>
-                        <div class="mt-2" :class="issuer.manager_name ? 'font-bold text-slate-700' : 'text-slate-400'">
-                            {{ issuer.manager_name ?? '....................' }}
-                        </div>
-                    </div>
-                    <div>
-                        <div class="font-extrabold text-slate-800">المستخدم</div>
-                        <div class="mt-2 font-bold text-slate-700">{{ bond.created_by ?? '—' }}</div>
-                    </div>
-                </div>
-
-                <div v-if="issuer.phone || issuer.tax_number" class="mt-5 border-t border-slate-200 pt-2 text-center text-[11px] font-medium text-slate-500">
-                    <span v-if="issuer.phone" dir="ltr">{{ issuer.phone }}</span>
-                    <span v-if="issuer.phone && issuer.tax_number"> · </span>
-                    <span v-if="issuer.tax_number">الرقم الضريبي: <span dir="ltr">{{ issuer.tax_number }}</span></span>
-                </div>
+                <!-- التذييل: العنوان تحت الإطار كما في الدفتر -->
+                <div v-if="issuer.address" class="mt-2 text-center text-sm font-extrabold">{{ issuer.address }}</div>
             </div>
         </div>
     </AppLayout>
 </template>
+
+<style scoped>
+/*
+    الورقة عرضية: السند أوسع من طوله، والطباعة الطولية تدفع عمود الإنجليزية
+    خارج السطر. واللون يُثبَّت أسود لأن الرمادي يخرج باهتًا على الورق.
+*/
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 10mm;
+    }
+
+    .voucher {
+        color: #000;
+        font-size: 12px;
+    }
+}
+</style>

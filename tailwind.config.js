@@ -5,7 +5,10 @@ export default {
     darkMode: ['class', '[data-disabled-dark]'],
     content: [
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
-        './storage/framework/views/*.php',
+        // لا تُرصد ذاكرة Blade المُصرَّفة (storage/framework/views): لارافيل
+        // يعيد كتابتها مع كل طلب، فيراها Tailwind تغيّرًا فيعيد بناء CSS،
+        // فيبثّ Vite تحديث أنماط يومض به المتصفّح بلا سبب. وما فيها من أصناف
+        // مأخوذ أصلًا من مصدرها في resources/views.
         './resources/views/**/*.blade.php',
         './resources/js/**/*.{vue,js,ts,jsx,tsx}',
     ],

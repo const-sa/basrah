@@ -108,6 +108,12 @@ class OnlineBookingController extends Controller
         return response()->json([
             'total_amount' => $quote['total_amount'],
             'deposit_amount' => $quote['deposit_amount'],
+            // الضريبة داخل الإجمالي لا فوقه — يراها الزائر كما سيراها في
+            // فاتورته، ولا يتغيّر المبلغ الذي وافق عليه.
+            'is_taxable' => $quote['is_taxable'],
+            'tax_rate' => $quote['tax_rate'],
+            'net_amount' => $quote['net_amount'],
+            'tax_amount' => $quote['tax_amount'],
             'nights' => $quote['nights'] ?? null,
             'days' => $quote['days'] ?? null,
             'lines' => array_map(
@@ -185,6 +191,9 @@ class OnlineBookingController extends Controller
                 'schedule' => $booking->scheduleLabel(),
                 'status_label' => $booking->statusLabel(),
                 'total_amount' => (float) $booking->total_amount,
+                // الضريبة أُضيفت فوق السعر ودخلت هذا الإجمالي، فتُذكَر
+                // ليقرأ الزائر رقمه كما سيقرؤه في فاتورته.
+                'tax_amount' => $booking->taxAmount(),
                 'deposit_amount' => (float) $booking->deposit_amount,
                 'client_name' => $booking->client?->name,
             ],

@@ -3,6 +3,7 @@ import { StatPill, TableActionButton } from '@/components/data-table';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatTime12 } from '@/lib/dates';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { BadgeDollarSign, Building2, ChevronDown, Home, ImagePlus, Lock, Pencil, Plus, Power, Search, Settings2, Trash2, Unlock, UserCog, Users, X } from 'lucide-vue-next';
@@ -39,7 +40,12 @@ interface Unit {
     staff_names: string[];
     sections: Section[];
     prices: PriceRow[];
+    /** ساعات الفترات المكتوبة على هذه الوحدة — الفترة الغائبة على ساعات الإعدادات. */
+    period_hours: Record<string, PeriodHours>;
 }
+
+/** دخول الفترة وخروجها بصيغة HH:MM — والفارغ يعني «ساعة الإعدادات». */
+interface PeriodHours { start: string; end: string }
 
 /**
  * A staff candidate — a login account, since only an account can open a unit.
@@ -267,7 +273,14 @@ const toggle = (u: Unit) => router.patch(`/admin/units/${u.id}/toggle`, {}, { pr
 const showPrices = ref(false);
 const pricedUnit = ref<Unit | null>(null);
 
-const priceForm = useForm({ security_deposit: null as number | null, prices: [] as PriceRow[] });
+const priceForm = useForm({
+    security_deposit: null as number | null,
+    // ساعة لكل فترة لا لكل صف: الصفوف صفٌّ لكل (قسم × فترة)، وساعة دخول
+    // تختلف من غرفة إلى غرفة في الشاليه الواحد تجعل مدى الحجز يتبدّل بتبدّل
+    // الغرفة المختارة، وعليه يُبنى كشف التعارض. فالساعة للوحدة كلها.
+    hours: {} as Record<string, PeriodHours>,
+    prices: [] as PriceRow[],
+});
 
 /** التسعير اليومي للشاليهات وحدها؛ القاعة تبقى على صفّي الأسبوع. */
 const pricedByDay = computed(() => pricedUnit.value?.type === 'chalet');
@@ -279,6 +292,55 @@ const pricedPeriods = (u: Unit): Period[] => (u.type === 'chalet' ? props.option
 
 const emptyDayPrices = (): Record<number, number | null> =>
     Object.fromEntries(props.options.weekdays.map((d) => [d.key, null]));
+
+/**
+ * ساعات فترات الوحدة كما تُفتح عليها النافذة.
+ *
+ * الفترة التي لم تُكتب لها ساعة تُفتح بخانتين فارغتين لا بساعة الإعدادات
+ * منسوخةً فيهما: الفارغ يعني «اتبع النظام»، ونسخ الساعة يجمّد الوحدة على
+ * ساعة اليوم فلا تتبع تغيير الإعدادات بعدها.
+ */
+const buildHours = (u: Unit): Record<string, PeriodHours> =>
+    Object.fromEntries(
+        pricedPeriods(u).map((p) => [
+            p.key,
+            { start: u.period_hours?.[p.key]?.start ?? '', end: u.period_hours?.[p.key]?.end ?? '' },
+        ]),
+    );
+
+/** ساعة الفترة في الإعدادات — تُعرض تلميحًا في الخانة الفارغة. */
+const periodDefaults = (key: string): PeriodHours => {
+    const p = [...props.options.periods, ...props.options.stay_periods].find((x) => x.key === key);
+
+    return { start: p?.start ?? '', end: p?.end ?? '' };
+};
+
+/** ساعتا الفترة سارية المفعول: المكتوبة هنا، وإلا ساعة الإعدادات. */
+const effectiveHours = (key: string): PeriodHours => {
+    const written = priceHours.value[key];
+    const fallback = periodDefaults(key);
+
+    return {
+        start: written?.start || fallback.start,
+        end: written?.end || fallback.end,
+    };
+};
+
+/**
+ * نصف ساعة مكتوبة: خانةٌ ملأى وأختها فارغة.
+ *
+ * الخادم يرفضها، ونصف مدًى لا يُبنى منه حجز أصلًا، فيُنبَّه عليها في مكانها.
+ */
+const hoursClash = (key: string) => {
+    const h = priceHours.value[key];
+
+    return !!h && (!h.start) !== (!h.end);
+};
+
+/** إعادة الفترة إلى ساعات الإعدادات. */
+const clearHours = (key: string) => {
+    priceHours.value[key] = { start: '', end: '' };
+};
 
 /** صفوف التسعير: الوحدة كاملة ثم كل قسم — مبدوءة بما هو محفوظ أو بصفر. */
 const buildPriceRows = (u: Unit): PriceRow[] => {
@@ -316,6 +378,9 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumF
 /* useForm widens array fields; read the rows back through their real type. */
 const priceRows = computed(() => priceForm.prices as unknown as PriceRow[]);
 
+/* والساعات كذلك — نفس التوسيع، ونفس القراءة عبر نوعها الحقيقي. */
+const priceHours = computed(() => priceForm.hours as unknown as Record<string, PeriodHours>);
+
 /** One key per (section, period) — the unit of work in this modal. */
 const rowKey = (r: PriceRow) => `${r.unit_section_id ?? 'whole'}:${r.period}`;
 
@@ -340,6 +405,7 @@ const openPrices = (u: Unit) => {
     pricedUnit.value = u;
     priceForm.clearErrors();
     priceForm.security_deposit = u.security_deposit;
+    priceForm.hours = buildHours(u);
     priceForm.prices = buildPriceRows(u);
 
     enabled.value = {};
@@ -512,6 +578,11 @@ const rowSummary = (r: PriceRow) => {
     if (!hasAnyPrice(r)) return 'مفعّلة بلا سعر — لن تُعرض حتى يُدخَل سعر';
 
     const parts: string[] = [];
+    const hours = effectiveHours(r.period);
+
+    if (hours.start && hours.end) {
+        parts.push(`${formatTime12(hours.start)} ← ${formatTime12(hours.end)}`);
+    }
 
     if (isSet(r.weekday_price)) parts.push(`أيام الأسبوع ${money(Number(r.weekday_price))}`);
     if (isSet(r.weekend_price)) parts.push(`الجمعة والسبت ${money(Number(r.weekend_price))}`);
@@ -951,6 +1022,59 @@ const destroy = (u: Unit) => {
                         </div>
 
                         <div v-if="enabled[rowKey(r)] && expanded[rowKey(r)]" class="space-y-3 border-t border-slate-100 px-3 py-3">
+                            <!--
+                                ساعتا الفترة: عليهما يُبنى مدى الحجز، فيُكشف بهما
+                                التعارض ويُطبع بهما العقد. تُترك فارغةً لتتبع
+                                الوحدةُ ساعات الإعدادات، وتُكتب هنا حين يختلف
+                                تسليم هذه الوحدة عن غيرها.
+                            -->
+                            <div class="flex flex-wrap items-end gap-3 rounded-lg border border-teal-100 bg-teal-50/40 px-2.5 py-2">
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-bold text-emerald-700">وقت الدخول</span>
+                                    <input
+                                        v-model="priceHours[r.period].start"
+                                        type="time" dir="ltr"
+                                        class="w-28 rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+                                        :class="hoursClash(r.period) ? 'border-amber-300 bg-amber-50 focus:ring-amber-100' : 'border-emerald-200 focus:border-emerald-400 focus:ring-emerald-100'"
+                                    />
+                                </label>
+
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-bold text-rose-700">وقت الخروج</span>
+                                    <input
+                                        v-model="priceHours[r.period].end"
+                                        type="time" dir="ltr"
+                                        class="w-28 rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2"
+                                        :class="hoursClash(r.period) ? 'border-amber-300 bg-amber-50 focus:ring-amber-100' : 'border-rose-200 focus:border-rose-400 focus:ring-rose-100'"
+                                    />
+                                </label>
+
+                                <button
+                                    v-if="priceHours[r.period].start || priceHours[r.period].end"
+                                    type="button" @click="clearHours(r.period)"
+                                    class="mb-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-500 hover:border-rose-300 hover:text-rose-600"
+                                    title="إرجاع الفترة إلى ساعات الإعدادات"
+                                >ساعات الإعدادات</button>
+
+                                <p class="mb-1 min-w-0 flex-1 text-[11px] font-medium text-slate-500">
+                                    <span v-if="hoursClash(r.period)" class="font-bold text-amber-600">
+                                        اكتب الوقتين معًا — وقتٌ بلا أخيه لا يُبنى منه مدى حجز.
+                                    </span>
+                                    <span v-else-if="priceHours[r.period].start">
+                                        على هذه الوحدة وأقسامها كلها — يُبنى عليه مدى الحجز وكشف التعارض.
+                                    </span>
+                                    <span v-else>
+                                        فارغٌ يعني ساعات الإعدادات:
+                                        <bdi>{{ formatTime12(periodDefaults(r.period).start) }}</bdi> ←
+                                        <bdi>{{ formatTime12(periodDefaults(r.period).end) }}</bdi>
+                                    </span>
+                                </p>
+                            </div>
+
+                            <p v-if="priceForm.errors[`hours.${r.period}.start`] || priceForm.errors[`hours.${r.period}.end`]" class="text-[11px] font-bold text-red-600">
+                                {{ priceForm.errors[`hours.${r.period}.start`] ?? priceForm.errors[`hours.${r.period}.end`] }}
+                            </p>
+
                             <!-- السعر الافتراضي أولًا: هو الأساس، وأسعار الأيام استثناءات عليه -->
                             <div class="flex flex-wrap items-end gap-3">
                                 <label class="block">

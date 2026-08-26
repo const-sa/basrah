@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\BookingPeriod;
+use App\Support\StayPeriod;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +28,7 @@ class Unit extends Model
         'privacy_mode',
         'capacity',
         'security_deposit',
+        'period_hours',
         'description',
         'notes',
         'sort_order',
@@ -40,6 +42,7 @@ class Unit extends Model
             'capacity' => 'integer',
             'sort_order' => 'integer',
             'security_deposit' => 'decimal:2',
+            'period_hours' => 'array',
         ];
     }
 
@@ -51,6 +54,80 @@ class Unit extends Model
     public function securityDeposit(): float
     {
         return round((float) ($this->security_deposit ?? 0), 2);
+    }
+
+    /**
+     * ساعات فترةٍ بعينها كما كُتبت على هذه الوحدة، أو null إن لم تُكتب.
+     *
+     * الفترة التي لم تُكتب لها ساعات ترجع إلى ساعات الإعدادات، فالوحدة القديمة
+     * تعمل كما كانت قبل أن يوجد هذا العمود.
+     *
+     * @return array{start: string, end: string}|null
+     */
+    public function periodHours(string $period): ?array
+    {
+        $hours = $this->period_hours[$period] ?? null;
+
+        if (! is_array($hours)) {
+            return null;
+        }
+
+        $start = self::time($hours['start'] ?? null);
+        $end = self::time($hours['end'] ?? null);
+
+        // نصف ساعات لا يصلح مدًى: من كتب الدخول ولم يكتب الخروج تُقرأ فترته
+        // من الإعدادات كاملةً، لا نصفها من هنا ونصفها من هناك.
+        return ($start === null || $end === null) ? null : ['start' => $start, 'end' => $end];
+    }
+
+    /**
+     * ساعة دخول الفترة على هذه الوحدة، أو null لترجع إلى الإعدادات.
+     */
+    public function periodStart(string $period): ?string
+    {
+        return $this->periodHours($period)['start'] ?? null;
+    }
+
+    /**
+     * ساعة خروج الفترة على هذه الوحدة، أو null لترجع إلى الإعدادات.
+     */
+    public function periodEnd(string $period): ?string
+    {
+        return $this->periodHours($period)['end'] ?? null;
+    }
+
+    /**
+     * ساعات كل الفترات سارية المفعول — ما كُتب على الوحدة، وإلا ساعات
+     * الإعدادات — جاهزةً لشاشات الحجز حتى تعرض ساعة الوحدة المختارة لا ساعة
+     * النظام.
+     *
+     * @return array<string, array{start: string, end: string}>
+     */
+    public function effectiveHours(): array
+    {
+        $hours = [
+            StayPeriod::PERIOD => [
+                'start' => StayPeriod::checkInTime($this),
+                'end' => StayPeriod::checkOutTime($this),
+            ],
+        ];
+
+        foreach (BookingPeriod::periodsFor($this) as $key => $meta) {
+            $hours[$key] = ['start' => $meta['start'], 'end' => $meta['end']];
+        }
+
+        return $hours;
+    }
+
+    /**
+     * الساعة إن كانت HH:MM سليمة، وإلا null.
+     *
+     * نصف ساعة مكتوبة أو خانة فارغة لا تُبنى منها بداية حجز، فتُهمَل هنا بدل
+     * أن تُمرَّر إلى Carbon فتُفسَّر تفسيرًا لا يقصده أحد.
+     */
+    private static function time(mixed $value): ?string
+    {
+        return is_string($value) && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value) ? $value : null;
     }
 
     public function sections(): HasMany

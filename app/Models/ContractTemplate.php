@@ -51,6 +51,10 @@ class ContractTemplate extends Model
         'guests_count' => 'عدد الضيوف',
         'total_amount' => 'الإجمالي',
         'total_amount_words' => 'الإجمالي كتابةً',
+        // الضريبة داخل الإجمالي لا فوقه، فقالب العقد يذكرها تفصيلًا لا يزيدها.
+        'subtotal' => 'الإجمالي قبل الضريبة',
+        'tax_rate' => 'نسبة الضريبة',
+        'tax_amount' => 'مبلغ الضريبة',
         'deposit_amount' => 'العربون',
         'remaining_amount' => 'المتبقي',
         'security_deposit' => 'مبلغ التأمين المسترد',

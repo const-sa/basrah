@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Addon;
+use App\Models\Setting;
 use App\Models\Unit;
 use App\Services\BookingPricing;
 use Database\Seeders\BookingSetupSeeder;
@@ -32,6 +33,53 @@ class BookingPricingTest extends TestCase
         $this->seed([RolesSeeder::class, UnitsSeeder::class, BookingSetupSeeder::class]);
         $this->pricing = app(BookingPricing::class);
         $this->unit = Unit::where('code', 'HALL-01')->firstOrFail();
+    }
+
+    /**
+     * الضريبة تُضاف فوق المُسعَّر: الأسعار المُدخَلة صافية، فيخرج الإجمالي
+     * صافيًا زائدًا ضريبته — ويبقى الصافي معروضًا ليُقرأ السطران معًا.
+     */
+    public function test_vat_is_added_on_top_of_the_priced_amount(): void
+    {
+        $untaxed = $this->pricing->quote($this->unit, 'whole', '2026-09-10', 'full_day');
+
+        $this->assertFalse($untaxed['is_taxable']);
+        $this->assertSame(0.0, $untaxed['tax_amount']);
+        $this->assertSame($untaxed['net_amount'], $untaxed['total_amount']);
+
+        Setting::current()->update([
+            'tax_enabled' => true,
+            'tax_number' => '300000000000003',
+            'tax_rate' => 15,
+        ]);
+
+        $taxed = $this->pricing->quote($this->unit, 'whole', '2026-09-10', 'full_day');
+
+        $this->assertTrue($taxed['is_taxable']);
+        $this->assertSame(15.0, $taxed['tax_rate']);
+        // الصافي لم يتغيّر — الضريبة زادت الإجمالي ولم تُقتطع منه.
+        $this->assertSame($untaxed['total_amount'], $taxed['net_amount']);
+        $this->assertSame(round($taxed['net_amount'] * 0.15, 2), $taxed['tax_amount']);
+        $this->assertSame(round($taxed['net_amount'] * 1.15, 2), $taxed['total_amount']);
+    }
+
+    /**
+     * والإقامة بالليلة تتبع القاعدة نفسها — الضريبة على مجموع الليالي.
+     */
+    public function test_a_stay_is_taxed_on_top_of_its_nights(): void
+    {
+        Setting::current()->update([
+            'tax_enabled' => true,
+            'tax_number' => '300000000000003',
+            'tax_rate' => 15,
+        ]);
+
+        $chalet = Unit::where('type', 'chalet')->firstOrFail();
+
+        $quote = $this->pricing->quoteStay($chalet, '2026-09-10', '2026-09-12');
+
+        $this->assertSame(round($quote['net_amount'] * 0.15, 2), $quote['tax_amount']);
+        $this->assertSame(round($quote['net_amount'] + $quote['tax_amount'], 2), $quote['total_amount']);
     }
 
     public function test_weekend_costs_more_than_a_weekday(): void

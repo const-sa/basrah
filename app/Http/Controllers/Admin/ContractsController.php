@@ -224,6 +224,9 @@ class ContractsController extends Controller
                 'subtotal' => $data['subtotal'] ?? null,
                 'discount_amount' => $data['discount_amount'] ?? null,
                 'tax_amount' => $data['tax_amount'] ?? null,
+                // الضريبة كما جُمِّدت يوم إصدار العقد — لا كما هي اليوم.
+                'is_taxable' => (bool) ($data['is_taxable'] ?? false),
+                'tax_rate' => $data['tax_rate'] ?? null,
                 'sent_at' => $contract->sent_at?->format('Y-m-d H:i'),
                 'signed_at' => $contract->signed_at?->format('Y-m-d H:i'),
             ],

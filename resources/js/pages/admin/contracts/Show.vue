@@ -33,6 +33,8 @@ const props = defineProps<{
         quotation_date: string | null; valid_until: string | null;
         items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string }[];
         subtotal: string | null; discount_amount: string | null; tax_amount: string | null;
+        /** الضريبة كما جُمِّدت يوم الإصدار — عقدٌ قديم بلا ضريبة يبقى بلا سطرها. */
+        is_taxable: boolean; tax_rate: string | null;
         sent_at: string | null; signed_at: string | null;
     };
     issuer: {
@@ -361,6 +363,10 @@ const print = () => window.print();
                         <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">
                             <div class="text-xs font-bold text-slate-600">{{ isQuotation ? 'قيمة العقد' : 'قيمة الإيجار' }}</div>
                             <div class="font-extrabold text-slate-900">{{ contract.total_amount ?? '—' }} ريال</div>
+                            <!-- الضريبة داخل قيمة الإيجار لا فوقها: تُذكَر ولا تُغيّر المبلغ الموقَّع -->
+                            <div v-if="!isQuotation && contract.is_taxable" class="text-[11px] font-bold text-slate-500">
+                                شاملة ضريبة القيمة المضافة ({{ contract.tax_rate }}%): <span dir="ltr">{{ contract.tax_amount }}</span>
+                            </div>
                         </div>
                         <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">
                             <div class="text-xs font-bold text-slate-600">{{ isQuotation ? 'المدفوع' : 'العربون المدفوع' }}</div>

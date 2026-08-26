@@ -194,6 +194,35 @@ class Booking extends Model
     // ── حسابات مالية ─────────────────────────────────────────
 
     /**
+     * المبلغ قبل الضريبة: مجموع ما بيع فعلًا ناقصًا الخصم.
+     *
+     * يُقرأ من أعمدة الحجز نفسها لا باستخراجٍ من الإجمالي: الضريبة أُضيفت
+     * فوق هذا الرقم عند الحفظ، فقسمة الإجمالي عليها قد تردّ هللةً مختلفة،
+     * وسطر الفاتورة يجب أن يطابق ما سُعِّر به الحجز بالضبط.
+     */
+    public function netAmount(): float
+    {
+        return round(
+            (float) $this->base_amount + (float) $this->package_amount
+            + (float) $this->event_fee_amount + (float) $this->addons_amount
+            - (float) $this->discount_amount,
+            2,
+        );
+    }
+
+    /**
+     * ضريبة هذا الحجز — الفرق بين ما سُعِّر به وما خُزِّن إجماليًا.
+     *
+     * وهو صفرٌ في الحجوزات التي أُنشئت والضريبة معطّلة، بلا حاجة لقراءة
+     * الإعدادات: الحجز يحمل ضريبته التي حُسبت يوم إنشائه لا التي تُفعَّل
+     * بعده، فلا ينقلب سجلٌ قديم بتغيير إعداد.
+     */
+    public function taxAmount(): float
+    {
+        return round(max(0, (float) $this->total_amount - $this->netAmount()), 2);
+    }
+
+    /**
      * المتبقي على العميل بعد ما سدّده.
      */
     public function remainingAmount(): float

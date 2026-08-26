@@ -44,7 +44,15 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumF
 // ── التسعيرة الحيّة ──────────────────────────────────────────
 // السعر يُحسب على الخادم لا في المتصفح: قواعد نهاية الأسبوع وأسعار الأيام
 // وأنواع المناسبات تعيش هناك، ونسخُها هنا يعني رقمين يفترقان مع أول تعديل.
-const quote = ref<{ total_amount: number; deposit_amount: number; lines: QuoteLine[] } | null>(null);
+const quote = ref<{
+    total_amount: number;
+    deposit_amount: number;
+    is_taxable: boolean;
+    tax_rate: number;
+    net_amount: number;
+    tax_amount: number;
+    lines: QuoteLine[];
+} | null>(null);
 const quoting = ref(false);
 const quoteError = ref<string | null>(null);
 
@@ -291,8 +299,20 @@ const submit = () => form.post(`/book/${props.unit.id}`, { preserveScroll: true 
                                 </li>
                             </ul>
                             <div class="mt-3 border-t border-slate-200 pt-3">
-                                <div class="flex justify-between text-base">
-                                    <span class="font-extrabold text-slate-900">الإجمالي</span>
+                                <!-- الضريبة تُضاف فوق سعر الوحدة: يراها الزائر مفصَّلة
+                                     قبل أن يرسل طلبه، لا مفاجأةً في الفاتورة. -->
+                                <template v-if="quote.is_taxable">
+                                    <div class="flex justify-between text-sm">
+                                        <span class="font-bold text-slate-600">الإجمالي قبل الضريبة</span>
+                                        <span class="font-bold text-slate-800" dir="ltr">{{ money(quote.net_amount) }} ريال</span>
+                                    </div>
+                                    <div class="mt-1 flex justify-between text-sm">
+                                        <span class="font-bold text-slate-600">ضريبة القيمة المضافة ({{ quote.tax_rate }}%)</span>
+                                        <span class="font-bold text-slate-800" dir="ltr">+ {{ money(quote.tax_amount) }} ريال</span>
+                                    </div>
+                                </template>
+                                <div class="flex justify-between text-base" :class="quote.is_taxable ? 'mt-1.5 border-t border-slate-200 pt-1.5' : ''">
+                                    <span class="font-extrabold text-slate-900">{{ quote.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                     <span class="font-extrabold text-slate-900" dir="ltr">{{ money(quote.total_amount) }} ريال</span>
                                 </div>
                                 <div v-if="quote.deposit_amount > 0" class="mt-1 flex justify-between text-sm">

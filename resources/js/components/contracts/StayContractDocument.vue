@@ -30,6 +30,10 @@ interface StayContract {
     guests_count: string | null;
     total_amount: string | null;
     total_amount_words: string | null;
+    /** الضريبة كما جُمِّدت يوم الإصدار — داخل المبلغ لا فوقه. */
+    is_taxable: boolean;
+    tax_rate: string | null;
+    tax_amount: string | null;
     deposit_amount: string | null;
     remaining_amount: string | null;
     security_deposit: string | null;
@@ -179,6 +183,9 @@ const hasSecurityDeposit = computed(() => Number((props.contract.security_deposi
             <td class="v" style="width: 82%">
                 <b dir="ltr">{{ contract.total_amount ?? '' }}</b> ريال
                 <span v-if="contract.total_amount_words" class="words">({{ contract.total_amount_words }})</span>
+                <span v-if="contract.is_taxable" class="words">
+                    — شامل ضريبة القيمة المضافة ({{ contract.tax_rate }}%) وقدرها <b dir="ltr">{{ contract.tax_amount }}</b> ريال
+                </span>
             </td>
         </tr></table>
 

@@ -129,6 +129,17 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
 
+/**
+ * الطرق التي قُبض بها هذا الحجز فعلًا، وما قُبض بكل واحدة.
+ *
+ * الطريقة التي لم يُقبض بها شيء لا تُعرض: الصف يقول ما جرى لا ما كان
+ * ممكنًا، وسردُ الطرق كلها بأصفارها يُغرق الرقم الذي يُقرأ.
+ */
+const paidMethods = (b: Booking) =>
+    props.meta.payment_methods
+        .map((m) => ({ label: m.label, amount: Number(b.paid_by_method?.[m.id] ?? 0) }))
+        .filter((m) => m.amount > 0);
+
 const today = todayString();
 
 // ── الفلاتر ─────────────────────────────────────────────────
@@ -441,7 +452,7 @@ const generateContract = (b: Booking) => {
                                         b.status_label
                                     }}</span>
                                 </td>
-                                <!-- المال ثلاثة أعمدة كسجل القاعات: ما عليه، وما قبض منه، وما بقي -->
+<!-- المال ثلاثة أعمدة كسجل القاعات: ما عليه، وما قبض منه، وما بقي -->
                                 <td class="whitespace-nowrap px-4 py-3 text-center font-extrabold text-slate-800" dir="ltr">
                                     {{ money(b.total_amount) }}
                                 </td>
@@ -452,6 +463,19 @@ const generateContract = (b: Booking) => {
                                     <span dir="ltr">{{ money(b.paid_amount) }}</span>
                                     <div v-if="!b.is_deposit_settled && b.deposit_amount > 0" class="mt-0.5 text-[10px] font-bold text-amber-600">
                                         العربون {{ money(b.deposit_amount) }} غير مستوفى
+                                    </div>
+                                    <!--
+                                        وبمَ قُبض: سؤالٌ يُسأل عند التسليم وعند جرد الصندوق
+                                        آخر اليوم، وكان جوابه لا يُقرأ إلا بفتح لوحة الدفعات
+                                        حجزًا حجزًا.
+                                    -->
+                                    <div v-if="paidMethods(b).length" class="mt-1 flex flex-wrap justify-center gap-1">
+                                        <span
+                                            v-for="m in paidMethods(b)" :key="m.label"
+                                            class="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600"
+                                        >
+                                            {{ m.label }} <span dir="ltr">{{ money(m.amount) }}</span>
+                                        </span>
                                     </div>
                                 </td>
                                 <td
@@ -528,31 +552,6 @@ const generateContract = (b: Booking) => {
                                             title="تأكيد الحجز"
                                             @click="changeStatus(b, 'confirmed')"
                                         />
-                                        <!--
-                                            لا تسجيل دخول في الشاليهات: الحجز المؤكد يمضي إلى الخروج مباشرة.
-                                            و«تم الدخول» تبقى مقبولة هنا من أجل حجوزات سُجِّلت بها من قبل.
-                                        -->
-                                        <TableActionButton
-                                            v-if="can('chalet_bookings.edit') && ['confirmed', 'checked_in'].includes(b.status)"
-                                            variant="success"
-                                            :icon="LogOut"
-                                            title="تسجيل الخروج"
-                                            @click="changeStatus(b, 'checked_out')"
-                                        />
-                                        <TableActionButton
-                                            v-if="can('chalet_bookings.edit')"
-                                            variant="edit"
-                                            :icon="Pencil"
-                                            title="تعديل"
-                                            @click="router.visit(`/admin/bookings/chalets/${b.id}/edit`)"
-                                        />
-                                        <TableActionButton
-                                            v-if="can('chalet_bookings.edit') && !isClosedStatus(b.status)"
-                                            variant="dark"
-                                            :icon="CalendarClock"
-                                            title="تأجيل"
-                                            @click="changeStatus(b, 'postponed')"
-                                        />
                                         <TableActionButton
                                             v-if="can('chalet_bookings.edit') && !isClosedStatus(b.status)"
                                             variant="warning"
@@ -560,13 +559,37 @@ const generateContract = (b: Booking) => {
                                             title="إلغاء"
                                             @click="changeStatus(b, 'cancelled')"
                                         />
-                                        <TableActionButton
-                                            v-if="can('chalet_bookings.delete')"
-                                            variant="danger"
-                                            :icon="Trash2"
-                                            title="حذف"
-                                            @click="destroy(b)"
-                                        />
+
+                                        <!-- التعديل والحذف داخل قائمة النقاط الثلاث: إجراءان يغيّران الحجز نفسه،
+                                             فإخفاؤهما خلف نقرة يقلّل الضغط الخاطئ ويُهدّئ صفّ الإجراءات. -->
+                                        <DropdownMenu v-if="can('chalet_bookings.edit') || can('chalet_bookings.delete')">
+                                            <DropdownMenuTrigger :as-child="true">
+                                                <button
+                                                    type="button"
+                                                    title="خيارات"
+                                                    class="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-200 text-slate-700 shadow-sm transition hover:bg-slate-300 data-[state=open]:bg-slate-300"
+                                                >
+                                                    <MoreVertical class="h-4 w-4" />
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" class="w-40">
+                                                <DropdownMenuItem
+                                                    v-if="can('chalet_bookings.edit')"
+                                                    class="cursor-pointer font-bold text-slate-700"
+                                                    @select="router.visit(`/admin/bookings/chalets/${b.id}/edit`)"
+                                                >
+                                                    <Pencil class="h-4 w-4 text-cyan-600" /> تعديل
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator v-if="can('chalet_bookings.edit') && can('chalet_bookings.delete')" />
+                                                <DropdownMenuItem
+                                                    v-if="can('chalet_bookings.delete')"
+                                                    class="cursor-pointer font-bold text-red-600 focus:bg-red-50 focus:text-red-700"
+                                                    @select="destroy(b)"
+                                                >
+                                                    <Trash2 class="h-4 w-4" /> حذف
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
                                 </td>
                             </tr>

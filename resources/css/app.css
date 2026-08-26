@@ -199,7 +199,15 @@ html {
         color: #0f172a !important;
         border-width: 1px !important;
         border-style: solid !important;
-        border-color: #ced4da !important;
+        border-color: #94a3b8 !important;
+        font-weight: 600 !important;
+    }
+    /* التمرير: الحدّ يغمق قبل أن يُنقر الحقل */
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):hover,
+    select:hover,
+    textarea:hover,
+    .field-control:hover {
+        border-color: #64748b !important;
     }
     /* عند التركيز: حدّ أخضر واضح + هالة خفيفة */
     input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):focus,
@@ -211,7 +219,7 @@ html {
         outline: none !important;
     }
     .field-control, .field-control * { color: #0f172a !important; }
-    ::placeholder { color: #94a3b8 !important; opacity: 1; }
+    ::placeholder { color: #94a3b8 !important; font-weight: 500 !important; opacity: 1; }
 
     /* نصوص خلايا الجداول → أسود في كل الصفحات (الشارات والأزرار الملوّنة
        تحتفظ بألوانها لأنها تضبط لونها مباشرةً على العنصر).

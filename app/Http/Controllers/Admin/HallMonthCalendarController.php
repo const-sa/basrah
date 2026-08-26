@@ -162,8 +162,8 @@ class HallMonthCalendarController extends BaseCalendarController
         $sections = $unit->sections->where('is_active', true);
 
         // خانة لكل فترة تُباع بها القاعة — وهي اليوم الكامل وحده.
-        return collect(BookingPeriod::periods())->only(BookingPeriod::hallKeys())->map(function ($meta, $period) use ($unit, $date, $bookings, $sections) {
-            [$startsAt, $endsAt] = BookingPeriod::range($date, $period);
+        return collect(BookingPeriod::periodsFor($unit))->only(BookingPeriod::hallKeys())->map(function ($meta, $period) use ($unit, $date, $bookings, $sections) {
+            [$startsAt, $endsAt] = BookingPeriod::range($date, $period, 1, $unit);
 
             $clashing = $bookings->filter(fn (Booking $b) => $b->unit_id === $unit->id
                 && $b->starts_at->lt($endsAt)

@@ -171,6 +171,10 @@
         @if (!empty($data['total_amount_words']))
             <span style="font-size: 9pt; color: #4a4a4a;">({{ $data['total_amount_words'] }})</span>
         @endif
+        {{-- الضريبة داخل المبلغ لا فوقه: تُذكَر ولا تُغيّر ما وُقّع عليه --}}
+        @if (!empty($data['is_taxable']))
+            <span style="font-size: 9pt; color: #4a4a4a;">— شامل ضريبة القيمة المضافة ({{ $data['tax_rate'] }}%) وقدرها <b class="num">{{ $data['tax_amount'] }}</b> ريال</span>
+        @endif
     </td>
 </tr></table>
 

@@ -2,7 +2,6 @@
 import AvailabilityDatePicker from '@/components/AvailabilityDatePicker.vue';
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfToken } from '@/lib/csrf';
 import { addDays, daysBetween, formatTime12, startOfMonth, todayString } from '@/lib/dates';
@@ -24,6 +23,8 @@ interface UnitOption {
     day_use_periods: string[];
     /** The refundable deposit normally taken on this chalet — 0 means none. */
     security_deposit: number;
+    /** ساعات فترات هذا الشاليه سارية المفعول — ساعته إن كُتبت، وإلا ساعة الإعدادات. */
+    hours: Record<string, { start: string; end: string }>;
     sections: SectionOption[];
 }
 interface AddonOption { id: number; name: string; price: number; pricing: string }
@@ -56,6 +57,8 @@ interface Quote {
     pricing: {
         base_amount: number; addons_amount: number; discount_amount: number;
         total_amount: number; deposit_amount: number; is_weekend: boolean;
+        /** الضريبة مستخرجة من الإجمالي شاملةً لا مضافة فوقه. */
+        is_taxable: boolean; tax_rate: number; net_amount: number; tax_amount: number;
         /** Stay quotes carry nights; day-use quotes carry days instead. */
         nights?: number; weekend_nights?: number; average_night?: number;
         days?: number;
@@ -76,8 +79,6 @@ const props = defineProps<{
         payment_methods: PaymentMethodOption[];
     };
 }>();
-
-const { can } = usePermissions();
 
 const isEdit = computed(() => props.booking !== null);
 
@@ -204,8 +205,35 @@ const isStay = computed(() => form.period === STAY);
 const dayPeriods = computed(() => {
     const allowed = selectedUnit.value?.day_use_periods ?? [];
 
-    return props.meta.periods.filter((p) => allowed.includes(p.key));
+    // بساعات هذا الشاليه لا بساعات الإعدادات: الفترة قد تكون مكتوبةً له
+    // بساعة أخرى، وعليها سيُبنى حجزه فعلًا.
+    return props.meta.periods
+        .filter((p) => allowed.includes(p.key))
+        .map((p) => ({ ...p, ...unitHours(p.key) }));
 });
+
+/**
+ * ساعتا فترةٍ على الشاليه المختار، وإلا ساعتا الإعدادات.
+ *
+ * الشاشة تقول ساعة الوحدة لا ساعة النظام، لأنها الساعة التي يُسلَّم بها
+ * النزيل ويُطبع بها عقده.
+ */
+function unitHours(key: string): { start: string; end: string } {
+    const written = selectedUnit.value?.hours?.[key];
+
+    if (written) return written;
+
+    if (key === STAY) {
+        return { start: props.meta.stay.check_in_time, end: props.meta.stay.check_out_time };
+    }
+
+    const fallback = props.meta.periods.find((p) => p.key === key);
+
+    return { start: fallback?.start ?? '', end: fallback?.end ?? '' };
+}
+
+/** ساعتا الإقامة على الشاليه المختار — ما يُعرض على خانتَي الدخول والخروج. */
+const stayHours = computed(() => unitHours(STAY));
 
 const canBookByDay = computed(() => dayPeriods.value.length > 0);
 
@@ -228,6 +256,27 @@ const setMode = (stay: boolean) => {
     form.period = dayPeriods.value[0]?.key ?? STAY;
     form.days_count = 1;
 };
+
+/**
+ * الفترة كحقلٍ واحد: «إقامة بليالٍ» أو إحدى فترات اليوم المسعَّرة.
+ *
+ * العبور بين الوجهين يجرّ معه ضبط المدى — ليلةً للإقامة ويومًا للفترة — فيمرّ
+ * الاختيار على setMode بدل الكتابة في form.period مباشرةً وترك مدى متناقض.
+ */
+const periodChoice = computed<string>({
+    get: () => form.period,
+    set: (key) => {
+        if (key === STAY) {
+            setMode(true);
+
+            return;
+        }
+
+        if (isStay.value) setMode(false);
+
+        form.period = key;
+    },
+});
 
 const hydrating = ref(true);
 
@@ -276,22 +325,17 @@ const setNights = (count: number) => {
 };
 
 /**
- * A chalet is let one section at a time. What the client calls a «قسم» is a
- * room inside the chalet, and a booking takes one room — a guest who wants
- * two is sold the chalet whole. So picking another replaces the choice rather
- * than adding to it, and picking the chosen one clears it.
+ * القسم المختار مفردًا — واجهةُ الحقل المنسدل على مصفوفة section_ids.
+ *
+ * الخادم يستقبل مصفوفة (يتّسع لحجزٍ متعدّد الأقسام لاحقًا)، والحجز اليوم
+ * يأخذ قسمًا واحدًا، فيُترجم هنا بدل أن يعرف الحقل بالمصفوفة.
  */
-const pickSection = (id: number) => {
-    form.section_ids = form.section_ids[0] === id ? [] : [id];
-};
-
-const toggleAddon = (id: number) => {
-    if (form.addons[id]) {
-        delete form.addons[id];
-    } else {
-        form.addons[id] = 1;
-    }
-};
+const sectionId = computed<number | null>({
+    get: () => form.section_ids[0] ?? null,
+    set: (id) => {
+        form.section_ids = id ? [id] : [];
+    },
+});
 
 /**
  * فحص الإتاحة واحتساب سعر الإقامة على الخادم عند كل تغيير مؤثر.
@@ -516,6 +560,25 @@ watch(maxCheckOut, (max) => {
 const periodFree = (key: string): boolean =>
     dayUseSpan.value.every((date) => availability.value[date]?.periods[key] !== false);
 
+/**
+ * لماذا لا يُحفظ الحجز النهاري بعد.
+ *
+ * الإقامة يحرسها مدًى ظاهر — ليلةٌ على الأقل — أما الفترة فلا مدى لها يُقاس،
+ * فالتحقّق نفسه هو حارسها: فترةٌ محجوزة، أو تحقّقٌ لم يتمّ بعد، يمنعان الحفظ
+ * بدل أن يمرّ الحجز ويرتدّ من الخادم.
+ */
+const dayUseBlocker = computed<string | null>(() => {
+    if (isStay.value) return null;
+
+    if (!periodFree(form.period)) return 'الفترة المختارة محجوزة في أحد أيام الحجز — اختر فترة أخرى أو تاريخًا آخر.';
+
+    if (checking.value) return 'جارٍ التحقق من إتاحة الفترة…';
+
+    if (quote.value === null) return 'أكمل الشاليه والقسم ليتم التحقق من إتاحة الفترة.';
+
+    return null;
+});
+
 // ── The security deposit: held, not charged ─────────────────
 
 /** What this chalet usually asks for — the figure the form starts from. */
@@ -528,38 +591,39 @@ const securityChanged = computed(() =>
 /**
  * The statuses this form may set.
  *
- * A chalet has no check-in step any more — a confirmed stay goes straight to
- * check-out — so «تم الدخول» is not offered. It stays on the list for a
- * booking already sitting in it, so an older one can still be opened and
- * corrected instead of quietly changing status the moment it is saved.
+ * Neither end of the stay is picked from here: «تم الدخول» and «تم الخروج»
+ * follow from the stay itself, not from a choice made while editing. Each one
+ * stays on the list for a booking already sitting in it, so an older one can
+ * still be opened and corrected instead of quietly changing status the moment
+ * it is saved.
  */
+const HIDDEN_STATUSES = ['checked_in', 'checked_out'];
+
 const statusOptions = computed(() =>
     props.meta.statuses.filter(
-        (s) => s.key !== 'checked_in' || props.booking?.status === 'checked_in',
+        (s) => !HIDDEN_STATUSES.includes(s.key) || props.booking?.status === s.key,
     ),
 );
 
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
-const suggestedDeposit = computed(() => pricing.value?.deposit_amount ?? 0);
 const suggestedTotal = computed(() => pricing.value?.total_amount ?? 0);
 
 const payChoice = computed(() => {
     if (form.payment_amount <= 0) return 'none';
     if (form.payment_amount >= suggestedTotal.value && suggestedTotal.value > 0) return 'full';
-    if (form.payment_amount === suggestedDeposit.value) return 'deposit';
 
     return 'custom';
 });
 
-const setPayChoice = (choice: 'none' | 'deposit' | 'full') => {
+const setPayChoice = (choice: 'none' | 'full') => {
     if (choice === 'none') {
         form.payment_amount = 0;
 
         return;
     }
 
-    form.payment_amount = choice === 'deposit' ? suggestedDeposit.value : suggestedTotal.value;
-    form.payment_type = choice === 'deposit' ? 'deposit' : 'payment';
+    form.payment_amount = suggestedTotal.value;
+    form.payment_type = 'payment';
 };
 
 /**
@@ -581,6 +645,10 @@ const otherErrors = computed(() =>
 );
 
 const submit = () => {
+    // الزرّ معطَّل في هذه الحال، لكن Enter داخل حقلٍ يُرسل النموذج من دونه —
+    // فالحارس هنا لا في الزرّ وحده.
+    if (dayUseBlocker.value !== null) return;
+
     // The two shapes carry different fields, and the one that does not apply
     // is sent as null rather than left at whatever the hidden input still
     // holds — a stale check-out date would otherwise fail a rule for a field
@@ -607,32 +675,85 @@ const submit = () => {
                     <h1 class="text-2xl font-extrabold text-slate-900">
                         {{ isEdit ? `تعديل الحجز ${booking?.reference}` : 'حجز جديد' }}
                     </h1>
-                    <p class="mt-1 text-sm font-medium text-slate-600">
-                        إقامة بالليالي — دخول {{ meta.stay.check_in_time }} وخروج {{ meta.stay.check_out_time }}
+                    <p class="mt-1 text-sm font-semibold text-slate-700">
+                        إقامة بالليالي — دخول {{ stayHours.start }} وخروج {{ stayHours.end }}
                     </p>
                 </div>
-                <Link href="/admin/bookings/chalets" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
+                <Link href="/admin/bookings/chalets" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-extrabold text-slate-800 shadow-sm hover:bg-slate-50">
                     <ArrowRight class="h-4 w-4" /> رجوع للسجل
                 </Link>
             </div>
 
             <div class="grid gap-5 lg:grid-cols-[1fr_340px]">
                 <div class="space-y-4">
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 class="mb-3 text-sm font-extrabold text-slate-800">الشاليه والنزيل</h2>
+                    <div class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
+                        <h2 class="mb-4 border-b-2 border-slate-300 pb-2.5 text-base font-extrabold text-slate-900">الشاليه والنزيل</h2>
 
-                        <div class="grid gap-3 sm:grid-cols-2">
+                        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             <div>
-                                <label class="mb-1 block text-sm font-bold text-slate-700">الشاليه</label>
-                                <select v-model="form.unit_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">الشاليه</label>
+                                <select v-model="form.unit_id" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm">
                                     <option :value="null">— اختر الشاليه —</option>
                                     <option v-for="u in units" :key="u.id" :value="u.id">{{ u.name }} ({{ u.code }})</option>
                                 </select>
                                 <p v-if="form.errors.unit_id" class="mt-1 text-xs text-red-500">{{ form.errors.unit_id }}</p>
+                                <p v-else-if="selectedUnit && !letByRoom" class="mt-1 text-[11px] font-semibold text-slate-600">
+                                    لا أقسام في هذا الشاليه — يُحجز بكامله.
+                                </p>
+                            </div>
+                            <!-- القسم — يظهر للشاليه المقسَّم وحده، فغير المقسَّم يُحجز كاملًا ولا شيء يُختار -->
+                            <div v-if="letByRoom">
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">القسم</label>
+                                <select v-model="sectionId" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm">
+                                    <option :value="null">— اختر القسم —</option>
+                                    <option v-for="s in bookableSections" :key="s.id" :value="s.id">{{ s.name }}</option>
+                                </select>
+                                <p v-if="form.errors.section_ids" class="mt-1 text-xs text-red-500">{{ form.errors.section_ids }}</p>
+                            </div>
+                            <!--
+                                التاريخ قبل الفترة، لا بعدها: الفترة تُقرأ متاحةً أو محجوزة على
+                                يومٍ بعينه، فلا معنى لعرضها قبل أن يُختار اليوم.
+                            -->
+                            <div>
+                                <label class="mb-1 flex items-center gap-1 text-sm font-extrabold text-slate-900">
+                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> التاريخ
+                                </label>
+                                <AvailabilityDatePicker
+                                    v-model="form.booking_date"
+                                    :min="minDate"
+                                    :blocked="isStay ? takenNights : dayUseDays.closed"
+                                    :partial="isStay ? [] : dayUseDays.partial"
+                                    :in-range="isStay ? stayNights : dayUseSpan"
+                                    :loading="loadingDiary"
+                                    @view="onCalendarView"
+                                />
+                                <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
+                                    <span class="rounded bg-emerald-50 px-1.5 py-0.5">{{ checkInHijri }}</span>
+                                    <span class="font-bold text-slate-700">{{ checkInDay }}</span>
+                                </p>
+                                <p v-if="form.errors.booking_date" class="mt-1 text-xs text-red-500">{{ form.errors.booking_date }}</p>
+                            </div>
+                            <!-- الفترة — إقامةً بليالٍ أو فترةً نهارية من فترات هذا الشاليه المسعَّرة -->
+                            <div>
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">الفترة</label>
+                                <select v-model="periodChoice" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm">
+                                    <option :value="STAY">إقامة بليالٍ</option>
+                                    <!-- المحجوزة تبقى معروضة ومعطّلة: أن تُرى محجوزةً أوضح من أن تختفي -->
+                                    <option v-for="p in dayPeriods" :key="p.key" :value="p.key" :disabled="!periodFree(p.key)">
+                                        {{ p.label }} — {{ formatTime12(p.start) }} إلى {{ formatTime12(p.end) }}{{ periodFree(p.key) ? '' : ' (محجوزة)' }}
+                                    </option>
+                                </select>
+                                <p v-if="form.errors.period" class="mt-1 text-xs text-red-500">{{ form.errors.period }}</p>
+                                <p v-else-if="!isStay && !periodFree(form.period)" class="mt-1 text-[11px] font-bold text-red-600">
+                                    الفترة المختارة محجوزة في هذا التاريخ — اختر فترة أخرى أو تاريخًا آخر.
+                                </p>
+                                <p v-else-if="selectedUnit && !canBookByDay" class="mt-1 text-[11px] font-semibold text-slate-600">
+                                    لا فترات نهارية مسعَّرة لهذا الشاليه — يُحجز بالليالي.
+                                </p>
                             </div>
                             <div>
                                 <div class="mb-1 flex items-center justify-between gap-2">
-                                    <label class="block text-sm font-bold text-slate-700">النزيل</label>
+                                    <label class="block text-sm font-extrabold text-slate-900">النزيل</label>
                                     <ClientQuickAdd category="chalet" @created="onClientCreated" />
                                 </div>
                                 <SearchableSelect
@@ -649,8 +770,8 @@ const submit = () => {
 
                     <!-- مدة الإقامة: تاريخا الدخول والخروج، والليالي تُحسب بينهما -->
                     <div class="rounded-2xl border-2 border-teal-100 bg-white p-5 shadow-sm">
-                        <div class="mb-3 flex items-center justify-between gap-2">
-                            <h2 class="flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
+                        <div class="mb-4 flex items-center justify-between gap-2 border-b-2 border-slate-300 pb-2.5">
+                            <h2 class="flex items-center gap-1.5 text-base font-extrabold text-slate-900">
                                 <Moon class="h-4 w-4 text-teal-500" /> {{ isStay ? 'مدة الإقامة' : 'فترة الحجز' }}
                             </h2>
                             <span class="rounded-lg bg-teal-600 px-3 py-1 text-sm font-extrabold text-white">
@@ -659,98 +780,30 @@ const submit = () => {
                             </span>
                         </div>
 
-                        <!-- نوع الحجز: لا يظهر إلا لشاليه مسعَّر بالفترات -->
-                        <div v-if="canBookByDay" class="mb-3 flex flex-wrap gap-1.5 rounded-xl bg-slate-100 p-1">
-                            <button type="button" @click="setMode(true)"
-                                class="flex-1 rounded-lg px-3 py-1.5 text-xs font-extrabold transition"
-                                :class="isStay ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-                            >إقامة بليالٍ</button>
-                            <button type="button" @click="setMode(false)"
-                                class="flex-1 rounded-lg px-3 py-1.5 text-xs font-extrabold transition"
-                                :class="!isStay ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-                            >حجز بالفترة</button>
-                        </div>
-
-                        <!-- الحجز النهاري: تاريخ واحد وفترة، بلا تاريخ خروج -->
-                        <div v-if="!isStay" class="space-y-3">
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                        <LogIn class="h-3.5 w-3.5 text-emerald-500" /> التاريخ
-                                    </label>
-                                    <AvailabilityDatePicker
-                                        v-model="form.booking_date"
-                                        :min="minDate"
-                                        :blocked="dayUseDays.closed"
-                                        :partial="dayUseDays.partial"
-                                        :in-range="dayUseSpan"
-                                        :loading="loadingDiary"
-                                        @view="onCalendarView"
-                                    />
-                                    <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
-                                        <span class="rounded bg-emerald-50 px-1.5 py-0.5">{{ checkInHijri }}</span>
-                                        <span class="text-slate-500">{{ checkInDay }}</span>
-                                    </p>
-                                    <p v-if="form.errors.booking_date" class="mt-1 text-xs text-red-500">{{ form.errors.booking_date }}</p>
-                                </div>
-                                <div>
-                                    <label class="mb-1 block text-xs font-bold text-slate-700">عدد الأيام</label>
-                                    <input v-model.number="form.days_count" type="number" min="1" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-                                    <p class="mt-1 text-[11px] font-medium text-slate-500">الفترة نفسها تتكرر في كل يوم، ويُسعَّر كل يوم بيومه.</p>
-                                    <p v-if="form.errors.days_count" class="mt-1 text-xs text-red-500">{{ form.errors.days_count }}</p>
-                                </div>
-                            </div>
-
+                        <!-- الحجز النهاري: التاريخ والفترة فوق، فلا يبقى هنا إلا تكرار الفترة أيامًا -->
+                        <div v-if="!isStay" class="grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1.5 block text-xs font-bold text-slate-700">اختر الفترة</label>
-                                <div class="flex flex-wrap gap-1.5">
-                                    <!--
-                                        Each hour is its own <bdi>, not one span forced to dir="ltr":
-                                        ص and م are Arabic letters, and making the run latin pushed
-                                        them to the wrong end of their own times.
-                                    -->
-                                    <button v-for="p in dayPeriods" :key="p.key" type="button"
-                                        :disabled="!periodFree(p.key)"
-                                        @click="form.period = p.key"
-                                        class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:cursor-not-allowed"
-                                        :class="form.period === p.key
-                                            ? (periodFree(p.key) ? 'bg-teal-600 text-white' : 'bg-red-100 text-red-700 ring-1 ring-red-300')
-                                            : (periodFree(p.key) ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-red-50 text-red-300')"
-                                    >
-                                        <span>{{ p.label }}</span>
-                                        <span class="text-[10px] opacity-70"><bdi>{{ formatTime12(p.start) }}</bdi> – <bdi>{{ formatTime12(p.end) }}</bdi></span>
-                                        <span v-if="!periodFree(p.key)" class="rounded bg-red-100 px-1 py-0.5 text-[9px] font-extrabold text-red-600">محجوزة</span>
-                                    </button>
-                                </div>
-                                <p v-if="!periodFree(form.period)" class="mt-1.5 text-[11px] font-bold text-red-600">
-                                    الفترة المختارة محجوزة في هذا التاريخ — اختر فترة أخرى أو تاريخًا آخر.
-                                </p>
-                                <p v-if="form.errors.period" class="mt-1 text-xs text-red-500">{{ form.errors.period }}</p>
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">عدد الأيام</label>
+                                <input v-model.number="form.days_count" type="number" min="1" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
+                                <p class="mt-1 text-[11px] font-semibold text-slate-600">الفترة نفسها تتكرر في كل يوم، ويُسعَّر كل يوم بيومه.</p>
+                                <p v-if="form.errors.days_count" class="mt-1 text-xs text-red-500">{{ form.errors.days_count }}</p>
                             </div>
                         </div>
 
                         <div v-else class="grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول (<bdi>{{ formatTime12(meta.stay.check_in_time) }}</bdi>)
-                                </label>
-                                <AvailabilityDatePicker
-                                    v-model="form.booking_date"
-                                    :min="minDate"
-                                    :blocked="takenNights"
-                                    :in-range="stayNights"
-                                    :loading="loadingDiary"
-                                    @view="onCalendarView"
-                                />
-                                <p v-if="checkInHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-emerald-700">
-                                    <span class="rounded bg-emerald-50 px-1.5 py-0.5">{{ checkInHijri }}</span>
-                                    <span class="text-slate-500">{{ checkInDay }}</span>
-                                </p>
-                                <p v-if="form.errors.booking_date" class="mt-1 text-xs text-red-500">{{ form.errors.booking_date }}</p>
+                                <div class="mb-1 flex items-center gap-1 text-sm font-extrabold text-slate-900">
+                                    <LogIn class="h-3.5 w-3.5 text-emerald-500" /> الدخول (<bdi>{{ formatTime12(stayHours.start) }}</bdi>)
+                                </div>
+                                <div class="rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm font-extrabold text-slate-900">
+                                    {{ form.booking_date }}
+                                    <span v-if="checkInDay" class="text-xs font-bold text-slate-600">— {{ checkInDay }}</span>
+                                </div>
+                                <p v-if="checkInHijri" class="mt-1 text-[11px] font-bold text-emerald-700">{{ checkInHijri }}</p>
                             </div>
                             <div>
-                                <label class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-700">
-                                    <LogOut class="h-3.5 w-3.5 text-rose-500" /> الخروج (<bdi>{{ formatTime12(meta.stay.check_out_time) }}</bdi>)
+                                <label class="mb-1 flex items-center gap-1 text-sm font-extrabold text-slate-900">
+                                    <LogOut class="h-3.5 w-3.5 text-rose-500" /> الخروج (<bdi>{{ formatTime12(stayHours.end) }}</bdi>)
                                 </label>
                                 <!-- Capped at the first taken night after arrival: a stay cannot run through someone else's night -->
                                 <AvailabilityDatePicker
@@ -763,7 +816,7 @@ const submit = () => {
                                 />
                                 <p v-if="checkOutHijri" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-bold text-rose-700">
                                     <span class="rounded bg-rose-50 px-1.5 py-0.5">{{ checkOutHijri }}</span>
-                                    <span class="text-slate-500">{{ checkOutDay }}</span>
+                                    <span class="font-bold text-slate-700">{{ checkOutDay }}</span>
                                 </p>
                                 <p v-if="form.errors.check_out_date" class="mt-1 text-xs text-red-500">{{ form.errors.check_out_date }}</p>
                             </div>
@@ -785,68 +838,23 @@ const submit = () => {
                         </p>
                     </div>
 
-                    <!-- النطاق — يتبع الشاليه لا اختيار الموظف: بأقسام يُحجز بالقسم، وبلا أقسام يُحجز كاملًا -->
-                    <div v-if="selectedUnit" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 class="mb-3 text-sm font-extrabold text-slate-800">نطاق الحجز</h2>
 
-                        <!-- شاليه بلا أقسام: يُحجز بكامله، ولا شيء يُختار -->
-                        <div v-if="!letByRoom" class="rounded-xl border-2 border-teal-400 bg-teal-50 p-3 text-center">
-                            <div class="text-sm font-extrabold text-slate-800">الشاليه كاملًا</div>
-                            <div class="mt-0.5 text-[11px] font-medium text-slate-500">لا أقسام في هذا الشاليه — يُحجز بكامله</div>
-                        </div>
-
-                        <!-- شاليه بأقسام: يُحجز بالقسم وحده، والشاليه كاملًا غير مطروح -->
-                        <div v-else>
-                            <div class="mb-1.5 text-[11px] font-bold text-slate-600">اختر القسم — قسم واحد لكل حجز</div>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button
-                                    v-for="s in bookableSections"
-                                    :key="s.id"
-                                    type="button"
-                                    @click="pickSection(s.id)"
-                                    class="rounded-lg px-3 py-1.5 text-xs font-bold transition"
-                                    :class="form.section_ids.includes(s.id) ? 'bg-teal-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-                                >{{ s.name }}</button>
-                            </div>
-                            <p class="mt-1.5 text-[11px] font-medium text-slate-500">هذا الشاليه مقسَّم، فيُحجز القسم لا الشاليه كاملًا.</p>
-                            <p v-if="form.errors.section_ids" class="mt-1 text-xs text-red-500">{{ form.errors.section_ids }}</p>
-                        </div>
-                    </div>
-
-                    <!-- الخدمات الإضافية -->
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <h2 class="text-sm font-extrabold text-slate-800">الخدمات الإضافية</h2>
-                            <Link v-if="can('addons.view')" href="/admin/addons" class="text-[11px] font-bold text-blue-600 hover:underline">
-                                إدارة الخدمات وأسعارها
-                            </Link>
-                        </div>
-                        <div class="space-y-1.5">
-                            <div v-for="a in addons" :key="a.id" class="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-                                <input type="checkbox" :checked="!!form.addons[a.id]" @change="toggleAddon(a.id)" class="h-4 w-4 rounded border-slate-300 text-teal-600" />
-                                <span class="flex-1 text-sm font-bold text-slate-700">{{ a.name }}</span>
-                                <span class="text-xs font-bold text-slate-500">{{ money(a.price) }}</span>
-                                <input v-if="form.addons[a.id]" v-model.number="form.addons[a.id]" type="number" min="1" class="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
                         <div class="grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-sm font-bold text-slate-700">الخصم</label>
-                                <input v-model.number="form.discount_amount" type="number" min="0" step="0.01" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">الخصم</label>
+                                <input v-model.number="form.discount_amount" type="number" min="0" step="0.01" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
                             </div>
                             <div>
-                                <label class="mb-1 block text-sm font-bold text-slate-700">الحالة</label>
-                                <select v-model="form.status" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">الحالة</label>
+                                <select v-model="form.status" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm">
                                     <option v-for="s in statusOptions" :key="s.key" :value="s.key">{{ s.label }}</option>
                                 </select>
                             </div>
                         </div>
 
-                        <label class="mb-1 mt-3 block text-sm font-bold text-slate-700">ملاحظات</label>
-                        <textarea v-model="form.notes" rows="2" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"></textarea>
+                        <label class="mb-1 mt-3 block text-sm font-extrabold text-slate-900">ملاحظات</label>
+                        <textarea v-model="form.notes" rows="2" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm"></textarea>
                     </div>
                 </div>
 
@@ -869,7 +877,7 @@ const submit = () => {
                         </div>
                     </div>
 
-                    <div v-if="pricing" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div v-if="pricing" class="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
                         <!-- ملخّص الليالي: السعر مجموع ليالٍ، ومتوسط الليلة هو ما يفاوض عليه العميل -->
                         <div v-if="isStay" class="mb-2 grid grid-cols-2 gap-2">
                             <div class="rounded-xl bg-teal-50 p-2 text-center">
@@ -877,7 +885,7 @@ const submit = () => {
                                 <div class="text-base font-extrabold text-teal-700">{{ pricing.nights }}</div>
                             </div>
                             <div class="rounded-xl bg-slate-50 p-2 text-center">
-                                <div class="text-[10px] font-bold text-slate-500">متوسط الليلة</div>
+                                <div class="text-[10px] font-extrabold text-slate-600">متوسط الليلة</div>
                                 <div class="text-base font-extrabold text-slate-700">{{ money(pricing.average_night) }}</div>
                             </div>
                         </div>
@@ -889,7 +897,7 @@ const submit = () => {
                                 <div class="text-base font-extrabold text-teal-700">{{ periodLabel(form.period) }}</div>
                             </div>
                             <div class="rounded-xl bg-slate-50 p-2 text-center">
-                                <div class="text-[10px] font-bold text-slate-500">الأيام</div>
+                                <div class="text-[10px] font-extrabold text-slate-600">الأيام</div>
                                 <div class="text-base font-extrabold text-slate-700">{{ pricing.days ?? days }}</div>
                             </div>
                         </div>
@@ -905,7 +913,7 @@ const submit = () => {
 
                         <div class="space-y-1 border-b border-slate-100 pb-2 text-xs">
                             <div v-for="(l, i) in pricing.lines" :key="i" class="flex justify-between gap-2">
-                                <span class="font-medium text-slate-600">{{ l.label }}</span>
+                                <span class="font-bold text-slate-700">{{ l.label }}</span>
                                 <span class="shrink-0 font-bold text-slate-800">{{ money(l.amount) }}</span>
                             </div>
                         </div>
@@ -915,8 +923,20 @@ const submit = () => {
                                 <span class="font-medium">الخصم</span>
                                 <span class="font-bold">− {{ money(pricing.discount_amount) }}</span>
                             </div>
+                            <!-- الضريبة تُضاف فوق المُسعَّر — تُعرَض هنا كما ستخرج في
+                                 الفاتورة، فلا يوقّع الموظف عقدًا برقمٍ لم يره. -->
+                            <template v-if="pricing.is_taxable">
+                                <div class="flex justify-between border-t border-slate-100 pt-1.5">
+                                    <span class="font-medium text-slate-600">الإجمالي قبل الضريبة</span>
+                                    <span class="font-bold text-slate-800">{{ money(pricing.net_amount) }}</span>
+                                </div>
+                                <div class="flex justify-between text-teal-700">
+                                    <span class="font-medium">ضريبة القيمة المضافة ({{ pricing.tax_rate }}%)</span>
+                                    <span class="font-bold">+ {{ money(pricing.tax_amount) }}</span>
+                                </div>
+                            </template>
                             <div class="flex justify-between border-t border-slate-100 pt-1.5 text-base">
-                                <span class="font-extrabold text-slate-700">الإجمالي</span>
+                                <span class="font-extrabold text-slate-700">{{ pricing.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                 <span class="font-extrabold text-teal-600">{{ money(pricing.total_amount) }}</span>
                             </div>
                             <div class="flex justify-between text-amber-700">
@@ -927,20 +947,16 @@ const submit = () => {
                     </div>
 
                     <!-- السداد عند الحجز — عند الإنشاء فقط، والتعديل له لوحة الدفعات -->
-                    <div v-if="!isEdit && pricing" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h3 class="mb-2 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
+                    <div v-if="!isEdit && pricing" class="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+                        <h3 class="mb-3 flex items-center gap-1.5 border-b-2 border-slate-300 pb-2 text-base font-extrabold text-slate-900">
                             <Wallet class="h-4 w-4 text-slate-400" /> السداد
                         </h3>
 
-                        <div class="grid grid-cols-3 gap-1">
+                        <div class="grid grid-cols-2 gap-1">
                             <button type="button" @click="setPayChoice('none')"
                                 class="rounded-lg py-1.5 text-[11px] font-bold transition"
                                 :class="payChoice === 'none' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
                             >غير مسدَّد</button>
-                            <button type="button" @click="setPayChoice('deposit')"
-                                class="rounded-lg py-1.5 text-[11px] font-bold transition"
-                                :class="payChoice === 'deposit' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
-                            >عربون</button>
                             <button type="button" @click="setPayChoice('full')"
                                 class="rounded-lg py-1.5 text-[11px] font-bold transition"
                                 :class="payChoice === 'full' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
@@ -949,21 +965,21 @@ const submit = () => {
 
                         <div v-if="form.payment_amount > 0" class="mt-2.5 space-y-2.5">
                             <div>
-                                <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ المقبوض</label>
-                                <input v-model.number="form.payment_amount" type="number" min="0" step="0.01" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-bold" />
+                                <label class="mb-1 block text-xs font-extrabold text-slate-800">المبلغ المقبوض</label>
+                                <input v-model.number="form.payment_amount" type="number" min="0" step="0.01" class="w-full rounded-lg border border-slate-400 px-2.5 py-2 text-sm font-bold" />
                                 <p v-if="form.errors.payment_amount" class="mt-1 text-[11px] text-red-500">{{ form.errors.payment_amount }}</p>
                             </div>
 
                             <div class="grid grid-cols-2 gap-2">
                                 <div>
-                                    <label class="mb-1 block text-[11px] font-bold text-slate-600">الطريقة</label>
-                                    <select v-model="form.payment_method_id" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs">
+                                    <label class="mb-1 block text-xs font-extrabold text-slate-800">الطريقة</label>
+                                    <select v-model="form.payment_method_id" class="w-full rounded-lg border border-slate-400 px-2 py-2 text-xs">
                                         <option v-for="m in meta.payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-[11px] font-bold text-slate-600">تاريخ القبض</label>
-                                    <input v-model="form.payment_paid_on" type="date" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs" />
+                                    <label class="mb-1 block text-xs font-extrabold text-slate-800">تاريخ القبض</label>
+                                    <input v-model="form.payment_paid_on" type="date" class="w-full rounded-lg border border-slate-400 px-2 py-2 text-xs" />
                                 </div>
                             </div>
 
@@ -978,7 +994,7 @@ const submit = () => {
                             </label>
                         </div>
 
-                        <p v-else class="mt-2 text-[11px] font-medium text-slate-500">
+                        <p v-else class="mt-2 text-[11px] font-semibold text-slate-600">
                             تُحفظ الإقامة بلا دفعة، ويبقى المبلغ كاملًا على النزيل.
                         </p>
                     </div>
@@ -990,18 +1006,18 @@ const submit = () => {
                         mistake the separate account exists to prevent.
                     -->
                     <div v-if="selectedUnit" class="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
-                        <h3 class="mb-1 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
+                        <h3 class="mb-1.5 flex items-center gap-1.5 text-base font-extrabold text-slate-900">
                             <ShieldCheck class="h-4 w-4 text-indigo-400" /> التأمين
                         </h3>
-                        <p class="mb-2.5 text-[11px] font-medium leading-relaxed text-slate-500">
+                        <p class="mb-2.5 text-[11px] font-semibold leading-relaxed text-slate-600">
                             ضمانٌ للتلفيات يُعاد عند الخروج — خارج الإجمالي وخارج المتبقي على النزيل.
                         </p>
 
-                        <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
+                        <label class="mb-1 block text-xs font-extrabold text-slate-800">المبلغ</label>
                         <input
                             v-model.number="form.security_deposit_amount"
                             type="number" min="0" step="0.01" dir="ltr"
-                            class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-bold focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            class="w-full rounded-lg border border-slate-400 px-2.5 py-2 text-sm font-bold focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                         />
                         <p v-if="form.errors.security_deposit_amount" class="mt-1 text-[11px] text-red-500">{{ form.errors.security_deposit_amount }}</p>
 
@@ -1025,25 +1041,26 @@ const submit = () => {
                                 <span class="font-bold text-indigo-700">المحتجز الآن</span>
                                 <span class="font-extrabold text-indigo-800">{{ money(booking?.security_held ?? 0) }}</span>
                             </div>
-                            <p class="text-[11px] font-medium text-slate-500">قبض التأمين ورده يتمّان من لوحة الدفعات في السجل.</p>
+                            <p class="text-[11px] font-semibold text-slate-600">قبض التأمين ورده يتمّان من لوحة الدفعات في السجل.</p>
                         </div>
                     </div>
 
                     <p v-if="form.errors.availability" class="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{{ form.errors.availability }}</p>
 
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
                         <p v-if="blocked" class="mb-2 text-xs font-bold text-red-600">لا يمكن الحفظ ما دام الشاليه غير متاح</p>
                         <p v-else-if="isStay && nights < 1" class="mb-2 text-xs font-bold text-amber-600">مدة الإقامة ليلة واحدة على الأقل</p>
+                        <p v-else-if="dayUseBlocker" class="mb-2 text-xs font-bold text-amber-600">{{ dayUseBlocker }}</p>
 
                         <!-- خطأ لا يقابله حقل ظاهر — حتى لا يبدو الحفظ بلا أثر -->
                         <ul v-if="otherErrors.length" class="mb-2 space-y-1 rounded-lg bg-red-50 px-3 py-2">
                             <li v-for="(msg, i) in otherErrors" :key="i" class="text-[11px] font-bold text-red-600">{{ msg }}</li>
                         </ul>
                         <div class="flex gap-2">
-                            <button type="submit" :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights))" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
+                            <button type="submit" :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights)) || dayUseBlocker !== null" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
                                 {{ isEdit ? 'حفظ التعديل' : isStay ? 'حفظ الإقامة' : 'حفظ الحجز' }}
                             </button>
-                            <Link href="/admin/bookings/chalets" class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">
+                            <Link href="/admin/bookings/chalets" class="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
                                 إلغاء
                             </Link>
                         </div>

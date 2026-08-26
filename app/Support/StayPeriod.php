@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Unit;
 use Carbon\CarbonImmutable;
 
 /**
@@ -26,14 +27,24 @@ class StayPeriod
     /** Label for the overnight row in the pricing screen. */
     public const LABEL = 'الليلة';
 
-    public static function checkInTime(): string
+    /**
+     * ساعة تسليم الشاليه.
+     *
+     * ساعة الوحدة — إن كُتبت في شاشة أسعارها — تتقدّم على ساعة الإعدادات:
+     * الشاليهات لا تُسلَّم كلها في ساعة واحدة، وواحدٌ منها يُنظَّف بعد ظهر يومه
+     * فيُسلَّم متأخرًا عن جاره. والوحدة التي لم تُكتب لها ساعة تبقى على ساعة
+     * النظام كما كانت.
+     */
+    public static function checkInTime(?Unit $unit = null): string
     {
-        return app(BookingTimes::class)->stay()['check_in'];
+        return $unit?->periodStart(self::PERIOD)
+            ?? app(BookingTimes::class)->stay()['check_in'];
     }
 
-    public static function checkOutTime(): string
+    public static function checkOutTime(?Unit $unit = null): string
     {
-        return app(BookingTimes::class)->stay()['check_out'];
+        return $unit?->periodEnd(self::PERIOD)
+            ?? app(BookingTimes::class)->stay()['check_out'];
     }
 
     public static function maxNights(): int
@@ -56,13 +67,13 @@ class StayPeriod
      *
      * @return array{0: CarbonImmutable, 1: CarbonImmutable}
      */
-    public static function range(string $checkIn, string $checkOut): array
+    public static function range(string $checkIn, string $checkOut, ?Unit $unit = null): array
     {
         $starts = CarbonImmutable::parse($checkIn)->startOfDay()
-            ->setTimeFromTimeString(self::checkInTime());
+            ->setTimeFromTimeString(self::checkInTime($unit));
 
         $ends = CarbonImmutable::parse($checkOut)->startOfDay()
-            ->setTimeFromTimeString(self::checkOutTime());
+            ->setTimeFromTimeString(self::checkOutTime($unit));
 
         return [$starts, $ends];
     }
@@ -91,11 +102,11 @@ class StayPeriod
      *
      * @return array{check_in_time: string, check_out_time: string, max_nights: int}
      */
-    public static function forView(): array
+    public static function forView(?Unit $unit = null): array
     {
         return [
-            'check_in_time' => self::checkInTime(),
-            'check_out_time' => self::checkOutTime(),
+            'check_in_time' => self::checkInTime($unit),
+            'check_out_time' => self::checkOutTime($unit),
             'max_nights' => self::maxNights(),
         ];
     }
@@ -112,16 +123,16 @@ class StayPeriod
      *
      * @return list<array{key: string, label: string, start: string, end: string}>
      */
-    public static function pricingPeriods(): array
+    public static function pricingPeriods(?Unit $unit = null): array
     {
         return [
             [
                 'key' => self::PERIOD,
                 'label' => self::LABEL,
-                'start' => self::checkInTime(),
-                'end' => self::checkOutTime(),
+                'start' => self::checkInTime($unit),
+                'end' => self::checkOutTime($unit),
             ],
-            ...BookingPeriod::forView(),
+            ...BookingPeriod::forView($unit),
         ];
     }
 

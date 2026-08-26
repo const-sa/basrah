@@ -15,6 +15,8 @@ interface UnitOption {
     id: number; name: string; code: string; type: string;
     bookable_mode: 'whole' | 'sections' | 'both';
     privacy_mode: 'open' | 'exclusive';
+    /** ساعات فترات هذه القاعة سارية المفعول — ساعتها إن كُتبت، وإلا ساعة الإعدادات. */
+    hours: Record<string, { start: string; end: string }>;
     sections: SectionOption[];
 }
 interface ClientOption { id: number; name: string; mobile: string | null }
@@ -48,6 +50,8 @@ interface Quote {
         priced_by_event: boolean;
         addons_amount: number; discount_amount: number;
         total_amount: number; deposit_amount: number; is_weekend: boolean;
+        /** الضريبة مستخرجة من الإجمالي شاملةً لا مضافة فوقه. */
+        is_taxable: boolean; tax_rate: number; net_amount: number; tax_amount: number;
         days: number;
         package: { id: number; name: string; price: number } | null;
         event_type: { id: number; name: string; price: number } | null;
@@ -141,6 +145,16 @@ const form = useForm({
 });
 
 const selectedUnit = computed(() => props.units.find((u) => u.id === form.unit_id) ?? null);
+
+/**
+ * الفترات بساعات القاعة المختارة.
+ *
+ * القاعة قد تُكتب لها ساعاتها في شاشة أسعارها، وعليها يُبنى مدى حجزها وكشف
+ * تعارضه، فتُعرض هي لا ساعة الإعدادات.
+ */
+const periods = computed(() =>
+    props.meta.periods.map((p) => ({ ...p, ...(selectedUnit.value?.hours?.[p.key] ?? {}) })),
+);
 
 /** الباقات المتاحة للقاعة المختارة: الخاصة بها والعامة معًا — كقاعدة الخادم. */
 const availablePackages = computed(() =>
@@ -581,14 +595,14 @@ const eventBadge = (color: string) =>
                                 <label class="mb-1 block text-[15px] font-bold text-slate-900">الفترة</label>
                                 <!-- القاعة تُباع بفترة واحدة، فتُعرض خبرًا لا قائمةً بخيار واحد -->
                                 <div
-                                    v-if="meta.periods.length === 1"
+                                    v-if="periods.length === 1"
                                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] font-bold text-slate-700"
                                 >
-                                    {{ meta.periods[0].label }}
-                                    <span class="text-sm font-medium text-slate-500" dir="ltr">({{ meta.periods[0].start }}–{{ meta.periods[0].end }})</span>
+                                    {{ periods[0].label }}
+                                    <span class="text-sm font-medium text-slate-500" dir="ltr">({{ periods[0].start }}–{{ periods[0].end }})</span>
                                 </div>
                                 <select v-else v-model="form.period" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
-                                    <option v-for="p in meta.periods" :key="p.key" :value="p.key">{{ p.label }} ({{ p.start }}–{{ p.end }})</option>
+                                    <option v-for="p in periods" :key="p.key" :value="p.key">{{ p.label }} ({{ p.start }}–{{ p.end }})</option>
                                 </select>
                             </div>
                             <div>
@@ -715,8 +729,20 @@ const eventBadge = (color: string) =>
                                 <span class="font-medium">الخصم</span>
                                 <span class="font-bold">− {{ money(quote.pricing.discount_amount) }}</span>
                             </div>
+                            <!-- الضريبة تُضاف فوق المُسعَّر — تُعرَض هنا كما ستخرج في
+                                 الفاتورة، فلا يوقّع الموظف عقدًا برقمٍ لم يره. -->
+                            <template v-if="quote.pricing.is_taxable">
+                                <div class="flex justify-between border-t border-slate-200 pt-2.5">
+                                    <span class="font-medium text-slate-700">الإجمالي قبل الضريبة</span>
+                                    <span class="font-bold text-slate-900">{{ money(quote.pricing.net_amount) }}</span>
+                                </div>
+                                <div class="flex justify-between text-emerald-800">
+                                    <span class="font-medium">ضريبة القيمة المضافة ({{ quote.pricing.tax_rate }}%)</span>
+                                    <span class="font-bold">+ {{ money(quote.pricing.tax_amount) }}</span>
+                                </div>
+                            </template>
                             <div class="flex justify-between border-t border-slate-200 pt-2.5 text-xl">
-                                <span class="font-extrabold text-slate-900">الإجمالي</span>
+                                <span class="font-extrabold text-slate-900">{{ quote.pricing.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                 <span class="font-extrabold text-emerald-700">{{ money(quote.pricing.total_amount) }}</span>
                             </div>
                             <div class="flex justify-between text-lg text-amber-800">

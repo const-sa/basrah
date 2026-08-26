@@ -85,24 +85,42 @@ class BookingInvoiceTest extends TestCase
     }
 
     /**
-     * الضريبة تُستخرج من إجمالي الحجز لا تُضاف فوقه: العقد وسند القبض
-     * والدفعات كلها على هذا الإجمالي، فرفعه على الفاتورة يخالف ما وُقّع.
+     * الضريبة تُضاف فوق ما سُعِّر به الحجز، فيصير إجماليه شاملًا لها —
+     * وهي نفسها التي عرضتها شاشة الحجز قبل الحفظ، فلا تفاجئ العميل.
      */
-    public function test_vat_is_extracted_from_the_booking_total_not_added_on_top(): void
+    public function test_vat_is_added_on_top_of_the_priced_amount(): void
     {
         $this->enableTax();
 
-        $total = (float) $this->booking->total_amount;
+        $booking = $this->bookingWithTax();
+
+        $net = $booking->netAmount();
+
+        $this->actingAs($this->owner)
+            ->get("/admin/bookings/{$booking->id}/invoice")
+            ->assertInertia(fn ($page) => $page
+                ->where('invoice.is_taxable', true)
+                ->where('invoice.tax_rate', fn ($v) => (float) $v === 15.0)
+                ->where('invoice.net_amount', fn ($v) => (float) $v === $net)
+                ->where('invoice.tax_amount', fn ($v) => (float) $v === round($net * 0.15, 2))
+                ->where('invoice.total_amount', fn ($v) => (float) $v === round($net * 1.15, 2))
+                ->has('issuer.qr'));
+    }
+
+    /**
+     * حجزٌ سُجِّل والضريبة معطّلة يبقى بلا ضريبة وإن فُعِّلت بعده: الضريبة
+     * حُسبت يوم إنشائه ودخلت إجماليه، وتفعيلٌ لاحق لا يرفع ورقةً وُقّعت.
+     */
+    public function test_a_booking_priced_before_the_tax_was_enabled_stays_untaxed(): void
+    {
+        $this->enableTax();
 
         $this->actingAs($this->owner)
             ->get("/admin/bookings/{$this->booking->id}/invoice")
             ->assertInertia(fn ($page) => $page
-                ->where('invoice.is_taxable', true)
-                ->where('invoice.tax_rate', fn ($v) => (float) $v === 15.0)
-                ->where('invoice.total_amount', fn ($v) => (float) $v === $total)
-                ->where('invoice.net_amount', fn ($v) => (float) $v === round($total / 1.15, 2))
-                ->where('invoice.tax_amount', fn ($v) => (float) $v === round($total - round($total / 1.15, 2), 2))
-                ->has('issuer.qr'));
+                ->where('invoice.is_taxable', false)
+                ->where('invoice.tax_amount', fn ($v) => (float) $v === 0.0)
+                ->where('invoice.total_amount', fn ($v) => (float) $v === (float) $this->booking->total_amount));
     }
 
     public function test_the_package_appears_as_its_own_line(): void
@@ -165,6 +183,22 @@ class BookingInvoiceTest extends TestCase
         $this->actingAs($other)
             ->get("/admin/bookings/{$this->booking->id}/invoice")
             ->assertForbidden();
+    }
+
+    /**
+     * حجزٌ سُعِّر والضريبة مفعّلة — الضريبة تدخل إجماليه عند إنشائه.
+     */
+    private function bookingWithTax(): Booking
+    {
+        return app(BookingService::class)->create([
+            'unit_id' => $this->booking->unit_id,
+            'client_id' => $this->booking->client_id,
+            'scope' => 'whole',
+            'booking_date' => '2026-10-15',
+            'period' => 'full_day',
+            'status' => 'confirmed',
+            'guests_count' => 30,
+        ]);
     }
 
     private function enableTax(): void

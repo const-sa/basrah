@@ -185,12 +185,16 @@ class HallBookingsController extends BaseBookingsController
         }
 
         $total = round((float) ($row->total ?? 0), 2);
+        $subtotal = round((float) ($row->subtotal ?? 0), 2);
+        $discount = round((float) ($row->discount ?? 0), 2);
 
         return [
-            'subtotal' => round((float) ($row->subtotal ?? 0), 2),
-            'discount' => round((float) ($row->discount ?? 0), 2),
+            'subtotal' => $subtotal,
+            'discount' => $discount,
             'deposit' => round((float) ($row->deposit ?? 0), 2),
-            'tax' => $this->taxPortion($total),
+            // الضريبة أُضيفت فوق المُسعَّر، فهي فرق الإجمالي عنه — لا نسبةٌ
+            // تُستخرج اليوم فتضع ضريبةً على حجوزٍ سُجِّلت بلا ضريبة.
+            'tax' => round(max(0, $total - ($subtotal - $discount)), 2),
             'total' => $total,
             'paid' => round((float) ($row->paid ?? 0), 2),
             'paid_by_method' => $byMethod,

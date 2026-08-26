@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\BookingTimes;
+use App\Support\Vat;
 use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
@@ -45,9 +46,12 @@ class Setting extends Model
 
     protected static function booted(): void
     {
-        // Booking hours are memoised for the request; a save must not leave
-        // the old ones in play for the rest of it.
-        static::saved(fn () => app()->forgetInstance(BookingTimes::class));
+        // Booking hours and the VAT rule are memoised for the request; a save
+        // must not leave the old ones in play for the rest of it.
+        static::saved(function () {
+            app()->forgetInstance(BookingTimes::class);
+            Vat::forget();
+        });
     }
 
     /**

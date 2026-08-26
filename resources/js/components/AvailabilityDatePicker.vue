@@ -189,11 +189,11 @@ const hasMarks = computed(() => props.blocked.length > 0 || props.partial.length
             type="button"
             :disabled="disabled"
             @click="toggle"
-            class="flex w-full items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-right text-sm transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+            class="flex w-full items-center gap-2 rounded-xl border border-slate-400 bg-white px-3 py-2.5 text-right text-sm transition hover:border-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100"
             :class="open && 'border-teal-500 ring-2 ring-teal-100'"
         >
-            <CalendarDays class="h-4 w-4 shrink-0 text-slate-400" />
-            <span class="flex-1 font-bold text-slate-800" dir="ltr">{{ modelValue || '—' }}</span>
+            <CalendarDays class="h-4 w-4 shrink-0 text-slate-500" />
+            <span class="flex-1 font-extrabold text-slate-900" dir="ltr">{{ modelValue || '—' }}</span>
             <Loader2 v-if="loading" class="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" />
         </button>
 

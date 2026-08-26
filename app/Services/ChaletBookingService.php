@@ -7,6 +7,7 @@ use App\Models\Unit;
 use App\Services\Concerns\BuildsBookings;
 use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -211,7 +212,7 @@ class ChaletBookingService
      * @param  array<int, int>  $addons
      * @return array{
      *     quote: array<string, mixed>, period: string,
-     *     starts_at: \Carbon\CarbonImmutable, ends_at: \Carbon\CarbonImmutable,
+     *     starts_at: CarbonImmutable, ends_at: CarbonImmutable,
      *     check_out_date: string|null, nights: int|null, days_count: int|null
      * }
      *
@@ -232,7 +233,7 @@ class ChaletBookingService
     ): array {
         if ($period === StayPeriod::PERIOD) {
             $nights = $this->guardStay($unit, $scope, $date, (string) $checkOut, $sectionIds, $clientId, $ignoreId);
-            [$startsAt, $endsAt] = StayPeriod::range($date, (string) $checkOut);
+            [$startsAt, $endsAt] = StayPeriod::range($date, (string) $checkOut, $unit);
 
             return [
                 'quote' => $this->pricing->quoteStay($unit, $date, (string) $checkOut, $sectionIds, $addons, $discount),
@@ -250,7 +251,7 @@ class ChaletBookingService
         $days = BookingPeriod::days($days);
 
         $this->guardDayUse($unit, $scope, $date, $period, $days, $sectionIds, $clientId, $ignoreId);
-        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days);
+        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days, $unit);
 
         return [
             // The hall quote already prices a period across days; a chalet
@@ -296,7 +297,7 @@ class ChaletBookingService
             ]);
         }
 
-        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days);
+        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days, $unit);
 
         $result = $this->availability->checkRange(
             $unit,
@@ -345,7 +346,7 @@ class ChaletBookingService
             ]);
         }
 
-        [$startsAt, $endsAt] = StayPeriod::range($checkIn, $checkOut);
+        [$startsAt, $endsAt] = StayPeriod::range($checkIn, $checkOut, $unit);
 
         $result = $this->availability->checkRange(
             $unit,

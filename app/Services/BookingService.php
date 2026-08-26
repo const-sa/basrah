@@ -161,7 +161,7 @@ class BookingService
                 $days,
             );
 
-            [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days);
+            [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days, $unit);
 
             $booking = Booking::create([
                 'reference' => $this->nextReference(),
@@ -247,6 +247,7 @@ class BookingService
                 $payload['booking_date'],
                 $payload['period'],
                 $payload['days_count'],
+                $unit,
             );
 
             $booking->update([

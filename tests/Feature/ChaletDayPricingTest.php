@@ -134,4 +134,55 @@ class ChaletDayPricingTest extends TestCase
         $this->assertNull($row->day_prices);
         $this->assertSame(900.0, $row->priceFor(false, 0));
     }
+
+    /**
+     * القسم غير المسعَّر لفترةٍ نهارية يأخذ سعر الشاليه فيها.
+     *
+     * الفترات النهارية تُدخَل على الشاليه مرةً واحدة في الغالب، والحجز يقع على
+     * قسمٍ منه، فحصرُ السعر على صفّ القسم كان يُخرِج إجمالي صفر لفترةٍ سعرها
+     * مكتوب. وسعر القسم — متى وُجد — يبقى المقدَّم.
+     */
+    public function test_a_section_without_a_period_price_takes_the_chalet_price(): void
+    {
+        $section = $this->unit->sections()->firstOrFail();
+
+        UnitPrice::updateOrCreate(
+            ['unit_id' => $this->unit->id, 'unit_section_id' => null, 'period' => 'evening'],
+            ['weekday_price' => 200, 'weekend_price' => 500, 'deposit_percent' => 25, 'is_active' => true],
+        );
+
+        // صفّ القسم موجود بلا سعر — كما يتركه حفظ شاشة الأسعار بخاناتٍ فارغة.
+        UnitPrice::updateOrCreate(
+            ['unit_id' => $this->unit->id, 'unit_section_id' => $section->id, 'period' => 'evening'],
+            ['weekday_price' => 0, 'weekend_price' => 0, 'is_active' => true],
+        );
+
+        // 2026-09-09 أربعاء — يوم عاديّ لا نهاية أسبوع.
+        $quote = $this->pricing->quote($this->unit->fresh(), 'sections', '2026-09-09', 'evening', [$section->id]);
+
+        $this->assertSame(200.0, $quote['base_amount']);
+        $this->assertSame(200.0, $quote['total_amount']);
+        // شروط العربون تأتي مع الصفّ الذي سُعِّر به الحجز.
+        $this->assertSame(50.0, $quote['deposit_amount']);
+        $this->assertStringContainsString('بسعر الشاليه', $quote['lines'][0]['label']);
+    }
+
+    public function test_a_section_priced_for_the_period_keeps_its_own_price(): void
+    {
+        $section = $this->unit->sections()->firstOrFail();
+
+        UnitPrice::updateOrCreate(
+            ['unit_id' => $this->unit->id, 'unit_section_id' => null, 'period' => 'evening'],
+            ['weekday_price' => 200, 'weekend_price' => 500, 'is_active' => true],
+        );
+        UnitPrice::updateOrCreate(
+            ['unit_id' => $this->unit->id, 'unit_section_id' => $section->id, 'period' => 'evening'],
+            ['weekday_price' => 120, 'weekend_price' => 300, 'is_active' => true],
+        );
+
+        $quote = $this->pricing->quote($this->unit->fresh(), 'sections', '2026-09-09', 'evening', [$section->id]);
+
+        $this->assertSame(120.0, $quote['base_amount']);
+        $this->assertStringNotContainsString('بسعر الشاليه', $quote['lines'][0]['label']);
+    }
 }

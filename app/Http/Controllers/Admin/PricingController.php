@@ -50,6 +50,12 @@ class PricingController extends Controller
             // per period: it answers for damage to the chalet, and damage does
             // not care whether the guest came for a morning or a week.
             'security_deposit' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            // ساعات كل فترة: دخولها وخروجها على هذه الوحدة بعينها. تُقبل
+            // للفترات التي يُباع بها هذا النوع وحدها، وتُترك فارغة لترجع
+            // الفترة إلى ساعات الإعدادات.
+            'hours' => ['array'],
+            'hours.*.start' => ['nullable', 'date_format:H:i', 'required_with:hours.*.end'],
+            'hours.*.end' => ['nullable', 'date_format:H:i', 'required_with:hours.*.start'],
             'prices' => ['array'],
             'prices.*.unit_section_id' => [
                 'nullable',
@@ -67,9 +73,13 @@ class PricingController extends Controller
             'prices.*.deposit_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        $unit->fill(['period_hours' => $this->hours($data['hours'] ?? null, $periods)]);
+
         if (array_key_exists('security_deposit', $data)) {
-            $unit->update(['security_deposit' => $this->nullableDecimal($data['security_deposit'])]);
+            $unit->fill(['security_deposit' => $this->nullableDecimal($data['security_deposit'])]);
         }
+
+        $unit->save();
 
         foreach ($data['prices'] ?? [] as $row) {
             $dayPrices = $this->dayPrices($row['day_prices'] ?? null);
@@ -96,6 +106,40 @@ class PricingController extends Controller
         }
 
         return back()->with('success', 'تم حفظ أسعار الوحدة');
+    }
+
+    /**
+     * ساعات الفترات بعد تنقيتها.
+     *
+     * تُقبل الفترات التي يُباع بها هذا النوع وحدها — ساعةُ «الليلة» على قاعة
+     * لا تُقرأ أبدًا — وتُسقَط الفترة التي تُركت خانتاها فارغتين فترجع إلى
+     * ساعات الإعدادات. والخريطة الفارغة تُخزَّن null لا [] فتُقرأ لاحقًا
+     * «هذه الوحدة على ساعات النظام».
+     *
+     * ساعة الخروج قد تسبق ساعة الدخول ولا خطأ في ذلك: الفترة عندئذٍ تعبر
+     * منتصف الليل — والمبيت كله كذلك — وBookingPeriod يستنتج العبور من
+     * الساعتين نفسيهما.
+     *
+     * @param  array<string, mixed>|null  $hours
+     * @param  list<string>  $periods
+     * @return array<string, array{start: string, end: string}>|null
+     */
+    private function hours(?array $hours, array $periods): ?array
+    {
+        $clean = [];
+
+        foreach ($periods as $period) {
+            $start = $hours[$period]['start'] ?? null;
+            $end = $hours[$period]['end'] ?? null;
+
+            if (! is_string($start) || ! is_string($end) || $start === '' || $end === '') {
+                continue;
+            }
+
+            $clean[$period] = ['start' => $start, 'end' => $end];
+        }
+
+        return $clean === [] ? null : $clean;
     }
 
     /**
