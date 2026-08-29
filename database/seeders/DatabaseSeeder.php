@@ -2,10 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Role;
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -27,20 +24,8 @@ class DatabaseSeeder extends Seeder
             NotificationTemplatesSeeder::class,
             CitiesSeeder::class,
             ClientsSeeder::class,
+            // آخرًا لأنه يحتاج الأدوار مبذورةً قبله.
+            AdminUserSeeder::class,
         ]);
-
-        $superAdmin = Role::where('slug', 'super-admin')->first();
-
-        User::updateOrCreate(
-            ['email' => 'admin@admin.com'],
-            [
-                'name' => 'مدير النظام',
-                'password' => Hash::make('123456'),
-                'role_id' => $superAdmin?->id,
-                'is_active' => true,
-                'has_all_units' => true,
-                'email_verified_at' => now(),
-            ],
-        );
     }
 }
