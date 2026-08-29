@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Unit;
 use App\Services\Concerns\BuildsBookings;
 use App\Support\BookingPeriod;
+use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +62,8 @@ class ChaletBookingService
                 $data['addons'] ?? [],
                 (float) ($data['discount_amount'] ?? 0),
                 $data['client_id'] ?? null,
+                null,
+                $this->hourlyTerms($data),
             );
 
             $quote = $plan['quote'];
@@ -133,6 +136,7 @@ class ChaletBookingService
                 (float) ($data['discount_amount'] ?? $booking->discount_amount),
                 $clientId,
                 $booking->id,
+                $this->hourlyTerms($data, $booking),
             );
 
             $quote = $plan['quote'];
@@ -179,6 +183,25 @@ class ChaletBookingService
 
             return $booking->fresh(['unit', 'client', 'sections', 'addons']);
         });
+    }
+
+    /**
+     * ساعتا الحجز ومبلغه كما جاءا من الطلب.
+     *
+     * والتعديل الذي لم يمسّهما يقرؤهما من الحجز نفسه: مداه المحفوظ هو
+     * ساعتاه، وbase_amount هو المبلغ المتَّفق عليه. فتعديلُ اسم النزيل وحده
+     * لا يُسقط الاتفاق ولا يُعيد المبلغ صفرًا.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{start: string|null, end: string|null, amount: float}
+     */
+    private function hourlyTerms(array $data, ?Booking $booking = null): array
+    {
+        return [
+            'start' => $data['start_time'] ?? $booking?->starts_at->format('H:i'),
+            'end' => $data['end_time'] ?? $booking?->ends_at->format('H:i'),
+            'amount' => (float) ($data['hourly_amount'] ?? $booking?->base_amount ?? 0),
+        ];
     }
 
     /**
@@ -234,7 +257,32 @@ class ChaletBookingService
         float $discount,
         ?int $clientId,
         ?int $ignoreId = null,
+        array $hourly = [],
     ): array {
+        // الحجز بالساعات: ساعتاه في الطلب لا في جدول الفترات، ومبلغه معه.
+        if ($period === HourlyPeriod::PERIOD) {
+            [$startsAt, $endsAt] = $this->guardHourly($unit, $scope, $date, $hourly, $sectionIds, $clientId, $ignoreId);
+
+            return [
+                'quote' => $this->pricing->quoteHourly(
+                    $unit,
+                    (float) ($hourly['amount'] ?? 0),
+                    HourlyPeriod::hours($startsAt, $endsAt),
+                    $sectionIds,
+                    $addons,
+                    $discount,
+                ),
+                'period' => HourlyPeriod::PERIOD,
+                'starts_at' => $startsAt,
+                'ends_at' => $endsAt,
+                // لا تاريخ خروج ولا ليالٍ ولا أيام: الحجز يقع في مداه وحده،
+                // والأعمدة الثلاثة تُترك فارغة كي لا يُعدّ ما ليس معدودًا.
+                'check_out_date' => null,
+                'nights' => null,
+                'days_count' => null,
+            ];
+        }
+
         if ($period === StayPeriod::PERIOD) {
             $nights = $this->guardStay($unit, $scope, $date, (string) $checkOut, $sectionIds, $clientId, $ignoreId);
             [$startsAt, $endsAt] = StayPeriod::range($date, (string) $checkOut, $unit);
@@ -273,6 +321,71 @@ class ChaletBookingService
             'nights' => null,
             'days_count' => $days,
         ];
+    }
+
+    /**
+     * التحقق من حجز الساعات ومن خلوّ الشاليه فيه.
+     *
+     * الساعتان تُفحصان هنا لا في طبقة التحقق وحدها: الخدمة تُستدعى من الشاشة
+     * ومن الموقع العام، ومدًى مقلوبٌ أو ممتدٌّ يومًا كاملًا يقفل الشاليه على
+     * غير ما اتُّفق عليه.
+     *
+     * @param  array{start?: string|null, end?: string|null, amount?: mixed}  $hourly
+     * @param  list<int>  $sectionIds
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     *
+     * @throws ValidationException
+     */
+    private function guardHourly(
+        Unit $unit,
+        string $scope,
+        string $date,
+        array $hourly,
+        array $sectionIds,
+        ?int $clientId,
+        ?int $ignoreId = null,
+    ): array {
+        $start = $hourly['start'] ?? null;
+        $end = $hourly['end'] ?? null;
+
+        if (! $start || ! $end) {
+            throw ValidationException::withMessages([
+                'start_time' => 'الحجز بالساعات يحتاج ساعة بداية وساعة نهاية.',
+            ]);
+        }
+
+        [$startsAt, $endsAt] = HourlyPeriod::range($date, $start, $end);
+        $minutes = $startsAt->diffInMinutes($endsAt);
+
+        if ($minutes < HourlyPeriod::MIN_MINUTES) {
+            throw ValidationException::withMessages([
+                'end_time' => 'أقصر حجز بالساعات '.HourlyPeriod::MIN_MINUTES.' دقيقة.',
+            ]);
+        }
+
+        // ما بلغ اليوم يُباع ليلةً لا ساعات: السعر عندئذٍ سعر مبيت، وبيعه
+        // بالساعة يخسر المؤسسة فرق الليلة.
+        if ($minutes > HourlyPeriod::MAX_HOURS * 60) {
+            throw ValidationException::withMessages([
+                'end_time' => 'ما تجاوز '.HourlyPeriod::MAX_HOURS.' ساعة يُحجز بالليلة لا بالساعات.',
+            ]);
+        }
+
+        $result = $this->availability->checkRange(
+            $unit,
+            $scope,
+            $startsAt,
+            $endsAt,
+            $sectionIds,
+            $clientId !== null ? (int) $clientId : null,
+            $ignoreId,
+        );
+
+        if (! $result['ok']) {
+            throw ValidationException::withMessages(['availability' => $result['reason']]);
+        }
+
+        return [$startsAt, $endsAt];
     }
 
     /**

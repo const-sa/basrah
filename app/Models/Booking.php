@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Observers\BookingObserver;
 use App\Support\BookingPeriod;
+use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -304,7 +305,11 @@ class Booking extends Model
 
     public function periodLabel(): string
     {
-        return BookingPeriod::label($this->period);
+        // الحجز بالساعات لا فترةَ له في الإعدادات تُقرأ منها تسميته: ساعتاه
+        // مكتوبتان في مداه هو، فاسمه ثابت هنا.
+        return $this->isHourly()
+            ? HourlyPeriod::LABEL
+            : BookingPeriod::label($this->period);
     }
 
     public function sourceLabel(): string
@@ -343,6 +348,25 @@ class Booking extends Model
     }
 
     /**
+     * هل بيع هذا الحجز بالساعة؟
+     *
+     * شكلٌ ثالث إلى جانب الإقامة والفترة: ساعتاه يكتبهما الموظف لكل حجز على
+     * حدة، ومبلغه يُتَّفق عليه ولا يُقرأ من جدول أسعار.
+     */
+    public function isHourly(): bool
+    {
+        return $this->period === HourlyPeriod::PERIOD;
+    }
+
+    /**
+     * عدد ساعات الحجز — من مداه المحفوظ لا من عمودٍ يجاوره.
+     */
+    public function hoursCount(): float
+    {
+        return $this->isHourly() ? HourlyPeriod::hours($this->starts_at, $this->ends_at) : 0.0;
+    }
+
+    /**
      * عدد ليالي الإقامة — ليلة واحدة على الأقل، وصفر لحجز القاعة.
      */
     public function nightsCount(): int
@@ -368,7 +392,13 @@ class Booking extends Model
      */
     public function daysCount(): int
     {
-        return $this->isStay() ? 0 : BookingPeriod::days($this->days_count);
+        // الحجز بالساعات يقع داخل يومه — وإن عبر منتصف الليل — فلا يُعدّ
+        // أيامًا، وعدّه يومًا يجعل تقويم الشهر يرسمه في يومين.
+        if ($this->isStay() || $this->isHourly()) {
+            return 0;
+        }
+
+        return BookingPeriod::days($this->days_count);
     }
 
     /**
@@ -397,6 +427,14 @@ class Booking extends Model
      */
     public function scheduleLabel(): string
     {
+        // الساعات أولًا: هي ما اتُّفق عليه، ومن الساعة إلى الساعة هو ما
+        // يُراجَع عند التسليم — فيُذكران معًا في الصف وفي العقد.
+        if ($this->isHourly()) {
+            return HourlyPeriod::label($this->hoursCount())
+                .' — من '.HourlyPeriod::time($this->starts_at)
+                .' إلى '.HourlyPeriod::time($this->ends_at);
+        }
+
         if (! $this->isStay()) {
             $days = $this->daysCount();
 

@@ -11,6 +11,7 @@ use App\Services\BookingService;
 use App\Services\ChaletBookingService;
 use App\Services\WhatsappNotifier;
 use App\Support\BookingPeriod;
+use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -134,6 +135,9 @@ class ChaletBookingsController extends BaseBookingsController
             'booking' => [
                 ...$this->present($booking),
                 'discount_amount' => (float) $booking->discount_amount,
+                // المبلغ المتَّفق عليه في الحجز بالساعات — تفتح عليه الشاشة
+                // خانةَ المبلغ، فلا يُعاد الاتفاق كتابةً في كل تعديل.
+                'base_amount' => (float) $booking->base_amount,
                 'addons' => $booking->addons->mapWithKeys(
                     fn ($a) => [$a->id => (int) $a->pivot->quantity],
                 ),
@@ -196,7 +200,12 @@ class ChaletBookingsController extends BaseBookingsController
             'section_ids' => ['array', 'max:1'],
             'section_ids.*' => ['integer', 'exists:unit_sections,id'],
             'booking_date' => ['required', 'date'],
-            'period' => ['nullable', Rule::in(StayPeriod::pricingKeys())],
+            'period' => ['nullable', Rule::in([...StayPeriod::pricingKeys(), HourlyPeriod::PERIOD])],
+            // ساعتا الحجز بالساعات ومبلغه المتَّفق عليه — تُقرأ في هذا الشكل
+            // وحده، ويتجاهلها غيره كما يتجاهل تاريخ الخروج.
+            'start_time' => ['nullable', 'date_format:H:i'],
+            'end_time' => ['nullable', 'date_format:H:i'],
+            'hourly_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             // Dropped outright for a day-use booking rather than merely made
             // optional: the form keeps a check-out date in state while the
             // field is hidden, and validating one nothing reads would fail the
@@ -215,6 +224,10 @@ class ChaletBookingsController extends BaseBookingsController
         $unit = Unit::with(['sections', 'prices'])->findOrFail($data['unit_id']);
         $sectionIds = $data['scope'] === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
         $period = $data['period'] ?? StayPeriod::PERIOD;
+
+        if ($period === HourlyPeriod::PERIOD) {
+            return $this->hourlyQuote($unit, $data, $sectionIds);
+        }
 
         if ($period !== StayPeriod::PERIOD) {
             return $this->dayUseQuote($unit, $data, $period, $sectionIds);
@@ -251,6 +264,71 @@ class ChaletBookingsController extends BaseBookingsController
                 $unit,
                 $data['booking_date'],
                 $data['check_out_date'],
+                $sectionIds,
+                $data['addons'] ?? [],
+                (float) ($data['discount_amount'] ?? 0),
+            ),
+        ]);
+    }
+
+    /**
+     * الإتاحة والسعر لحجزٍ بالساعات.
+     *
+     * السعر هنا هو ما أدخله الموظف لا ما يُحسب له: لا جدول لهذا الشكل. وتبقى
+     * الإتاحة تُفحص كما تُفحص في سائر الأشكال — على المدى نفسه — فالساعتان
+     * تقفلان الشاليه فيهما ويقفلانه على الإقامة التي تتقاطع معهما.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<int>  $sectionIds
+     */
+    private function hourlyQuote(Unit $unit, array $data, array $sectionIds): JsonResponse
+    {
+        $start = $data['start_time'] ?? null;
+        $end = $data['end_time'] ?? null;
+
+        // الشاشة تسأل عن السعر قبل أن تُكتب الساعتان، فيُردّ عليها ببيانٍ
+        // لما ينقص لا برفضٍ يبدو خطأً في الشاليه.
+        if (! $start || ! $end) {
+            return response()->json([
+                'availability' => [
+                    'ok' => false,
+                    'reason' => 'اكتب ساعة البداية وساعة النهاية.',
+                    'conflicts' => [],
+                ],
+                'pricing' => null,
+            ]);
+        }
+
+        [$startsAt, $endsAt] = HourlyPeriod::range($data['booking_date'], $start, $end);
+        $minutes = $startsAt->diffInMinutes($endsAt);
+
+        if ($minutes < HourlyPeriod::MIN_MINUTES || $minutes > HourlyPeriod::MAX_HOURS * 60) {
+            return response()->json([
+                'availability' => [
+                    'ok' => false,
+                    'reason' => $minutes < HourlyPeriod::MIN_MINUTES
+                        ? 'أقصر حجز بالساعات '.HourlyPeriod::MIN_MINUTES.' دقيقة.'
+                        : 'ما تجاوز '.HourlyPeriod::MAX_HOURS.' ساعة يُحجز بالليلة لا بالساعات.',
+                    'conflicts' => [],
+                ],
+                'pricing' => null,
+            ]);
+        }
+
+        return response()->json([
+            'availability' => $this->availability->checkRange(
+                $unit,
+                $data['scope'],
+                $startsAt,
+                $endsAt,
+                $sectionIds,
+                isset($data['client_id']) ? (int) $data['client_id'] : null,
+                $data['ignore_booking_id'] ?? null,
+            ),
+            'pricing' => $this->pricing->quoteHourly(
+                $unit,
+                (float) ($data['hourly_amount'] ?? 0),
+                HourlyPeriod::hours($startsAt, $endsAt),
                 $sectionIds,
                 $data['addons'] ?? [],
                 (float) ($data['discount_amount'] ?? 0),
@@ -405,6 +483,19 @@ class ChaletBookingsController extends BaseBookingsController
     }
 
     /**
+     * يُطلَب الحقل في الحجز بالساعات، ويُسقَط في غيره.
+     *
+     * الإسقاط لا الاختيار: الشاشة تحتفظ بالساعتين في حالتها بعد التبديل إلى
+     * شكل آخر، فالتحقق عليهما هناك يردّ حجزًا صحيحًا بسبب حقلٍ لا يُعرض.
+     */
+    private function requiredIfHourly(Request $request): ExcludeIf|string
+    {
+        return $request->input('period') === HourlyPeriod::PERIOD
+            ? 'required'
+            : Rule::excludeIf(true);
+    }
+
+    /**
      * Drops the field unless this request is an overnight stay, so a day-use
      * booking neither validates nor keeps a check-out date.
      */
@@ -432,7 +523,12 @@ class ChaletBookingsController extends BaseBookingsController
             // A chalet is a stay by default. A day-use booking names one of
             // the day periods instead, and then carries days_count rather
             // than a check-out date — see ChaletBookingService::plan().
-            'period' => ['nullable', Rule::in(StayPeriod::pricingKeys())],
+            'period' => ['nullable', Rule::in([...StayPeriod::pricingKeys(), HourlyPeriod::PERIOD])],
+            // الحجز بالساعات وحده يحمل ساعتيه ومبلغه، ويلزمانه: بلا واحدة
+            // منهما لا مدى يُحجز به.
+            'start_time' => [$this->requiredIfHourly($request), 'date_format:H:i'],
+            'end_time' => [$this->requiredIfHourly($request), 'date_format:H:i'],
+            'hourly_amount' => [$this->requiredIfHourly($request), 'numeric', 'min:0', 'max:9999999999'],
             // See the note in quote(): a day-use booking has no check-out
             // date, so a leftover one is dropped instead of validated.
             'check_out_date' => [

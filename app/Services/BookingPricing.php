@@ -8,6 +8,7 @@ use App\Models\Package;
 use App\Models\Unit;
 use App\Models\UnitPrice;
 use App\Support\BookingPeriod;
+use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
 use App\Support\Vat;
 use App\Support\Weekdays;
@@ -243,6 +244,67 @@ class BookingPricing
             // أسطر الليالي تُدمج في سطر واحد إن تشابهت، وإلا صارت قائمة
             // إقامة شهر ثلاثين سطرًا لا يقرأها أحد.
             'lines' => [...$this->foldNightLines($lines), ...$addonLines],
+        ];
+    }
+
+    /**
+     * تسعيرة حجزٍ بالساعات — مبلغٌ متَّفق عليه لا مبلغٌ محسوب.
+     *
+     * سائر الأشكال تقرأ سعرها من جدول الوحدة: الليلة بسعر ليلتها، والفترة
+     * بسعر فترتها. وهذا الشكل لا جدول له — الساعتان تُختاران لكل حجز على حدة،
+     * والمبلغ يُتَّفق عليه في المكالمة. فيدخل المبلغ كما أُدخل ويُحسب عليه ما
+     * يُحسب على غيره: الإضافات فوقه، والخصم منه، والضريبة على صافيه.
+     *
+     * ولا عربون محسوب هنا: العربون نسبةٌ أو مبلغٌ في صف تسعيرة، ولا صف
+     * لهذا الشكل. والموظف يقبض ما يتَّفق عليه من لوحة الدفعات.
+     *
+     * @param  list<int>  $sectionIds
+     * @param  array<int, int>  $addons
+     * @return array<string, mixed>
+     */
+    public function quoteHourly(
+        Unit $unit,
+        float $amount,
+        float $hours,
+        array $sectionIds = [],
+        array $addons = [],
+        float $discount = 0,
+    ): array {
+        $base = round(max(0, $amount), 2);
+        $scope = $sectionIds === [] ? 'whole' : 'sections';
+
+        // السطر يقول ما بيع وبكم: القسم يحمل المبلغ كله لأنه المحجوز وحده،
+        // وبه يُكتب سعر القسم في جدول الربط كما يُكتب في سائر الأشكال.
+        $label = $scope === 'whole'
+            ? "{$unit->name} — الوحدة كاملة"
+            : "{$unit->name} — ".$unit->sections()->whereIn('id', $sectionIds)->pluck('name')->implode('، ');
+
+        $lines = [[
+            'label' => $label.' ('.HourlyPeriod::label($hours).')',
+            'amount' => $base,
+            ...($scope === 'sections' ? ['section_id' => (int) $sectionIds[0]] : []),
+        ]];
+
+        [$addonsTotal, $addonLines] = $this->addonsTotal($addons);
+
+        $discount = (float) max(0, round($discount, 2));
+        $net = (float) max(0, round($base + $addonsTotal - $discount, 2));
+        $tax = Vat::breakdown($net);
+
+        return [
+            'base_amount' => $base,
+            'package_amount' => 0.0,
+            'event_fee_amount' => 0.0,
+            'addons_amount' => $addonsTotal,
+            'discount_amount' => $discount,
+            ...$tax,
+            'deposit_amount' => 0.0,
+            'is_weekend' => false,
+            'hours' => $hours,
+            'hours_label' => HourlyPeriod::label($hours),
+            'package' => null,
+            'event_type' => null,
+            'lines' => [...$lines, ...$addonLines],
         ];
     }
 

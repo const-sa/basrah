@@ -38,9 +38,14 @@ interface ExistingBooking {
     section_ids: number[];
     booking_date: string;
     check_out_date: string | null;
-    /** 'overnight' is a stay; any other period is a day-use booking. */
+    /** 'overnight' is a stay; 'hourly' is sold by the hour; anything else is day use. */
     period: string;
     days_count: number | null;
+    /** مدى الحجز المحفوظ — منه تُقرأ ساعتا الحجز بالساعات عند تعديله. */
+    starts_at: string;
+    ends_at: string;
+    /** المبلغ المتَّفق عليه — هو مبلغ الحجز بالساعات كما أُدخل. */
+    base_amount: number;
     status: string;
     discount_amount: number;
     /** The deposit agreed on this booking, and what is still held of it. */
@@ -62,6 +67,8 @@ interface Quote {
         /** Stay quotes carry nights; day-use quotes carry days instead. */
         nights?: number; weekend_nights?: number; average_night?: number;
         days?: number;
+        /** وحجز الساعات يحمل ساعاته — لا ليلة له ولا يوم. */
+        hours?: number; hours_label?: string;
         lines: QuoteLine[];
     } | null;
 }
@@ -102,6 +109,17 @@ const today = todayString();
 const STAY = 'overnight';
 
 /**
+ * الحجز بالساعات: شكلٌ ثالث لا فترةَ له في الإعدادات.
+ *
+ * الفترات الثلاث ساعاتها مكتوبة سلفًا وأسعارها مسعَّرة؛ وهذا يكتب الموظف
+ * ساعتيه ويُدخل مبلغه المتَّفق عليه في المكالمة.
+ */
+const HOURLY = 'hourly';
+
+/** ساعة الطابع الزمني «Y-m-d H:i:s» كما تقبلها خانة الوقت. */
+const timeOf = (at: string) => at.slice(11, 16);
+
+/**
  * أقدم تاريخ دخول يقبله الحقل — اليوم، فالشاليه لا يُحجز بأثر رجعي.
  * ويُستثنى حجز قائم مضى تاريخه ليبقى قابلًا للفتح والتصحيح.
  */
@@ -126,6 +144,11 @@ const form = useForm({
     // server reads to decide which shape it is.
     period: props.booking?.period ?? STAY,
     days_count: props.booking?.days_count ?? 1,
+    // ساعتا الحجز بالساعات ومبلغه. الحجز القائم يقرؤهما من مداه المحفوظ،
+    // فتفتح الشاشة على ما اتُّفق عليه لا على قيمٍ افتراضية.
+    start_time: props.booking?.period === HOURLY ? timeOf(props.booking.starts_at) : '16:00',
+    end_time: props.booking?.period === HOURLY ? timeOf(props.booking.ends_at) : '21:00',
+    hourly_amount: props.booking?.period === HOURLY ? props.booking.base_amount : 0,
     // الإقامة الجديدة مؤكدة افتراضيًا — و«مبدئي» يُختار من القائمة عند الحاجة.
     status: props.booking?.status ?? 'confirmed',
     addons: { ...(props.booking?.addons ?? {}) } as Record<number, number>,
@@ -199,6 +222,52 @@ const letByRoom = computed(() => selectedUnit.value?.allows_sections ?? false);
 // ── إقامة بليالٍ أم حجز نهاري ───────────────────────────────
 
 const isStay = computed(() => form.period === STAY);
+const isHourly = computed(() => form.period === HOURLY);
+
+/**
+ * عدد ساعات المدى المكتوب، مقرَّبًا إلى ربع الساعة كما يقرّبه الخادم.
+ *
+ * والنهاية التي لا تتجاوز البداية تقع في الغد: من العاشرة مساءً إلى الواحدة
+ * صباحًا ثلاث ساعات لا واحدٌ وعشرون بالسالب.
+ */
+const hourlyMinutes = computed(() => {
+    const [fromH, fromM] = (form.start_time || '').split(':').map(Number);
+    const [toH, toM] = (form.end_time || '').split(':').map(Number);
+
+    if ([fromH, fromM, toH, toM].some((n) => Number.isNaN(n))) return 0;
+
+    const span = toH * 60 + toM - (fromH * 60 + fromM);
+
+    return span > 0 ? span : span + 24 * 60;
+});
+
+const hours = computed(() => Math.round(hourlyMinutes.value / 60 * 4) / 4);
+
+/** عدد الساعات كما يُقرأ — «ساعتان ونصف» لا «2.5». */
+const hoursLabel = computed(() => {
+    const whole = Math.floor(hours.value);
+    const fraction = Math.round((hours.value - whole) * 100) / 100;
+    const fractionLabel = { 0.25: 'ربع', 0.5: 'نصف', 0.75: 'ثلاثة أرباع' }[fraction] ?? null;
+
+    const wholeLabel = whole === 0 ? null
+        : whole === 1 ? 'ساعة'
+        : whole === 2 ? 'ساعتان'
+        : whole <= 10 ? `${whole} ساعات`
+        : `${whole} ساعة`;
+
+    if (wholeLabel === null) return fractionLabel === null ? 'أقل من ساعة' : `${fractionLabel} ساعة`;
+
+    return fractionLabel === null ? wholeLabel : `${wholeLabel} و${fractionLabel}`;
+});
+
+/** ما يمنع الحفظ من مدى الساعات — نصفُ ساعةٍ حدٌّ أدنى، وما بلغ اليوم يُحجز ليلةً. */
+const hourlyBlocker = computed<string | null>(() => {
+    if (!isHourly.value) return null;
+    if (hourlyMinutes.value < 30) return 'أقصر حجز بالساعات 30 دقيقة.';
+    if (hourlyMinutes.value > 23 * 60) return 'ما تجاوز 23 ساعة يُحجز بالليلة لا بالساعات.';
+
+    return null;
+});
 
 /**
  * Day periods the selected chalet may be sold for. Pricing is what opens a
@@ -271,6 +340,15 @@ const periodChoice = computed<string>({
     set: (key) => {
         if (key === STAY) {
             setMode(true);
+
+            return;
+        }
+
+        // الحجز بالساعات لا يتكرر أيامًا ولا يقرأ فترةً مسعَّرة، فيُكتب
+        // مباشرةً بلا ضبط المدى الذي يلزم الفترات النهارية.
+        if (key === HOURLY) {
+            form.period = HOURLY;
+            form.days_count = 1;
 
             return;
         }
@@ -348,7 +426,13 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 const refreshQuote = () => {
     // A stay needs a night between its dates; a day-use booking only needs
     // its period, which the date and days count already imply.
-    const rangeReady = isStay.value ? nights.value >= 1 : form.period !== STAY;
+    // الحجز بالساعات جاهزٌ للسؤال متى صحّ مداه؛ ومبلغه لا يمنع السؤال لأن
+    // الإتاحة تُفحص قبل أن يُتَّفق على المبلغ.
+    const rangeReady = isStay.value
+        ? nights.value >= 1
+        : isHourly.value
+            ? hourlyBlocker.value === null
+            : form.period !== STAY;
 
     if (!form.unit_id || !rangeReady || (form.scope === 'sections' && !form.section_ids.length)) {
         quote.value = null;
@@ -376,6 +460,9 @@ const refreshQuote = () => {
                     period: form.period,
                     check_out_date: isStay.value ? form.check_out_date : null,
                     days_count: isStay.value ? null : days.value,
+                    start_time: isHourly.value ? form.start_time : null,
+                    end_time: isHourly.value ? form.end_time : null,
+                    hourly_amount: isHourly.value ? form.hourly_amount : null,
                     client_id: form.client_id,
                     addons: form.addons,
                     discount_amount: form.discount_amount,
@@ -390,7 +477,7 @@ const refreshQuote = () => {
 };
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.client_id, JSON.stringify(form.addons), form.discount_amount],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.start_time, form.end_time, form.hourly_amount, form.client_id, JSON.stringify(form.addons), form.discount_amount],
     refreshQuote,
     { deep: true },
 );
@@ -571,7 +658,10 @@ const periodFree = (key: string): boolean =>
  * بدل أن يمرّ الحجز ويرتدّ من الخادم.
  */
 const dayUseBlocker = computed<string | null>(() => {
-    if (isStay.value) return null;
+    // الحجز بالساعات ليس فترةً في التقويم: التقويم يرسم الفترات الثلاث
+    // وحدها، فقراءةُ إتاحته منها تقول «محجوزة» عن شكلٍ لا وجود له فيها.
+    // حارسه مداه هو، وعرضُ السعر يفحص التعارض قبل الحفظ.
+    if (isStay.value || isHourly.value) return null;
 
     if (!periodFree(form.period)) return 'الفترة المختارة محجوزة في أحد أيام الحجز — اختر فترة أخرى أو تاريخًا آخر.';
 
@@ -637,7 +727,7 @@ const setPayChoice = (choice: 'none' | 'full') => {
 const inlineErrorKeys = computed(() => [
     'unit_id', 'client_id', 'booking_date', 'period', 'days_count',
     'availability', 'payment_amount', 'discount_amount', 'notes',
-    'security_deposit_amount',
+    'security_deposit_amount', 'start_time', 'end_time', 'hourly_amount',
     ...(isStay.value ? ['check_out_date'] : []),
 ]);
 
@@ -650,7 +740,7 @@ const otherErrors = computed(() =>
 const submit = () => {
     // الزرّ معطَّل في هذه الحال، لكن Enter داخل حقلٍ يُرسل النموذج من دونه —
     // فالحارس هنا لا في الزرّ وحده.
-    if (dayUseBlocker.value !== null) return;
+    if (dayUseBlocker.value !== null || hourlyBlocker.value !== null) return;
 
     // The two shapes carry different fields, and the one that does not apply
     // is sent as null rather than left at whatever the hidden input still
@@ -659,7 +749,7 @@ const submit = () => {
     form.transform((data) => ({
         ...data,
         check_out_date: isStay.value ? data.check_out_date : null,
-        days_count: isStay.value ? null : days.value,
+        days_count: isStay.value || isHourly.value ? null : days.value,
     }));
 
     isEdit.value
@@ -724,9 +814,9 @@ const submit = () => {
                                 <AvailabilityDatePicker
                                     v-model="form.booking_date"
                                     :min="minDate"
-                                    :blocked="isStay ? takenNights : dayUseDays.closed"
-                                    :partial="isStay ? [] : dayUseDays.partial"
-                                    :in-range="isStay ? stayNights : dayUseSpan"
+                                    :blocked="isStay ? takenNights : isHourly ? [] : dayUseDays.closed"
+                                    :partial="isStay || isHourly ? [] : dayUseDays.partial"
+                                    :in-range="isStay ? stayNights : isHourly ? [form.booking_date] : dayUseSpan"
                                     :loading="loadingDiary"
                                     @view="onCalendarView"
                                 />
@@ -745,9 +835,11 @@ const submit = () => {
                                     <option v-for="p in dayPeriods" :key="p.key" :value="p.key" :disabled="!periodFree(p.key)">
                                         {{ p.label }} — {{ formatTime12(p.start) }} إلى {{ formatTime12(p.end) }}{{ periodFree(p.key) ? '' : ' (محجوزة)' }}
                                     </option>
+                                    <!-- بالساعات: لا يقرأ جدول الأسعار، فلا يُشترط تسعيرُ فترةٍ لعرضه -->
+                                    <option :value="HOURLY">بالساعات — تُحدَّد ساعتاه ومبلغه</option>
                                 </select>
                                 <p v-if="form.errors.period" class="mt-1 text-xs text-red-500">{{ form.errors.period }}</p>
-                                <p v-else-if="!isStay && !periodFree(form.period)" class="mt-1 text-[11px] font-bold text-red-600">
+                                <p v-else-if="!isStay && !isHourly && !periodFree(form.period)" class="mt-1 text-[11px] font-bold text-red-600">
                                     الفترة المختارة محجوزة في هذا التاريخ — اختر فترة أخرى أو تاريخًا آخر.
                                 </p>
                                 <p v-else-if="selectedUnit && !canBookByDay" class="mt-1 text-[11px] font-semibold text-slate-600">
@@ -775,16 +867,57 @@ const submit = () => {
                     <div class="rounded-2xl border-2 border-teal-100 bg-white p-5 shadow-sm">
                         <div class="mb-4 flex items-center justify-between gap-2 border-b-2 border-slate-300 pb-2.5">
                             <h2 class="flex items-center gap-1.5 text-base font-extrabold text-slate-900">
-                                <Moon class="h-4 w-4 text-teal-500" /> {{ isStay ? 'مدة الإقامة' : 'فترة الحجز' }}
+                                <Moon class="h-4 w-4 text-teal-500" />
+                                {{ isStay ? 'مدة الإقامة' : isHourly ? 'ساعات الحجز' : 'فترة الحجز' }}
                             </h2>
                             <span class="rounded-lg bg-teal-600 px-3 py-1 text-sm font-extrabold text-white">
                                 <template v-if="isStay">{{ nights }} {{ nights === 1 ? 'ليلة' : 'ليالٍ' }}</template>
+                                <template v-else-if="isHourly">{{ hoursLabel }}</template>
                                 <template v-else>{{ periodLabel(form.period) }}{{ days > 1 ? ` × ${days}` : '' }}</template>
                             </span>
                         </div>
 
+                        <!--
+                            الحجز بالساعات: ساعتاه ومبلغه. المبلغ يُكتب هنا لا
+                            يُقرأ من جدول — لا تسعيرة لهذا الشكل، وما يُتَّفق
+                            عليه في المكالمة هو ما يدخل الحجز.
+                        -->
+                        <div v-if="isHourly" class="space-y-3">
+                            <div class="grid gap-3 sm:grid-cols-3">
+                                <div>
+                                    <div class="mb-1 flex items-center gap-1 text-sm font-extrabold text-slate-900">
+                                        <LogIn class="h-3.5 w-3.5 text-emerald-500" /> من الساعة
+                                    </div>
+                                    <input v-model="form.start_time" type="time" dir="ltr" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
+                                    <p v-if="form.errors.start_time" class="mt-1 text-xs text-red-500">{{ form.errors.start_time }}</p>
+                                </div>
+                                <div>
+                                    <div class="mb-1 flex items-center gap-1 text-sm font-extrabold text-slate-900">
+                                        <LogOut class="h-3.5 w-3.5 text-rose-500" /> إلى الساعة
+                                    </div>
+                                    <input v-model="form.end_time" type="time" dir="ltr" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
+                                    <p v-if="form.errors.end_time" class="mt-1 text-xs text-red-500">{{ form.errors.end_time }}</p>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-extrabold text-slate-900">المبلغ المتَّفق عليه</label>
+                                    <input v-model.number="form.hourly_amount" type="number" min="0" step="any" dir="ltr" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
+                                    <p v-if="form.errors.hourly_amount" class="mt-1 text-xs text-red-500">{{ form.errors.hourly_amount }}</p>
+                                </div>
+                            </div>
+
+                            <p v-if="hourlyBlocker" class="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600">
+                                {{ hourlyBlocker }}
+                            </p>
+                            <p v-else class="text-[11px] font-semibold text-slate-600">
+                                {{ hoursLabel }} — تُقفل الوحدة فيها ولا تُباع لغير هذا النزيل.
+                                <span v-if="hourlyMinutes > 0 && form.end_time <= form.start_time" class="font-bold text-amber-700">
+                                    النهاية في اليوم التالي.
+                                </span>
+                            </p>
+                        </div>
+
                         <!-- الحجز النهاري: التاريخ والفترة فوق، فلا يبقى هنا إلا تكرار الفترة أيامًا -->
-                        <div v-if="!isStay" class="grid gap-3 sm:grid-cols-2">
+                        <div v-else-if="!isStay" class="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="mb-1 block text-sm font-extrabold text-slate-900">عدد الأيام</label>
                                 <input v-model.number="form.days_count" type="number" min="1" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
@@ -901,6 +1034,20 @@ const submit = () => {
                             </div>
                         </div>
 
+                        <!-- الحجز بالساعات يُقاس بساعاته وبمداها من متى إلى متى -->
+                        <div v-else-if="isHourly" class="mb-2 grid grid-cols-2 gap-2">
+                            <div class="rounded-xl bg-teal-50 p-2 text-center">
+                                <div class="text-[10px] font-bold text-teal-600">المدة</div>
+                                <div class="text-base font-extrabold text-teal-700">{{ hoursLabel }}</div>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 p-2 text-center">
+                                <div class="text-[10px] font-extrabold text-slate-600">من — إلى</div>
+                                <div class="text-base font-extrabold text-slate-700" dir="ltr">
+                                    {{ formatTime12(form.start_time) }} – {{ formatTime12(form.end_time) }}
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- الحجز النهاري يُقاس بالفترة والأيام لا بالليالي -->
                         <div v-else class="mb-2 grid grid-cols-2 gap-2">
                             <div class="rounded-xl bg-teal-50 p-2 text-center">
@@ -917,7 +1064,7 @@ const submit = () => {
                             <span v-if="isStay && pricing.weekend_nights > 0" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
                                 {{ pricing.weekend_nights }} ليلة نهاية أسبوع
                             </span>
-                            <span v-else-if="!isStay && pricing.is_weekend" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                            <span v-else-if="!isStay && !isHourly && pricing.is_weekend" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
                                 يشمل نهاية الأسبوع
                             </span>
                         </div>
@@ -1062,13 +1209,14 @@ const submit = () => {
                         <p v-if="blocked" class="mb-2 text-xs font-bold text-red-600">لا يمكن الحفظ ما دام الشاليه غير متاح</p>
                         <p v-else-if="isStay && nights < 1" class="mb-2 text-xs font-bold text-amber-600">مدة الإقامة ليلة واحدة على الأقل</p>
                         <p v-else-if="dayUseBlocker" class="mb-2 text-xs font-bold text-amber-600">{{ dayUseBlocker }}</p>
+                        <p v-else-if="hourlyBlocker" class="mb-2 text-xs font-bold text-amber-600">{{ hourlyBlocker }}</p>
 
                         <!-- خطأ لا يقابله حقل ظاهر — حتى لا يبدو الحفظ بلا أثر -->
                         <ul v-if="otherErrors.length" class="mb-2 space-y-1 rounded-lg bg-red-50 px-3 py-2">
                             <li v-for="(msg, i) in otherErrors" :key="i" class="text-[11px] font-bold text-red-600">{{ msg }}</li>
                         </ul>
                         <div class="flex gap-2">
-                            <button type="submit" :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights)) || dayUseBlocker !== null" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
+                            <button type="submit" :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights)) || dayUseBlocker !== null || hourlyBlocker !== null" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
                                 {{ isEdit ? 'حفظ التعديل' : isStay ? 'حفظ الإقامة' : 'حفظ الحجز' }}
                             </button>
                             <Link href="/admin/bookings/chalets" class="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">

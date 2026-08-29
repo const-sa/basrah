@@ -294,7 +294,9 @@ class ContractService
             'check_out_day' => Weekdays::label((int) $booking->ends_at->dayOfWeek),
             'check_in_time' => $this->timeLabel($booking->starts_at),
             'check_out_time' => $this->timeLabel($booking->ends_at),
-            'period' => BookingPeriod::label($booking->period),
+            // من الحجز لا من جدول الفترات: الحجز بالساعات لا فترة له في
+            // الإعدادات، وقراءته من هناك تطبع مفتاحه الإنجليزي في ورقة عقد.
+            'period' => $booking->periodLabel(),
             'starts_at' => $booking->starts_at->format('Y-m-d H:i'),
             'ends_at' => $booking->ends_at->format('Y-m-d H:i'),
             'guests_count' => (string) ($booking->guests_count ?? '—'),
