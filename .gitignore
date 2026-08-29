@@ -1,8 +1,4 @@
 /.phpunit.cache
-# Laravel rebuilds these from whatever is actually installed. Committed, they
-# carry a dev machine's package list to a host that ran `composer install
-# --no-dev`, and every artisan command there dies on a missing dev provider.
-/bootstrap/cache/*.php
 /node_modules
 /public/hot
 /public/storage

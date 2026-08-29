@@ -1,0 +1,8 @@
+# Laravel rebuilds everything here from whatever is actually installed, so none
+# of it belongs in the repo: committed, a dev machine's package manifest lands
+# on a host that ran `composer install --no-dev` and every artisan command there
+# dies on a missing dev provider. This file is the exception, and is tracked on
+# purpose — git stores no empty directories, and Laravel refuses to boot unless
+# the directory is present and writable.
+*
+!.gitignore
