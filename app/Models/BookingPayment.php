@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * A payment on a booking — deposit, instalment, refund, or a security-deposit
@@ -49,6 +50,7 @@ class BookingPayment extends Model
         'amount',
         'paid_on',
         'reference',
+        'attachment_path',
         'notes',
     ];
 
@@ -91,6 +93,14 @@ class BookingPayment extends Model
         return $this->type === 'refund' || in_array($this->type, self::SECURITY_RELEASES, true)
             ? -1 * (float) $this->amount
             : (float) $this->amount;
+    }
+
+    /**
+     * رابط إيصال الدفعة إن أُرفق — صورة الحوالة أو إشعار السداد.
+     */
+    public function attachmentUrl(): ?string
+    {
+        return $this->attachment_path ? Storage::url($this->attachment_path) : null;
     }
 
     /** Is this a security-deposit movement rather than part of the price? */

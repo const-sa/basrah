@@ -15,6 +15,7 @@ use App\Support\Tafqeet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,6 +36,25 @@ class BookingsController extends Controller
     // المسار المشترك لا يعرف نوع الحجز قبل جلبه، فالوسيط يقبل بديلَي النوعين
     // ويتم الفصل هنا بمفتاح النوع وحده.
     use AuthorizesByUnitType;
+
+    /**
+     * إيصال الدفعة — قائمة بيضاء صارمة بالامتداد ونوع المحتوى معًا: مرفق يفتحه
+     * محاسب لاحقًا لا يصحّ أن يكون صفحة أو ملفًا تنفيذيًا.
+     *
+     * الشرط واحد أينما أُرفق الإيصال — مع تسجيل الدفعة أو من ورقة الفاتورة —
+     * فيُكتب مرةً ويُقرأ في الموضعين.
+     *
+     * @var list<string>
+     */
+    private const RECEIPT_RULES = [
+        'file',
+        'max:5120', // 5MB
+        'mimes:pdf,jpg,jpeg,png,webp',
+        'mimetypes:application/pdf,image/jpeg,image/png,image/webp',
+    ];
+
+    /** المجلد الذي تُحفظ فيه إيصالات الدفعات على قرص public. */
+    private const RECEIPT_DIR = 'booking-payments';
 
     public function __construct(
         private readonly BookingService $bookings,
@@ -110,11 +130,18 @@ class BookingsController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01'],
             'paid_on' => ['required', 'date'],
             'reference' => ['nullable', 'string', 'max:100'],
+            'attachment' => ['nullable', ...self::RECEIPT_RULES],
             'notes' => ['nullable', 'string', 'max:1000'],
             'notify' => ['boolean'],
-        ]);
+        ], $this->receiptMessages('attachment'));
 
         $this->authorizeUnit($request, $booking->unit_id);
+
+        // الملف يُخزّن بعد التحقق من الصلاحية لا قبله: لا يُترك مرفق يتيم على القرص
+        // من محاولةٍ رُدّت.
+        if ($request->hasFile('attachment')) {
+            $data['attachment_path'] = $request->file('attachment')->store(self::RECEIPT_DIR, 'public');
+        }
 
         $payment = $this->bookings->recordPayment($booking, $data, $request->user()?->id);
 
@@ -149,6 +176,7 @@ class BookingsController extends Controller
                     'signed_amount' => $p->signedAmount(),
                     'paid_on' => $p->paid_on->toDateString(),
                     'reference' => $p->reference,
+                    'attachment_url' => $p->attachmentUrl(),
                     'notes' => $p->notes,
                     'received_by' => $p->receiver?->name,
                 ]),
@@ -165,6 +193,74 @@ class BookingsController extends Controller
                 'security_held' => $booking->securityHeld(),
             ],
         ]);
+    }
+
+    /**
+     * إرفاق إيصال بدفعة قائمة — أو استبدال إيصالها — من ورقة الفاتورة.
+     *
+     * الإرفاق عند تسجيل الدفعة ليس دائمًا ممكنًا: الحوالة تصل بعد قيد الدفعة
+     * بيوم، ومن يفتح الفاتورة ليراجعها هو من يجد الإيصال بيده. فبابٌ ثانٍ
+     * للإرفاق على الدفعة نفسها لا نسخة ثانية منها.
+     */
+    public function storeReceipt(Request $request, Booking $booking, BookingPayment $payment): RedirectResponse
+    {
+        $this->authorizeBookingAction($request, $booking, 'edit');
+
+        $this->authorizeUnit($request, $booking->unit_id);
+
+        // الدفعة تُطابَق بحجزها: رقمٌ في الرابط لا يكفي لفتح دفعة حجزٍ آخر.
+        abort_unless($payment->booking_id === $booking->id, 404);
+
+        $request->validate([
+            'receipt' => ['required', ...self::RECEIPT_RULES],
+        ], $this->receiptMessages('receipt'));
+
+        $previous = $payment->attachment_path;
+
+        $payment->update([
+            'attachment_path' => $request->file('receipt')->store(self::RECEIPT_DIR, 'public'),
+        ]);
+
+        // الإيصال القديم يُحذف بعد نجاح حفظ الجديد لا قبله — لئلا يضيع الاثنان.
+        if ($previous) {
+            Storage::disk('public')->delete($previous);
+        }
+
+        return back()->with('success', 'تم إرفاق إيصال الدفعة');
+    }
+
+    /**
+     * حذف إيصال دفعة — يُرفع خطأً فيُزال ويُرفق الصحيح.
+     */
+    public function destroyReceipt(Request $request, Booking $booking, BookingPayment $payment): RedirectResponse
+    {
+        $this->authorizeBookingAction($request, $booking, 'edit');
+
+        $this->authorizeUnit($request, $booking->unit_id);
+
+        abort_unless($payment->booking_id === $booking->id, 404);
+
+        if ($payment->attachment_path) {
+            Storage::disk('public')->delete($payment->attachment_path);
+            $payment->update(['attachment_path' => null]);
+        }
+
+        return back()->with('success', 'تم حذف المرفق');
+    }
+
+    /**
+     * رسائل رفض المرفق بالعربية — الحقل يختلف باختلاف الباب، والرسالة واحدة.
+     *
+     * @return array<string, string>
+     */
+    private function receiptMessages(string $field): array
+    {
+        return [
+            "{$field}.mimes" => 'نوع الملف غير مسموح. المسموح: PDF أو صورة.',
+            "{$field}.mimetypes" => 'نوع الملف غير مسموح. المسموح: PDF أو صورة.',
+            "{$field}.max" => 'حجم المرفق يتجاوز 5 ميجابايت.',
+            "{$field}.required" => 'اختر ملف الإيصال أولًا.',
+        ];
     }
 
     /**
@@ -317,6 +413,7 @@ class BookingsController extends Controller
                 'payment_status' => $this->paymentStatus($booking),
                 'lines' => $this->invoiceLines($booking),
                 'methods' => $this->paymentMethodTotals($booking),
+                'payments' => $this->invoicePayments($booking),
                 'unit_name' => $booking->unit?->name,
                 'unit_code' => $booking->unit?->code,
                 'unit_logo_url' => $booking->unit?->logoUrl(),
@@ -409,6 +506,34 @@ class BookingsController extends Controller
         }
 
         return $lines;
+    }
+
+    /**
+     * دفعات الحجز وإيصالاتها — تُعرض في ورقة الفاتورة لتُرفق منها.
+     *
+     * تُسرد الدفعات كلها لا المُرفَق منها وحده: الصفّ الخالي من إيصالٍ هو
+     * موضع الزرّ الذي يُرفق به، وإخفاؤه يُخفي الباب نفسه.
+     *
+     * ولا تُطبع: رابطٌ على ورقةٍ تُسلّم للعميل لا يُفتح.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function invoicePayments(Booking $booking): array
+    {
+        return $booking->payments()
+            ->orderBy('paid_on')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (BookingPayment $p) => [
+                'id' => $p->id,
+                'type_label' => BookingPayment::TYPES[$p->type] ?? $p->type,
+                'amount' => (float) $p->amount,
+                'paid_on' => $p->paid_on->toDateString(),
+                'reference' => $p->reference,
+                'method_label' => $p->methodLabel(),
+                'url' => $p->attachmentUrl(),
+            ])
+            ->all();
     }
 
     /**

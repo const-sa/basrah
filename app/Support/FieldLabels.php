@@ -14,6 +14,7 @@ class FieldLabels
 {
     private const MAP = [
         'reference' => 'المرجع',
+        'attachment_path' => 'المرفق',
         'number' => 'الرقم',
         'name' => 'الاسم',
         'code' => 'الرمز',

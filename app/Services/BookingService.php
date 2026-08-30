@@ -82,6 +82,7 @@ class BookingService
                 'amount' => $amount,
                 'paid_on' => $data['paid_on'] ?? now()->toDateString(),
                 'reference' => $data['reference'] ?? null,
+                'attachment_path' => $data['attachment_path'] ?? null,
                 'notes' => $data['notes'] ?? null,
             ]);
 

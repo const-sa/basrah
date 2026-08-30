@@ -3,7 +3,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowRight, MessageSquare, Printer } from 'lucide-vue-next';
+import { ArrowRight, Loader2, MessageSquare, Paperclip, Printer, Trash2, Upload } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 interface InvoiceLine {
@@ -11,6 +11,17 @@ interface InvoiceLine {
     note: string | null;
     quantity: number;
     amount: number;
+}
+
+/** دفعة على الفاتورة، ومعها إيصالها إن أُرفق — صورة الحوالة أو إشعار السداد. */
+interface InvoicePayment {
+    id: number;
+    type_label: string;
+    method_label: string;
+    amount: number;
+    paid_on: string;
+    reference: string | null;
+    url: string | null;
 }
 
 const props = defineProps<{
@@ -29,6 +40,7 @@ const props = defineProps<{
         payment_status: string;
         lines: InvoiceLine[];
         methods: { label: string; amount: number }[];
+        payments: InvoicePayment[];
         unit_name: string | null;
         unit_code: string | null;
         unit_logo_url: string | null;
@@ -89,7 +101,7 @@ const statusTone = computed(
 
 const print = () => window.print();
 
-const { can } = usePermissions();
+const { can, canBooking } = usePermissions();
 
 // الفاتورة تُرسل نصًّا على واتساب — والمرفق يحتاج ملفًا مخزَّنًا لا شاشةً
 // تُطبع، فذاك بابٌ آخر.
@@ -97,6 +109,66 @@ const sendInvoice = () => {
     if (!confirm(`إرسال فاتورة الحجز ${props.invoice.number} على واتساب؟`)) return;
 
     router.post(`/admin/bookings/${props.invoice.booking_id}/invoice/send`, {}, { preserveScroll: true });
+};
+
+// ── إيصالات التحويل ─────────────────────────────────────────
+// الإيصال يُرفق بالدفعة لا بالورقة: الحجز الواحد تدخله حوالتان بإيصالين،
+// فمرفقٌ واحد على الفاتورة يُضيّع أحدهما.
+// canBooking يطابق AuthorizesByUnitType على الخادم، فما يظهر في الشاشة هو ما يُقبل.
+const canAttach = computed(() => canBooking(props.invoice.unit_type, 'edit'));
+
+// حقل ملفٍ واحد للبطاقة كلها، يُوجَّه إلى الدفعة التي ضُغط زرّها: صفٌّ لكل
+// دفعة بحقله يملأ الشاشة بحقول لا تُرى.
+const receiptInput = ref<HTMLInputElement | null>(null);
+const targetPaymentId = ref<number | null>(null);
+const uploadingId = ref<number | null>(null);
+const uploadError = ref<string | null>(null);
+
+const pickReceipt = (paymentId: number) => {
+    targetPaymentId.value = paymentId;
+    uploadError.value = null;
+    receiptInput.value?.click();
+};
+
+const uploadReceipt = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    const paymentId = targetPaymentId.value;
+
+    // المتصفّح يُبقي اسم الملف بعد الرفع، فلا يُطلق حدث التغيير لو اختير هو
+    // نفسه ثانيةً — يُفرَّغ الحقل دائمًا لا عند النجاح وحده.
+    input.value = '';
+
+    if (!file || !paymentId) return;
+
+    uploadingId.value = paymentId;
+    uploadError.value = null;
+
+    router.post(
+        `/admin/bookings/${props.invoice.booking_id}/payments/${paymentId}/receipt`,
+        { receipt: file },
+        {
+            forceFormData: true,
+            preserveScroll: true,
+            onError: (errors) => (uploadError.value = errors.receipt ?? 'تعذّر رفع المرفق.'),
+            onFinish: () => {
+                uploadingId.value = null;
+                targetPaymentId.value = null;
+            },
+        },
+    );
+};
+
+const removeReceipt = (paymentId: number) => {
+    if (!confirm('حذف إيصال هذه الدفعة؟')) return;
+
+    uploadingId.value = paymentId;
+    uploadError.value = null;
+
+    router.delete(`/admin/bookings/${props.invoice.booking_id}/payments/${paymentId}/receipt`, {
+        preserveScroll: true,
+        onFinish: () => (uploadingId.value = null),
+    });
 };
 </script>
 
@@ -323,6 +395,87 @@ const sendInvoice = () => {
                     <span v-if="invoice.guests_count">عدد الضيوف: {{ invoice.guests_count }}</span>
                     <span v-if="issuer.email" dir="ltr">{{ issuer.email }}</span>
                 </div>
+            </div>
+
+            <!--
+                إيصالات التحويل — تُراجَع على الشاشة ولا تُطبع: رابطٌ على ورقةٍ
+                تُسلّم للعميل لا يُفتح. وتُسرد الدفعات كلها لا المُرفَق منها وحده،
+                لأن الصفّ الخالي هو موضع زرّ الإرفاق.
+            -->
+            <div class="mx-auto max-w-4xl rounded-xl border border-slate-300 bg-white px-8 py-5 shadow-sm print:hidden">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <Paperclip class="h-4 w-4 text-slate-500" />
+                        <h2 class="text-sm font-extrabold text-slate-900">مرفقات الدفعات وإيصالات التحويل</h2>
+                    </div>
+                    <span class="text-[11px] font-medium text-slate-500">صورة أو PDF حتى 5 ميجابايت</span>
+                </div>
+
+                <!-- حقل واحد يخدم صفوف البطاقة كلها -->
+                <input
+                    ref="receiptInput"
+                    type="file"
+                    class="hidden"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    @change="uploadReceipt"
+                />
+
+                <p v-if="uploadError" class="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{{ uploadError }}</p>
+
+                <ul v-if="invoice.payments.length" class="space-y-2">
+                    <li
+                        v-for="p in invoice.payments"
+                        :key="p.id"
+                        class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                    >
+                        <div class="flex flex-wrap items-center gap-2 text-[13px]">
+                            <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-extrabold text-slate-700">{{ p.type_label }}</span>
+                            <span class="font-extrabold text-slate-900" dir="ltr">{{ money(p.amount) }}</span>
+                            <span class="font-medium text-slate-600" dir="ltr">{{ p.paid_on }}</span>
+                            <span class="font-medium text-slate-600">{{ p.method_label }}</span>
+                            <span v-if="p.reference" class="font-medium text-slate-500" dir="ltr">#{{ p.reference }}</span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <a
+                                v-if="p.url"
+                                :href="p.url"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1 text-xs font-bold text-slate-800 hover:bg-slate-50"
+                            >
+                                <Paperclip class="h-3.5 w-3.5" /> فتح الإيصال
+                            </a>
+                            <span v-else class="text-xs font-medium text-slate-400">لا إيصال</span>
+
+                            <button
+                                v-if="canAttach"
+                                type="button"
+                                :disabled="uploadingId === p.id"
+                                @click="pickReceipt(p.id)"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                <Loader2 v-if="uploadingId === p.id" class="h-3.5 w-3.5 animate-spin" />
+                                <Upload v-else class="h-3.5 w-3.5" />
+                                {{ p.url ? 'استبدال' : 'إرفاق إيصال' }}
+                            </button>
+
+                            <button
+                                v-if="canAttach && p.url"
+                                type="button"
+                                :disabled="uploadingId === p.id"
+                                @click="removeReceipt(p.id)"
+                                class="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            >
+                                <Trash2 class="h-3.5 w-3.5" /> حذف
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+
+                <p v-else class="rounded-lg bg-slate-50 py-5 text-center text-xs font-medium text-slate-500">
+                    لا دفعات مسجّلة على هذا الحجز بعد — الإيصال يُرفق بدفعته، فسجّل الدفعة أولًا من لوحة الدفعات.
+                </p>
             </div>
         </div>
     </AppLayout>

@@ -191,6 +191,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::patch('bookings/{booking}/status', [BookingsController::class, 'changeStatus'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.status');
         Route::get('bookings/{booking}/payments', [BookingsController::class, 'payments'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.payments');
         Route::post('bookings/{booking}/payments', [BookingsController::class, 'storePayment'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.payments.store');
+        // إيصال الدفعة يُرفَق من ورقة الفاتورة أيضًا — الحوالة تصل بعد قيد الدفعة.
+        Route::post('bookings/{booking}/payments/{payment}/receipt', [BookingsController::class, 'storeReceipt'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.payments.receipt.store');
+        Route::delete('bookings/{booking}/payments/{payment}/receipt', [BookingsController::class, 'destroyReceipt'])->middleware('perm:hall_bookings.edit|chalet_bookings.edit')->name('bookings.payments.receipt.destroy');
         Route::post('bookings/{booking}/remind', [BookingsController::class, 'remind'])->middleware('perm:whatsapp.send')->name('bookings.remind');
         // تذكير المتبقي وإرسال الفاتورة (§14)
         Route::post('bookings/{booking}/remind-balance', [BookingsController::class, 'remindBalance'])->middleware('perm:whatsapp.send')->name('bookings.remind.balance');

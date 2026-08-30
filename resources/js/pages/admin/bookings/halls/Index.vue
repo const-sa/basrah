@@ -6,8 +6,8 @@ import { usePermissions } from '@/composables/usePermissions';
 import { useTableColumns, type ColumnPreset, type TableColumn } from '@/composables/useTableColumns';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { isClosedStatus, statusChipClass } from '@/lib/bookingStatus';
-import { toHijri } from '@/lib/hijri';
 import { todayString } from '@/lib/dates';
+import { toHijri } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -22,6 +22,7 @@ import {
     LogIn,
     LogOut,
     MoreVertical,
+    Paperclip,
     Pencil,
     Plus,
     Receipt,
@@ -122,6 +123,8 @@ interface Payment {
     signed_amount: number;
     paid_on: string;
     reference: string | null;
+    /** إيصال التحويل إن أُرفق بالدفعة. */
+    attachment_url: string | null;
     notes: string | null;
     received_by: string | null;
 }
@@ -258,9 +261,23 @@ const payForm = useForm({
     amount: 0,
     paid_on: todayString(),
     reference: '',
+    attachment: null as File | null,
     notes: '',
     notify: true,
 });
+
+// حقل الملف لا يُفرغه reset() — المتصفّح يمسك اسم الملف المختار حتى يُمسح
+// من العنصر نفسه، فيبدو الإيصال مرفقًا بدفعةٍ تالية لم يُرفق بها.
+const attachmentInput = ref<HTMLInputElement | null>(null);
+
+const pickAttachment = (event: Event) => {
+    payForm.attachment = (event.target as HTMLInputElement).files?.[0] ?? null;
+};
+
+const clearAttachment = () => {
+    payForm.attachment = null;
+    if (attachmentInput.value) attachmentInput.value.value = '';
+};
 
 const loadPayments = async (b: Booking) => {
     payLoading.value = true;
@@ -292,12 +309,16 @@ const openPayments = (b: Booking) => {
 
 const submitPayment = () => {
     if (!payBooking.value) return;
+    // المرفق يفرض إرسالًا بـ FormData — وإرساله دائمًا أوضح من مسارين يختلفان
+    // باختيار ملفٍ من عدمه.
     payForm.post(`/admin/bookings/${payBooking.value.id}/payments`, {
         preserveScroll: true,
+        forceFormData: true,
         onSuccess: () => {
             const updated = props.bookings.data.find((x) => x.id === payBooking.value?.id);
             if (updated) payBooking.value = updated;
-            payForm.reset('amount', 'reference', 'notes');
+            payForm.reset('amount', 'reference', 'notes', 'attachment');
+            clearAttachment();
             if (payBooking.value) loadPayments(payBooking.value);
         },
     });
@@ -1360,6 +1381,29 @@ const colorClass = statusChipClass;
                                 <input v-model="payForm.reference" dir="ltr" class="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs" />
                             </div>
 
+                            <!-- إيصال التحويل: رقم العملية يُكتب باليد ويُخطئ، والصورة هي ما يُراجَع عليه -->
+                            <div>
+                                <label class="mb-1 block text-[11px] font-bold text-slate-600">
+                                    مرفق الإيصال <span class="font-medium text-slate-400">(اختياري)</span>
+                                </label>
+                                <input
+                                    ref="attachmentInput"
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                                    @change="pickAttachment"
+                                    class="w-full cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] file:ml-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-[11px] file:font-bold file:text-slate-700"
+                                />
+                                <div
+                                    v-if="payForm.attachment"
+                                    class="mt-1 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-600"
+                                >
+                                    <span class="truncate">{{ payForm.attachment.name }}</span>
+                                    <button type="button" @click="clearAttachment" class="shrink-0 text-red-500 hover:text-red-600">إزالة</button>
+                                </div>
+                                <p v-if="payForm.errors.attachment" class="mt-1 text-[11px] text-red-500">{{ payForm.errors.attachment }}</p>
+                                <p v-else class="mt-1 text-[10px] font-medium text-slate-400">صورة أو PDF حتى 5 ميجابايت.</p>
+                            </div>
+
                             <label
                                 v-if="payBooking.client?.mobile && payForm.type !== 'refund'"
                                 class="flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-700"
@@ -1395,6 +1439,7 @@ const colorClass = statusChipClass;
                                         <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">النوع</th>
                                         <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">التاريخ</th>
                                         <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">الطريقة</th>
+                                        <th class="px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الإيصال</th>
                                         <th class="px-2 py-2 text-left font-extrabold text-[#1e3a8a]">المبلغ</th>
                                     </tr>
                                 </thead>
@@ -1416,6 +1461,19 @@ const colorClass = statusChipClass;
                                         </td>
                                         <td class="px-2 py-2 text-slate-600" dir="ltr">{{ p.paid_on }}</td>
                                         <td class="px-2 py-2 text-slate-600">{{ p.method_label }}</td>
+                                        <td class="px-2 py-2 text-center">
+                                            <a
+                                                v-if="p.attachment_url"
+                                                :href="p.attachment_url"
+                                                target="_blank"
+                                                rel="noopener"
+                                                title="فتح إيصال الدفعة"
+                                                class="inline-flex text-slate-500 hover:text-teal-600"
+                                            >
+                                                <Paperclip class="h-3.5 w-3.5" />
+                                            </a>
+                                            <span v-else class="text-slate-300">—</span>
+                                        </td>
                                         <td
                                             class="px-2 py-2 text-left font-extrabold"
                                             :class="p.signed_amount < 0 ? 'text-red-600' : 'text-slate-800'"
