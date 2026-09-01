@@ -25,6 +25,7 @@ interface PurchaseData {
     subtotal: number;
     discount_amount: number;
     tax_amount: number;
+    is_taxable: boolean;
     total: number;
     paid: number;
     remaining: number;
@@ -140,7 +141,9 @@ const print = () => window.print();
                                     <td class="px-4 py-3 font-extrabold text-slate-900">{{ item.name }}</td>
                                     <td class="px-4 py-3 text-center font-bold text-slate-700" dir="ltr">{{ qty(item.quantity) }}</td>
                                     <td class="px-4 py-3 text-center font-bold text-slate-700" dir="ltr">{{ money(item.unit_cost) }}</td>
-                                    <td class="px-4 py-3 text-center font-bold text-slate-700" dir="ltr">{{ money(item.tax_amount) }}</td>
+                                    <td class="px-4 py-3 text-center font-bold" :class="purchase.is_taxable ? 'text-slate-700' : 'text-slate-300'" dir="ltr">
+                                        {{ purchase.is_taxable ? money(item.tax_amount) : '—' }}
+                                    </td>
                                     <td class="px-4 py-3 text-left font-black text-slate-900" dir="ltr">{{ money(item.total_cost) }}</td>
                                 </tr>
                             </tbody>
@@ -173,7 +176,8 @@ const print = () => window.print();
                                     </div>
                                     <div class="flex justify-between font-bold text-slate-600">
                                         <dt>الضريبة</dt>
-                                        <dd dir="ltr">{{ money(purchase.tax_amount) }}</dd>
+                                        <dd v-if="purchase.is_taxable" dir="ltr">{{ money(purchase.tax_amount) }}</dd>
+                                        <dd v-else class="text-xs text-slate-400">فاتورة بدون ضريبة</dd>
                                     </div>
                                     
                                     <div class="my-4 border-t border-slate-200"></div>

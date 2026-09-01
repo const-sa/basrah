@@ -13,7 +13,7 @@ class Purchase extends Model
 
     protected $fillable = [
         'number', 'supplier_id', 'user_id', 'department_id',
-        'subtotal', 'discount_amount', 'tax_amount', 'total_amount',
+        'subtotal', 'discount_amount', 'tax_amount', 'total_amount', 'is_taxable',
         'payment_method_id', 'paid_amount', 'notes',
     ];
 
@@ -25,6 +25,7 @@ class Purchase extends Model
             'tax_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'paid_amount' => 'decimal:2',
+            'is_taxable' => 'boolean',
         ];
     }
 

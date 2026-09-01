@@ -109,6 +109,7 @@ class PurchaseController extends Controller
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'department_id' => ['required', 'exists:departments,id'],
             'payment_method_id' => ['nullable', 'exists:payment_methods,id'],
+            'is_taxable' => ['required', 'boolean'],
             'paid_amount' => ['required', 'numeric', 'min:0'],
             'discount_amount' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -130,9 +131,11 @@ class PurchaseController extends Controller
                 $taxAmount = 0;
 
                 foreach ($data['items'] as $item) {
-                    $itemTotal = round($item['quantity'] * $item['unit_cost'], 2);
-                    $subtotal += $itemTotal;
-                    $taxAmount += $item['tax_amount'];
+                    $subtotal += round($item['quantity'] * $item['unit_cost'], 2);
+
+                    // An invoice billed without tax carries none, whatever rate
+                    // the catalogue holds for the item.
+                    $taxAmount += $data['is_taxable'] ? $item['tax_amount'] : 0;
                 }
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
@@ -145,6 +148,7 @@ class PurchaseController extends Controller
                     'subtotal' => $subtotal,
                     'discount_amount' => $data['discount_amount'],
                     'tax_amount' => $taxAmount,
+                    'is_taxable' => $data['is_taxable'],
                     'total_amount' => $totalAmount,
                     'payment_method_id' => $data['payment_method_id'],
                     'paid_amount' => $data['paid_amount'],
@@ -193,6 +197,7 @@ class PurchaseController extends Controller
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'department_id' => ['required', 'exists:departments,id'],
             'payment_method_id' => ['nullable', 'exists:payment_methods,id'],
+            'is_taxable' => ['required', 'boolean'],
             'paid_amount' => ['required', 'numeric', 'min:0'],
             'discount_amount' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -229,9 +234,11 @@ class PurchaseController extends Controller
                 $taxAmount = 0;
 
                 foreach ($data['items'] as $item) {
-                    $itemTotal = round($item['quantity'] * $item['unit_cost'], 2);
-                    $subtotal += $itemTotal;
-                    $taxAmount += $item['tax_amount'];
+                    $subtotal += round($item['quantity'] * $item['unit_cost'], 2);
+
+                    // An invoice billed without tax carries none, whatever rate
+                    // the catalogue holds for the item.
+                    $taxAmount += $data['is_taxable'] ? $item['tax_amount'] : 0;
                 }
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
@@ -242,6 +249,7 @@ class PurchaseController extends Controller
                     'subtotal' => $subtotal,
                     'discount_amount' => $data['discount_amount'],
                     'tax_amount' => $taxAmount,
+                    'is_taxable' => $data['is_taxable'],
                     'total_amount' => $totalAmount,
                     'payment_method_id' => $data['payment_method_id'],
                     'paid_amount' => $data['paid_amount'],
@@ -329,7 +337,9 @@ class PurchaseController extends Controller
                 'code' => $l->item?->code,
                 'quantity' => (float) $l->quantity,
                 'unit_cost' => (float) $l->unit_cost,
-                'tax_amount' => $l->item?->tax_rate > 0 ? (float) $l->total_cost * ((float) $l->item->tax_rate / 100) : 0,
+                'tax_amount' => $purchase->is_taxable && $l->item?->tax_rate > 0
+                    ? (float) $l->total_cost * ((float) $l->item->tax_rate / 100)
+                    : 0,
                 'total_cost' => (float) $l->total_cost,
             ]),
         ];
@@ -384,6 +394,7 @@ class PurchaseController extends Controller
             'subtotal' => (float) $purchase->subtotal,
             'discount_amount' => (float) $purchase->discount_amount,
             'tax_amount' => (float) $purchase->tax_amount,
+            'is_taxable' => (bool) $purchase->is_taxable,
             'total' => (float) $purchase->total_amount,
             'paid' => (float) $purchase->paid_amount,
             'remaining' => round(max(0, (float) $purchase->total_amount - (float) $purchase->paid_amount), 2),

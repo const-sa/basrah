@@ -13,7 +13,7 @@ interface PurchaseRow {
     supplier: string | null;
     department: string | null; user: string | null;
     payment_method_id: number; method_label: string;
-    subtotal: number; tax_amount: number; discount_amount: number;
+    subtotal: number; tax_amount: number; discount_amount: number; is_taxable: boolean;
     total: number;
     paid: number; remaining: number;
     status: string; status_label: string;
@@ -349,12 +349,12 @@ const destroy = (p: PurchaseRow) => {
                                 <dt class="font-bold text-slate-600">الخصم</dt>
                                 <dd class="font-bold text-slate-800" dir="ltr">{{ money(details.purchase.discount_amount) }}</dd>
                             </div>
-                            <div class="flex justify-between border-b border-slate-100 py-1">
+                            <div v-if="details.purchase.is_taxable" class="flex justify-between border-b border-slate-100 py-1">
                                 <dt class="font-bold text-slate-600">ضريبة القيمة المضافة</dt>
                                 <dd class="font-bold text-slate-800" dir="ltr">{{ money(details.purchase.tax_amount) }}</dd>
                             </div>
                             <div class="flex justify-between bg-slate-800 px-2 py-1.5 text-sm text-white">
-                                <dt class="font-extrabold">الإجمالي شامل الضريبة</dt>
+                                <dt class="font-extrabold">{{ details.purchase.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</dt>
                                 <dd class="font-extrabold" dir="ltr">{{ money(details.purchase.total) }}</dd>
                             </div>
                             <div class="flex justify-between py-1">

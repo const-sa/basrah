@@ -35,6 +35,7 @@ const props = defineProps<{
         supplier_id: number;
         department_id: number;
         payment_method_id: number | null;
+        is_taxable: boolean;
         paid_amount: number;
         discount_amount: number;
         notes: string | null;
@@ -63,6 +64,7 @@ const form = useForm({
     supplier_id: props.purchase?.supplier_id ?? ('' as string | number),
     department_id: props.purchase?.department_id ?? (props.departments[0]?.id ?? ('' as string | number)),
     payment_method_id: props.purchase?.payment_method_id ?? (props.methods[0]?.id ?? ('' as string | number)),
+    is_taxable: props.purchase?.is_taxable ?? true,
     paid_amount: props.purchase?.paid_amount ?? 0,
     discount_amount: props.purchase?.discount_amount ?? 0,
     notes: props.purchase?.notes ?? '',
@@ -109,7 +111,7 @@ const addItem = (item: ItemOption) => {
         item: item,
         quantity: 1,
         unit_cost: item.cost,
-        tax_amount: item.cost * (item.tax_rate / 100),
+        tax_amount: form.is_taxable ? item.cost * (item.tax_rate / 100) : 0,
     });
 };
 
@@ -150,11 +152,17 @@ const addGroup = (group: ItemGroupOption) => {
 };
 
 // Calculations
-watch([() => form.items, () => form.discount_amount], ([lines, discount]) => {
+watch([() => form.items, () => form.discount_amount, () => form.is_taxable], ([lines, discount, taxable]) => {
     const currentSubtotal = lines.reduce((sum, line) => sum + (line.quantity * line.unit_cost), 0);
     const discountRatio = currentSubtotal > 0 ? (discount / currentSubtotal) : 0;
-    
+
     lines.forEach(line => {
+        if (!taxable) {
+            line.tax_amount = 0;
+
+            return;
+        }
+
         if (line.item) {
             const lineTotal = line.quantity * line.unit_cost;
             const discountedLineTotal = lineTotal - (lineTotal * discountRatio);
@@ -164,7 +172,7 @@ watch([() => form.items, () => form.discount_amount], ([lines, discount]) => {
 }, { deep: true });
 
 const subtotal = computed(() => form.items.reduce((sum, line) => sum + (line.quantity * line.unit_cost), 0));
-const totalTax = computed(() => form.items.reduce((sum, line) => sum + line.tax_amount, 0));
+const totalTax = computed(() => form.is_taxable ? form.items.reduce((sum, line) => sum + line.tax_amount, 0) : 0);
 const grandTotal = computed(() => subtotal.value - form.discount_amount + totalTax.value);
 
 watch(grandTotal, (val) => {
@@ -239,6 +247,30 @@ const submit = () => {
                             </select>
                             <p v-if="form.errors.payment_method_id" class="mt-1.5 text-xs text-red-500 font-medium">{{ form.errors.payment_method_id }}</p>
                         </div>
+
+                        <!-- Whether the supplier charged tax is a fact of this invoice, not of the catalogue -->
+                        <div>
+                            <label class="mb-1.5 flex min-h-[24px] items-center text-sm font-bold text-slate-700">الضريبة</label>
+                            <div class="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 shadow-sm">
+                                <button
+                                    type="button"
+                                    @click="form.is_taxable = true"
+                                    :class="form.is_taxable ? 'bg-white text-emerald-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'"
+                                    class="rounded-lg px-3 py-2 text-sm font-bold transition-all"
+                                >
+                                    بضريبة
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="form.is_taxable = false"
+                                    :class="!form.is_taxable ? 'bg-white text-emerald-800 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'"
+                                    class="rounded-lg px-3 py-2 text-sm font-bold transition-all"
+                                >
+                                    بدون ضريبة
+                                </button>
+                            </div>
+                            <p v-if="form.errors.is_taxable" class="mt-1.5 text-xs text-red-500 font-medium">{{ form.errors.is_taxable }}</p>
+                        </div>
                     </div>
                 </div>
 
@@ -296,8 +328,8 @@ const submit = () => {
                                     <td class="px-4 py-3">
                                         <input v-model.number="line.unit_cost" type="number" min="0" step="0.01" class="w-full rounded-lg border-slate-200 px-3 py-1.5 text-center text-sm shadow-sm focus:border-emerald-600 focus:ring-emerald-600" required />
                                     </td>
-                                    <td class="px-4 py-3 text-center text-xs font-bold text-slate-500" dir="ltr">
-                                        {{ money(line.tax_amount) }}
+                                    <td class="px-4 py-3 text-center text-xs font-bold" :class="form.is_taxable ? 'text-slate-500' : 'text-slate-300'" dir="ltr">
+                                        {{ form.is_taxable ? money(line.tax_amount) : '—' }}
                                     </td>
                                     <td class="px-4 py-3 text-left font-extrabold text-slate-900" dir="ltr">
                                         {{ money((line.quantity * line.unit_cost) + line.tax_amount) }}
@@ -360,7 +392,7 @@ const submit = () => {
                             <div class="p-6">
                                 <dl class="space-y-4 text-sm relative z-10">
                                     <div class="flex justify-between items-center text-slate-300">
-                                        <dt class="font-medium">الإجمالي قبل الضريبة</dt>
+                                        <dt class="font-medium">{{ form.is_taxable ? 'الإجمالي قبل الضريبة' : 'إجمالي الأصناف' }}</dt>
                                         <dd class="font-bold text-white tracking-wide" dir="ltr">{{ money(subtotal) }}</dd>
                                     </div>
                                     <div class="flex items-center justify-between border-t border-emerald-900 pt-4">
@@ -371,7 +403,8 @@ const submit = () => {
                                     </div>
                                     <div class="flex justify-between items-center border-t border-emerald-900 pt-4 text-slate-300">
                                         <dt class="font-medium">الضريبة</dt>
-                                        <dd class="font-bold text-white tracking-wide" dir="ltr">{{ money(totalTax) }}</dd>
+                                        <dd v-if="form.is_taxable" class="font-bold text-white tracking-wide" dir="ltr">{{ money(totalTax) }}</dd>
+                                        <dd v-else class="text-xs font-bold text-slate-500">فاتورة بدون ضريبة</dd>
                                     </div>
                                     <div class="flex justify-between items-center rounded-xl bg-emerald-700/20 px-4 py-3 border border-emerald-600/30 text-emerald-200">
                                         <dt class="font-bold">الإجمالي المستحق</dt>
