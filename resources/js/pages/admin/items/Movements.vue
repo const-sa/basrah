@@ -31,6 +31,7 @@ const apply = () => router.get('/admin/inventory/movements', filters.value, { pr
 const typeClass = (t: string) =>
     ({
         purchase: 'bg-emerald-100 text-emerald-700',
+        purchase_revert: 'bg-emerald-50 text-emerald-800',
         sale: 'bg-red-100 text-red-700',
         return: 'bg-sky-100 text-sky-700',
         adjustment: 'bg-amber-100 text-amber-700',

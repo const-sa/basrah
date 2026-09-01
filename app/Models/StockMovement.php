@@ -10,6 +10,7 @@ class StockMovement extends Model
 {
     public const TYPES = [
         'purchase' => 'شراء',
+        'purchase_revert' => 'إلغاء شراء',
         'sale' => 'بيع',
         'return' => 'مرتجع',
         'adjustment' => 'تسوية جرد',
