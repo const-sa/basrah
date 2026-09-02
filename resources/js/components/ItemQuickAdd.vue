@@ -8,6 +8,7 @@
  * as JSON to be appended to the invoice straight away.
  */
 import { usePermissions } from '@/composables/usePermissions';
+import { useVat } from '@/composables/useVat';
 import { jsonHeaders } from '@/lib/csrf';
 import { Loader2, PackagePlus, X } from 'lucide-vue-next';
 import { nextTick, ref, watch } from 'vue';
@@ -37,6 +38,9 @@ const props = withDefaults(
 const emit = defineEmits<{ created: [item: QuickItem] }>();
 
 const { can } = usePermissions();
+
+// نسبة الصنف لا تُعرض ولا تُحرَّر ما دام مفتاح الضريبة مطفأً.
+const { applies: vatApplies } = useVat();
 
 const open = ref(false);
 const saving = ref(false);
@@ -125,9 +129,7 @@ const submit = async () => {
 
         if (response.status === 422) {
             const body = await response.json();
-            errors.value = Object.fromEntries(
-                Object.entries(body.errors ?? {}).map(([key, list]) => [key, (list as string[])[0]]),
-            );
+            errors.value = Object.fromEntries(Object.entries(body.errors ?? {}).map(([key, list]) => [key, (list as string[])[0]]));
 
             return;
         }
@@ -161,12 +163,7 @@ const submit = async () => {
     </button>
 
     <Teleport to="body">
-        <div
-            v-if="open"
-            dir="rtl"
-            class="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4"
-            @click.self="close"
-        >
+        <div v-if="open" dir="rtl" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" @click.self="close">
             <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
                 <div class="mb-4 flex items-center justify-between">
                     <h2 class="text-base font-extrabold text-slate-900">صنف جديد</h2>
@@ -207,7 +204,10 @@ const submit = async () => {
 
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">النوع</label>
-                            <select v-model="type" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                            <select
+                                v-model="type"
+                                class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            >
                                 <option v-for="t in types" :key="t.key" :value="t.key">{{ t.label }}</option>
                             </select>
                             <p v-if="errors.type" class="mt-1 text-xs text-red-500">{{ errors.type }}</p>
@@ -217,13 +217,17 @@ const submit = async () => {
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">الوحدة</label>
-                            <select v-model="unit" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                            <select
+                                v-model="unit"
+                                class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            >
                                 <option v-for="u in units" :key="u.key" :value="u.key">{{ u.label }}</option>
                             </select>
                             <p v-if="errors.unit" class="mt-1 text-xs text-red-500">{{ errors.unit }}</p>
                         </div>
 
-                        <div>
+                        <!-- تُخفى وتبقى قيمتها الافتراضية ما دامت الضريبة مطفأة -->
+                        <div v-if="vatApplies">
                             <label class="mb-1 block text-sm font-bold text-slate-700">الضريبة %</label>
                             <input
                                 v-model.number="taxRate"
@@ -272,8 +276,7 @@ const submit = async () => {
                     <p v-if="message" class="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{{ message }}</p>
 
                     <p class="text-[11px] font-medium text-slate-500">
-                        يُنشأ الصنف برصيد صفر ثم تزيده هذه الفاتورة عند الحفظ. التصنيف والباركود
-                        وحد إعادة الطلب تُستكمل من شاشة الأصناف.
+                        يُنشأ الصنف برصيد صفر ثم تزيده هذه الفاتورة عند الحفظ. التصنيف والباركود وحد إعادة الطلب تُستكمل من شاشة الأصناف.
                     </p>
 
                     <div class="flex gap-2 pt-1">

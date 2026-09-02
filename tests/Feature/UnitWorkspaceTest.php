@@ -38,6 +38,9 @@ class UnitWorkspaceTest extends TestCase
     {
         parent::setUp();
 
+        // مبالغ هذا الاختبار شاملة للضريبة، فالمنشأة فيه مسجَّلة.
+        $this->registerForVat();
+
         Queue::fake();
         $this->seed([
             RolesSeeder::class, FacilitiesSeeder::class, DepartmentsSeeder::class,

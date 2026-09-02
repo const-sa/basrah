@@ -15,6 +15,7 @@ use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Services\SalesService;
 use App\Services\ZatcaQr;
+use App\Support\Vat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -182,7 +183,14 @@ class SalesController extends Controller
     private function issuer(Sale $sale): array
     {
         $settings = Setting::current();
-        $taxNumber = $settings->tax_enabled ? $settings->tax_number : null;
+        // من القاعدة الواحدة: التفعيل وحده لا يكفي — رقمٌ بلا نسبةٍ سارية
+        // يطبع رمزًا لفاتورةٍ ضريبتها صفر، وهو ما يرفضه تطبيق الهيئة.
+        //
+        // والفاتورة الصادرة يبقى رمزها ما دامت تحمل ضريبةً حُصّلت: ورقةٌ
+        // خرجت للعميل برمزٍ لا يصحّ أن تُطبع بعدها بلا رمز.
+        $taxNumber = Vat::applies() || (float) $sale->tax_amount > 0
+            ? $settings->tax_number
+            : null;
 
         $qr = null;
 

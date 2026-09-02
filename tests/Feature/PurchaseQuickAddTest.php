@@ -28,6 +28,9 @@ class PurchaseQuickAddTest extends TestCase
     {
         parent::setUp();
 
+        // مبالغ هذا الاختبار شاملة للضريبة، فالمنشأة فيه مسجَّلة.
+        $this->registerForVat();
+
         $this->seed([RolesSeeder::class, DepartmentsSeeder::class, CatalogSeeder::class]);
 
         $this->admin = User::factory()->create([

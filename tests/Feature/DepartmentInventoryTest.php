@@ -33,6 +33,9 @@ class DepartmentInventoryTest extends TestCase
     {
         parent::setUp();
 
+        // مبالغ هذا الاختبار شاملة للضريبة، فالمنشأة فيه مسجَّلة.
+        $this->registerForVat();
+
         $this->seed([
             RolesSeeder::class, DepartmentsSeeder::class, UnitsSeeder::class,
             BookingSetupSeeder::class, AccountsSeeder::class, CatalogSeeder::class,

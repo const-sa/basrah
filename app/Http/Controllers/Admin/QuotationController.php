@@ -13,6 +13,7 @@ use App\Models\QuotationItem;
 use App\Models\Setting;
 use App\Services\QuotationPdf;
 use App\Services\SalesService;
+use App\Support\Vat;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -105,7 +106,9 @@ class QuotationController extends Controller
                 foreach ($data['items'] as $item) {
                     $itemTotal = round($item['quantity'] * $item['unit_price'], 2);
                     $subtotal += $itemTotal;
-                    $taxAmount += $item['tax_amount'];
+                    // الشاشة يُصدَّق حسابها لا كونُ الضريبة مفعّلةً أصلًا: عرضٌ
+                    // فُتحت شاشته قبل الإطفاء وأُرسل بعده يحمل نسبةً لم تعد سارية.
+                    $taxAmount += Vat::applies() ? $item['tax_amount'] : 0;
                 }
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
@@ -186,7 +189,9 @@ class QuotationController extends Controller
                 foreach ($data['items'] as $item) {
                     $itemTotal = round($item['quantity'] * $item['unit_price'], 2);
                     $subtotal += $itemTotal;
-                    $taxAmount += $item['tax_amount'];
+                    // الشاشة يُصدَّق حسابها لا كونُ الضريبة مفعّلةً أصلًا: عرضٌ
+                    // فُتحت شاشته قبل الإطفاء وأُرسل بعده يحمل نسبةً لم تعد سارية.
+                    $taxAmount += Vat::applies() ? $item['tax_amount'] : 0;
                 }
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
@@ -237,6 +242,9 @@ class QuotationController extends Controller
             'invoice:id,quotation_id,number',
         ]);
         
+        $base = (float) $quotation->items->sum('total_price');
+        $offerTax = (float) $quotation->tax_amount;
+
         $data = [
             'quotation' => $this->summarize($quotation) + [
                 'notes' => $quotation->notes,
@@ -252,7 +260,9 @@ class QuotationController extends Controller
                 'quantity' => (float) $l->quantity,
                 'unit_price' => (float) $l->unit_price,
                 'total_price' => (float) $l->total_price,
-                'tax_amount' => round((float) $l->quantity * (float) $l->unit_price * (((float) ($l->item?->tax_rate ?? 0)) / 100), 2),
+                // حصّة السطر من ضريبة العرض المحفوظة، لا حسابٌ جديد بنسبة
+                // الصنف اليوم: العرض يُطبع بما حُرِّر به، وسطوره تجمع إجماليه.
+                'tax_amount' => $base > 0 ? round($offerTax * (float) $l->total_price / $base, 2) : 0.0,
             ]),
         ];
 
@@ -260,7 +270,7 @@ class QuotationController extends Controller
         // The Show page never renders it, and passing it there would leak a stray
         // attribute onto the component root.
         if ($request->wantsJson()) {
-            return response()->json($data + ['issuer' => $this->issuer()]);
+            return response()->json($data + ['issuer' => $this->issuer($quotation)]);
         }
 
         // العرض يُرسَل للعميل ثم يُفتح عند موافقته، فزرّ إصدار الفاتورة مكانه
@@ -279,7 +289,7 @@ class QuotationController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function issuer(): array
+    private function issuer(?Quotation $quotation = null): array
     {
         $settings = Setting::current();
 
@@ -289,7 +299,10 @@ class QuotationController extends Controller
             'address' => $settings->address,
             'phone' => $settings->phone,
             'email' => $settings->email,
-            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+            // من القاعدة الواحدة، ويبقى على عرضٍ حمل ضريبةً حُسبت.
+            'tax_number' => Vat::applies() || (float) ($quotation?->tax_amount ?? 0) > 0
+                ? $settings->tax_number
+                : null,
             'commercial_register' => $settings->commercial_register,
         ];
     }

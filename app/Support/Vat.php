@@ -68,6 +68,27 @@ class Vat
     }
 
     /**
+     * نسبة صنفٍ بعينه بعد المرور على المفتاح العام.
+     *
+     * الأصناف تحمل نسبها في جدولها، وشاشات المشتريات والمبيعات ونقطة البيع
+     * وعروض الأسعار كانت تقرؤها منه مباشرةً — فيُطفأ المفتاح في الإعدادات
+     * وتبقى الضريبة تُحتسب وتُطبع في فواتيرها كأن شيئًا لم يكن. فما من نسبة
+     * تُقرأ إلا من هنا: المفتاح مطفأ ⇒ صفر، مهما كان المخزَّن على الصنف.
+     */
+    public static function rateOf(float|string|null $itemRate): float
+    {
+        return self::applies() ? max(0.0, (float) $itemRate) : 0.0;
+    }
+
+    /**
+     * الضريبة المستحقة على مبلغٍ صافٍ بنسبة صنفه.
+     */
+    public static function onAt(float $net, float|string|null $itemRate): float
+    {
+        return round(round($net, 2) * self::rateOf($itemRate) / 100, 2);
+    }
+
+    /**
      * الضريبة المستحقة على مبلغٍ صافٍ — تُضاف فوقه.
      */
     public static function on(float $net): float

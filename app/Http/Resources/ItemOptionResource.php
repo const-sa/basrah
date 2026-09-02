@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Item;
+use App\Support\Vat;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -57,7 +58,9 @@ class ItemOptionResource extends JsonResource
             'name' => $this->name,
             'category' => $this->category?->name,
             'price' => (float) $this->price,
-            'tax_rate' => (float) $this->tax_rate,
+            // النسبة تخرج من هنا مطفأةً حين تُطفأ الضريبة، فتحتسب الشاشة
+            // صفرًا من تلقائها بلا أن تعرف بالمفتاح شيئًا.
+            'tax_rate' => Vat::rateOf($this->tax_rate),
             ...($this->withCost ? ['cost' => (float) $this->cost] : []),
         ];
     }

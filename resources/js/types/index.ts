@@ -30,6 +30,8 @@ export interface SharedData {
     version: string;
     brand?: Brand;
     quote: { message: string; author: string };
+    /** مفتاح الضريبة — تقرؤه كل شاشة تعرض سطر ضريبة أو عمودها. */
+    vat?: { applies: boolean; rate: number };
     auth: Auth;
     flash?: {
         success?: string;

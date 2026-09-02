@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Http\Controllers\Admin\NotificationsController;
 use App\Models\Unit;
 use App\Support\SiteIdentity;
+use App\Support\Vat;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -51,6 +52,15 @@ class HandleInertiaRequests extends Middleware
              */
             'brand' => fn () => SiteIdentity::brand(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
+            /**
+             * مفتاح الضريبة — تقرؤه كل شاشة تعرض سطر ضريبة أو عمودها.
+             *
+             * مشترك عالميًا لا مُمرَّرًا من كل متحكّم: الضريبة تظهر في
+             * المشتريات والمبيعات ونقطة البيع وعروض الأسعار وشاشة الأصناف،
+             * وتمريرها من كل واحدةٍ على حدة يعني شاشةً منسيّةً تُبقي عمودها
+             * بعد إطفاء المفتاح — وهي العلّة التي جُمع هذا لأجلها.
+             */
+            'vat' => fn () => ['applies' => Vat::applies(), 'rate' => Vat::rate()],
             'auth' => [
                 'user' => $request->user(),
                 'permissions' => fn () => $request->user()

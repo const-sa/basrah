@@ -32,6 +32,9 @@ class QuotationInvoiceTest extends TestCase
     {
         parent::setUp();
 
+        // مبالغ هذا الاختبار شاملة للضريبة، فالمنشأة فيه مسجَّلة.
+        $this->registerForVat();
+
         Queue::fake();
         $this->seed([RolesSeeder::class, UnitsSeeder::class, BookingSetupSeeder::class, AccountsSeeder::class]);
 

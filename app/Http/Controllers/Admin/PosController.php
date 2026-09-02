@@ -11,6 +11,7 @@ use App\Models\ItemGroup;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\SalesService;
+use App\Support\Vat;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -58,7 +59,9 @@ class PosController extends Controller
                     'unit' => $i->unit,
                     'unit_label' => $i->unitLabel(),
                     'price' => (float) $i->price,
-                    'tax_rate' => (float) $i->tax_rate,
+                    // مطفأةً حين تُطفأ الضريبة: الشاشة تحسب سطرها بهذه النسبة،
+                    // فتخرج بصفرٍ بلا أن تعرف بالمفتاح شيئًا.
+                    'tax_rate' => Vat::rateOf($i->tax_rate),
                     'stock_qty' => (float) $i->stock_qty,
                     'tracks_stock' => $i->tracksStock(),
                     'fractional' => $i->allowsFractionalQuantity(),

@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\Accounting\Ledger;
+use App\Support\Vat;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -147,7 +148,13 @@ class SalesService
                 }
 
                 $lineTotal = round((float) $line->unit_price * $qty, 2);
-                $lineTax = round($lineTotal * (float) $line->item->tax_rate / 100, 2);
+                // ضريبة المرتجع حصّةٌ ممّا حُصّل على السطر الأصلي، لا حسابٌ
+                // جديد بنسبة الصنف اليوم: الفاتورة تُردّ كما خرجت. وإلا لردَّ
+                // النظام ضريبةً لم تُؤخذ إن رُفعت النسبة، أو حجب المأخوذة إن
+                // أُطفئ المفتاح بعد البيع.
+                $lineTax = (float) $line->quantity > 0
+                    ? round((float) $line->tax_amount * $qty / (float) $line->quantity, 2)
+                    : 0.0;
                 $lineCost = round((float) $line->unit_cost * $qty, 2);
 
                 $return->lines()->create([
@@ -222,7 +229,7 @@ class SalesService
             $price = round((float) ($row['unit_price'] ?? $item->price), 2);
             $lineDiscount = round((float) ($row['discount_amount'] ?? 0), 2);
             $lineTotal = round(max(0, $price * $qty - $lineDiscount), 2);
-            $lineTax = round($lineTotal * (float) $item->tax_rate / 100, 2);
+            $lineTax = Vat::onAt($lineTotal, $item->tax_rate);
             $lineCost = round((float) $item->cost * $qty, 2);
 
             $sale->lines()->create([

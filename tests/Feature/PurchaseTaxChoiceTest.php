@@ -38,6 +38,10 @@ class PurchaseTaxChoiceTest extends TestCase
     {
         parent::setUp();
 
+        // جواب الفاتورة يقع تحت مفتاح المنشأة، فالمنشأة هنا مسجَّلة ليُختبر
+        // الجواب نفسه لا المفتاح.
+        $this->registerForVat();
+
         $this->seed([RolesSeeder::class, DepartmentsSeeder::class, CatalogSeeder::class]);
 
         $this->admin = User::factory()->create([

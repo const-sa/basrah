@@ -79,13 +79,28 @@
 
 <h2 class="section">تفاصيل العرض</h2>
 <table class="items">
+    {{--
+        ضريبة السطر حصّةٌ من ضريبة العرض المحفوظة موزّعةً بنسبة مبالغ السطور.
+        وكانت تُحسب من نسبة الصنف بافتراض 15% لكل صنفٍ بلا نسبة — فتُطبع ضريبةٌ
+        على عرضٍ حُرِّر بلا ضريبة أصلًا، ولا تجمع السطور إجمالي الورقة.
+        وعرضٌ بلا ضريبة تُطوى أعمدتها فلا يبقى منها عمودٌ فارغ.
+    --}}
+    @php
+        $linesBase = (float) $quotation->items->sum('total_price');
+        $offerTax = (float) $quotation->tax_amount;
+        $showsTax = $offerTax > 0;
+        $lineTax = fn ($line) => $linesBase > 0
+            ? round($offerTax * (float) $line->total_price / $linesBase, 2)
+            : 0.0;
+    @endphp
+
     <thead>
         <tr>
             <th style="width: 5%;">#</th>
-            <th style="width: 40%; text-align: right;">الصنف / البيان</th>
+            <th style="width: {{ $showsTax ? '40%' : '55%' }}; text-align: right;">الصنف / البيان</th>
             <th style="width: 10%;">الكمية</th>
             <th style="width: 15%;">سعر الوحدة</th>
-            <th style="width: 15%;">الضريبة</th>
+            @if ($showsTax)<th style="width: 15%;">الضريبة</th>@endif
             <th style="width: 15%;">الإجمالي</th>
         </tr>
     </thead>
@@ -101,9 +116,9 @@
                 </td>
                 <td class="num ltr">{{ number_format($line->quantity, 3) }}</td>
                 <td class="num ltr">{{ number_format($line->unit_price, 2) }}</td>
-                <td class="num ltr">{{ number_format($line->quantity * $line->unit_price * (($line->item?->tax_rate ?? 15) / 100), 2) }}</td>
+                @if ($showsTax)<td class="num ltr">{{ number_format($lineTax($line), 2) }}</td>@endif
                 <td class="num ltr" style="font-weight: bold;">
-                    {{ number_format(($line->quantity * $line->unit_price) + ($line->quantity * $line->unit_price * (($line->item?->tax_rate ?? 15) / 100)), 2) }}
+                    {{ number_format((float) $line->total_price + $lineTax($line), 2) }}
                 </td>
             </tr>
         @endforeach
@@ -114,7 +129,7 @@
     <div class="totals ltr" style="float: left; width: 50%; direction: rtl;">
         <table>
             <tr>
-                <td class="label">الإجمالي قبل الضريبة</td>
+                <td class="label">{{ $showsTax ? 'الإجمالي قبل الضريبة' : 'الإجمالي' }}</td>
                 <td class="val ltr">{{ number_format($quotation->subtotal, 2) }} ريال</td>
             </tr>
             @if ($quotation->discount_amount > 0)
@@ -123,10 +138,12 @@
                     <td class="val ltr" style="color: #b91c1c;">{{ number_format($quotation->discount_amount, 2) }} ريال</td>
                 </tr>
             @endif
-            <tr>
-                <td class="label">ضريبة القيمة المضافة</td>
-                <td class="val ltr">{{ number_format($quotation->tax_amount, 2) }} ريال</td>
-            </tr>
+            @if ($showsTax)
+                <tr>
+                    <td class="label">ضريبة القيمة المضافة</td>
+                    <td class="val ltr">{{ number_format($quotation->tax_amount, 2) }} ريال</td>
+                </tr>
+            @endif
             <tr class="grand">
                 <td class="label" style="color: white;">الإجمالي المستحق</td>
                 <td class="val ltr">{{ number_format($quotation->total_amount, 2) }} ريال</td>

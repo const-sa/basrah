@@ -14,6 +14,7 @@ use App\Models\PurchaseItem;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Services\InventoryService;
+use App\Support\Vat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -99,7 +100,9 @@ class PurchaseController extends Controller
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
             'itemUnits' => collect(Item::UNITS)
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
-            'defaultTaxRate' => $settings->tax_enabled ? (float) $settings->tax_rate : 0.0,
+            // من القاعدة الواحدة لا من العمود وحده: الرقم الضريبي والنسبة
+            // شرطان مع التفعيل، وعمودٌ يُقرأ منفردًا يُفلت أحدهما.
+            'defaultTaxRate' => Vat::rate(),
         ];
     }
 
@@ -133,9 +136,13 @@ class PurchaseController extends Controller
                 foreach ($data['items'] as $item) {
                     $subtotal += round($item['quantity'] * $item['unit_cost'], 2);
 
-                    // An invoice billed without tax carries none, whatever rate
-                    // the catalogue holds for the item.
-                    $taxAmount += $data['is_taxable'] ? $item['tax_amount'] : 0;
+                    // شرطان يتعاقبان: مفتاح المنشأة أوّلًا — فمنشأةٌ غير
+                    // مسجَّلة لا تُحرّر ضريبةً وإن قالت الفاتورة إنها بضريبة —
+                    // ثم جواب الفاتورة نفسها، وهو أعلى من نسب أصنافها.
+                    //
+                    // والشاشة يُصدَّق حسابها لا كونُ الضريبة سارية: صفحةٌ فُتحت
+                    // قبل الإطفاء وأُرسلت بعده تحمل نسبةً لم تعد قائمة.
+                    $taxAmount += Vat::applies() && $data['is_taxable'] ? $item['tax_amount'] : 0;
                 }
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
@@ -236,9 +243,13 @@ class PurchaseController extends Controller
                 foreach ($data['items'] as $item) {
                     $subtotal += round($item['quantity'] * $item['unit_cost'], 2);
 
-                    // An invoice billed without tax carries none, whatever rate
-                    // the catalogue holds for the item.
-                    $taxAmount += $data['is_taxable'] ? $item['tax_amount'] : 0;
+                    // شرطان يتعاقبان: مفتاح المنشأة أوّلًا — فمنشأةٌ غير
+                    // مسجَّلة لا تُحرّر ضريبةً وإن قالت الفاتورة إنها بضريبة —
+                    // ثم جواب الفاتورة نفسها، وهو أعلى من نسب أصنافها.
+                    //
+                    // والشاشة يُصدَّق حسابها لا كونُ الضريبة سارية: صفحةٌ فُتحت
+                    // قبل الإطفاء وأُرسلت بعده تحمل نسبةً لم تعد قائمة.
+                    $taxAmount += Vat::applies() && $data['is_taxable'] ? $item['tax_amount'] : 0;
                 }
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
@@ -324,6 +335,13 @@ class PurchaseController extends Controller
             'paymentMethod:id,name'
         ]);
         
+        // السطور لا تحفظ ضريبتها، الفاتورة تحفظ ضريبتها مجموعةً — فتُوزَّع
+        // عليها بنسبة مبالغها. وكان السطر يُعيد حسابها من نسبة الصنف اليوم،
+        // فتخالف السطورُ رأسَ الفاتورة كلما تغيّرت نسبةٌ أو أُطفئ المفتاح،
+        // وتُطبع ورقةٌ لا تجمع سطورُها إجماليها.
+        $base = (float) $purchase->items->sum('total_cost');
+        $invoiceTax = (float) $purchase->tax_amount;
+
         $data = [
             'purchase' => $this->summarize($purchase) + [
                 'notes' => $purchase->notes,
@@ -337,9 +355,7 @@ class PurchaseController extends Controller
                 'code' => $l->item?->code,
                 'quantity' => (float) $l->quantity,
                 'unit_cost' => (float) $l->unit_cost,
-                'tax_amount' => $purchase->is_taxable && $l->item?->tax_rate > 0
-                    ? (float) $l->total_cost * ((float) $l->item->tax_rate / 100)
-                    : 0,
+                'tax_amount' => $base > 0 ? round($invoiceTax * (float) $l->total_cost / $base, 2) : 0.0,
                 'total_cost' => (float) $l->total_cost,
             ]),
         ];
@@ -373,7 +389,10 @@ class PurchaseController extends Controller
             'address' => $settings->address,
             'phone' => $settings->phone,
             'email' => $settings->email,
-            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+            // من القاعدة الواحدة، ويبقى على ورقةٍ حملت ضريبةً حُصّلت.
+            'tax_number' => Vat::applies() || (float) $purchase->tax_amount > 0
+                ? $settings->tax_number
+                : null,
             'commercial_register' => $settings->commercial_register,
             'activity' => $purchase->department?->name,
         ];

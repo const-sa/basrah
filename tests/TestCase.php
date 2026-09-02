@@ -3,7 +3,9 @@
 namespace Tests;
 
 use App\Models\PaymentMethod;
+use App\Models\Setting;
 use App\Models\Unit;
+use App\Support\Vat;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -34,6 +36,25 @@ abstract class TestCase extends BaseTestCase
     protected function paymentMethodId(string $code = PaymentMethod::CASH): int
     {
         return (int) PaymentMethod::where('code', $code)->value('id');
+    }
+
+    /**
+     * منشأة مسجَّلة في الضريبة.
+     *
+     * المفتاح مطفأ في التركيب الجديد (‏tax_enabled يبدأ false)، والضريبة لا
+     * تسري إلا بتفعيلٍ ورقمٍ ونسبة مجتمعةً. فاختبارٌ يتوقّع مبالغ شاملة
+     * للضريبة عليه أن يقول إن المنشأة مسجَّلة، بدل أن يتّكل على نسبة الصنف
+     * وحدها — وهي التي كانت تُحتسب من دون المفتاح، وهو الخلل الذي عولج.
+     */
+    protected function registerForVat(float $rate = 15): void
+    {
+        Setting::current()->update([
+            'tax_enabled' => true,
+            'tax_number' => '300000000000003',
+            'tax_rate' => $rate,
+        ]);
+
+        Vat::forget();
     }
 
     /**
