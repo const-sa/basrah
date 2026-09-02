@@ -52,6 +52,7 @@ interface FormLine {
     item: ItemOption | null;
     quantity: number;
     unit_price: number;
+    is_taxable: boolean;
     tax_amount: number;
 }
 
@@ -67,6 +68,7 @@ const form = useForm({
               item: i.item,
               quantity: i.quantity,
               unit_price: i.unit_price,
+              is_taxable: i.is_taxable ?? true,
               tax_amount: i.tax_amount ?? i.quantity * i.unit_price * ((i.item?.tax_rate ?? 0) / 100),
           }))
         : ([] as FormLine[]),
@@ -87,6 +89,7 @@ const addItem = (item: ItemOption) => {
         item: item,
         quantity: 1,
         unit_price: item.price,
+        is_taxable: true,
         tax_amount: item.price * (item.tax_rate / 100),
     });
 };
@@ -134,6 +137,12 @@ watch(
         const discountRatio = currentSubtotal > 0 ? discount / currentSubtotal : 0;
 
         lines.forEach((line) => {
+            if (!line.is_taxable) {
+                line.tax_amount = 0;
+
+                return;
+            }
+
             if (line.item) {
                 const lineTotal = line.quantity * line.unit_price;
                 const discountedLineTotal = lineTotal - lineTotal * discountRatio;
@@ -145,7 +154,12 @@ watch(
 );
 
 const subtotal = computed(() => form.items.reduce((sum, line) => sum + line.quantity * line.unit_price, 0));
-const totalTax = computed(() => form.items.reduce((sum, line) => sum + line.tax_amount, 0));
+const totalTax = computed(() => form.items.reduce((sum, line) => sum + (line.is_taxable ? line.tax_amount : 0), 0));
+const taxedCount = computed(() => form.items.filter((line) => line.is_taxable).length);
+
+const setAllTaxable = (taxable: boolean) => {
+    form.items.forEach((line) => (line.is_taxable = taxable));
+};
 const grandTotal = computed(() => subtotal.value - form.discount_amount + totalTax.value);
 
 const submit = () => {
@@ -222,6 +236,25 @@ const submit = () => {
                     <div class="mb-4 flex items-center justify-between">
                         <h2 class="text-lg font-bold text-slate-800">بنود العرض</h2>
                         <div class="flex flex-wrap items-center gap-3">
+                            <div v-if="vatApplies && form.items.length" class="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+                                <button
+                                    type="button"
+                                    @click="setAllTaxable(true)"
+                                    :disabled="taxedCount === form.items.length"
+                                    class="rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    تفعيل الضريبة للكل
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="setAllTaxable(false)"
+                                    :disabled="taxedCount === 0"
+                                    class="rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    إلغاؤها للكل
+                                </button>
+                            </div>
+
                             <!-- المجموعات المحفوظة: أصناف تتكرّر معًا تُضاف دفعةً واحدة -->
                             <ItemGroupPicker :groups="groups" @select="addGroup" />
 
@@ -244,7 +277,7 @@ const submit = () => {
                                     <th class="px-3 py-2 text-right font-extrabold text-[#064e3b]">البند</th>
                                     <th class="w-32 px-3 py-2 text-center font-extrabold text-[#064e3b]">الكمية</th>
                                     <th class="w-32 px-3 py-2 text-center font-extrabold text-[#064e3b]">السعر</th>
-                                    <th v-if="vatApplies" class="w-32 px-3 py-2 text-center font-extrabold text-[#064e3b]">الضريبة</th>
+                                    <th v-if="vatApplies" class="w-40 px-3 py-2 text-center font-extrabold text-[#064e3b]">الضريبة</th>
                                     <th class="w-32 px-3 py-2 text-left font-extrabold text-[#064e3b]">الإجمالي</th>
                                     <th class="w-12 px-3 py-2 text-center font-extrabold text-[#064e3b]"></th>
                                 </tr>
@@ -272,8 +305,34 @@ const submit = () => {
                                             required
                                         />
                                     </td>
-                                    <td v-if="vatApplies" class="px-3 py-2 text-center text-xs font-bold text-slate-500" dir="ltr">
-                                        {{ money(line.tax_amount) }}
+                                    <td v-if="vatApplies" class="px-3 py-2">
+                                        <div class="flex items-center justify-center gap-2">
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                :aria-checked="line.is_taxable"
+                                                :title="line.is_taxable ? 'إلغاء الضريبة على هذا البند' : 'تفعيل الضريبة على هذا البند'"
+                                                @click="line.is_taxable = !line.is_taxable"
+                                                :class="[
+                                                    'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition',
+                                                    line.is_taxable ? 'brand-gradient' : 'bg-slate-300',
+                                                ]"
+                                            >
+                                                <span
+                                                    :class="[
+                                                        'inline-block h-4 w-4 transform rounded-full bg-white transition',
+                                                        line.is_taxable ? '-translate-x-1' : '-translate-x-6',
+                                                    ]"
+                                                ></span>
+                                            </button>
+                                            <span
+                                                class="w-14 text-center text-xs font-bold"
+                                                :class="line.is_taxable ? 'text-slate-500' : 'text-slate-300'"
+                                                dir="ltr"
+                                            >
+                                                {{ line.is_taxable ? money(line.tax_amount) : '—' }}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td class="px-3 py-2 text-left font-extrabold text-slate-900" dir="ltr">
                                         {{ money(line.quantity * line.unit_price + line.tax_amount) }}

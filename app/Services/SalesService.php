@@ -30,7 +30,7 @@ class SalesService
      * إتمام فاتورة بيع.
      *
      * @param  array{
-     *     lines: list<array{item_id:int, quantity:float, unit_price?:float, discount_amount?:float}>,
+     *     lines: list<array{item_id:int, quantity:float, unit_price?:float, discount_amount?:float, taxable?:bool}>,
      *     client_id?:int|null, unit_id?:int|null, booking_id?:int|null, quotation_id?:int|null,
      *     payment_method_id?:int|null, discount_amount?:float, paid_amount?:float|null, notes?:string|null
      * }  $data
@@ -229,7 +229,7 @@ class SalesService
             $price = round((float) ($row['unit_price'] ?? $item->price), 2);
             $lineDiscount = round((float) ($row['discount_amount'] ?? 0), 2);
             $lineTotal = round(max(0, $price * $qty - $lineDiscount), 2);
-            $lineTax = Vat::onAt($lineTotal, $item->tax_rate);
+            $lineTax = ($row['taxable'] ?? true) ? Vat::onAt($lineTotal, $item->tax_rate) : 0.0;
             $lineCost = round((float) $item->cost * $qty, 2);
 
             $sale->lines()->create([

@@ -169,7 +169,8 @@ class VatSwitchTest extends TestCase
             'notes' => null,
             'valid_until' => null,
             'items' => [[
-                'item_id' => $item->id, 'quantity' => 2, 'unit_price' => 100, 'tax_amount' => 30,
+                'item_id' => $item->id, 'quantity' => 2, 'unit_price' => 100,
+                'is_taxable' => true, 'tax_amount' => 30,
             ]],
         ])->assertSessionHasNoErrors()->assertRedirect();
 

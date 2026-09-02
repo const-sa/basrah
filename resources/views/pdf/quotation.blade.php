@@ -80,18 +80,13 @@
 <h2 class="section">تفاصيل العرض</h2>
 <table class="items">
     {{--
-        ضريبة السطر حصّةٌ من ضريبة العرض المحفوظة موزّعةً بنسبة مبالغ السطور.
-        وكانت تُحسب من نسبة الصنف بافتراض 15% لكل صنفٍ بلا نسبة — فتُطبع ضريبةٌ
-        على عرضٍ حُرِّر بلا ضريبة أصلًا، ولا تجمع السطور إجمالي الورقة.
-        وعرضٌ بلا ضريبة تُطوى أعمدتها فلا يبقى منها عمودٌ فارغ.
+        ضريبة السطر تُقرأ كما حُفظت عليه، فالبند يُعرض بضريبة أو معفى منها
+        وحده، وتجمع السطور إجمالي الورقة. وعرضٌ بلا ضريبة تُطوى أعمدتها فلا
+        يبقى منها عمودٌ فارغ.
     --}}
     @php
-        $linesBase = (float) $quotation->items->sum('total_price');
-        $offerTax = (float) $quotation->tax_amount;
-        $showsTax = $offerTax > 0;
-        $lineTax = fn ($line) => $linesBase > 0
-            ? round($offerTax * (float) $line->total_price / $linesBase, 2)
-            : 0.0;
+        $showsTax = (float) $quotation->tax_amount > 0;
+        $lineTax = fn ($line) => (float) $line->tax_amount;
     @endphp
 
     <thead>
@@ -116,7 +111,11 @@
                 </td>
                 <td class="num ltr">{{ number_format($line->quantity, 3) }}</td>
                 <td class="num ltr">{{ number_format($line->unit_price, 2) }}</td>
-                @if ($showsTax)<td class="num ltr">{{ number_format($lineTax($line), 2) }}</td>@endif
+                @if ($showsTax)
+                    <td class="num ltr">
+                        @if ($line->is_taxable){{ number_format($lineTax($line), 2) }}@else<span style="color: #94a3b8;">معفى</span>@endif
+                    </td>
+                @endif
                 <td class="num ltr" style="font-weight: bold;">
                     {{ number_format((float) $line->total_price + $lineTax($line), 2) }}
                 </td>

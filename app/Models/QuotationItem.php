@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class QuotationItem extends Model
 {
     protected $fillable = [
-        'quotation_id', 'item_id', 'quantity', 'unit_price', 'total_price'
+        'quotation_id', 'item_id', 'quantity', 'unit_price', 'total_price',
+        'is_taxable', 'tax_amount',
     ];
 
     protected function casts(): array
@@ -17,6 +18,8 @@ class QuotationItem extends Model
             'quantity' => 'decimal:3',
             'unit_price' => 'decimal:2',
             'total_price' => 'decimal:2',
+            'is_taxable' => 'boolean',
+            'tax_amount' => 'decimal:2',
         ];
     }
 

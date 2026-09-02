@@ -90,6 +90,7 @@ class QuotationController extends Controller
             'items.*.item_id' => ['required', 'exists:items,id'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.is_taxable' => ['required', 'boolean'],
             'items.*.tax_amount' => ['required', 'numeric', 'min:0'],
         ]);
 
@@ -100,16 +101,10 @@ class QuotationController extends Controller
                 $number = 'QT-' . str_pad(($last ? $last->id + 1 : 1), 6, '0', STR_PAD_LEFT);
 
                 // Calculate totals
-                $subtotal = 0;
-                $taxAmount = 0;
+                $lines = $this->priceLines($data['items']);
 
-                foreach ($data['items'] as $item) {
-                    $itemTotal = round($item['quantity'] * $item['unit_price'], 2);
-                    $subtotal += $itemTotal;
-                    // الشاشة يُصدَّق حسابها لا كونُ الضريبة مفعّلةً أصلًا: عرضٌ
-                    // فُتحت شاشته قبل الإطفاء وأُرسل بعده يحمل نسبةً لم تعد سارية.
-                    $taxAmount += Vat::applies() ? $item['tax_amount'] : 0;
-                }
+                $subtotal = round(array_sum(array_column($lines, 'total_price')), 2);
+                $taxAmount = round(array_sum(array_column($lines, 'tax_amount')), 2);
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
 
@@ -127,14 +122,8 @@ class QuotationController extends Controller
                     'status' => 'pending',
                 ]);
 
-                foreach ($data['items'] as $itemData) {
-                    QuotationItem::create([
-                        'quotation_id' => $quotation->id,
-                        'item_id' => $itemData['item_id'],
-                        'quantity' => $itemData['quantity'],
-                        'unit_price' => $itemData['unit_price'],
-                        'total_price' => round($itemData['quantity'] * $itemData['unit_price'], 2),
-                    ]);
+                foreach ($lines as $line) {
+                    QuotationItem::create($line + ['quotation_id' => $quotation->id]);
                 }
             });
         } catch (RuntimeException $e) {
@@ -177,22 +166,17 @@ class QuotationController extends Controller
             'items.*.item_id' => ['required', 'exists:items,id'],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.is_taxable' => ['required', 'boolean'],
             'items.*.tax_amount' => ['required', 'numeric', 'min:0'],
         ]);
 
         try {
             DB::transaction(function () use ($data, $quotation) {
                 // Calculate totals
-                $subtotal = 0;
-                $taxAmount = 0;
+                $lines = $this->priceLines($data['items']);
 
-                foreach ($data['items'] as $item) {
-                    $itemTotal = round($item['quantity'] * $item['unit_price'], 2);
-                    $subtotal += $itemTotal;
-                    // الشاشة يُصدَّق حسابها لا كونُ الضريبة مفعّلةً أصلًا: عرضٌ
-                    // فُتحت شاشته قبل الإطفاء وأُرسل بعده يحمل نسبةً لم تعد سارية.
-                    $taxAmount += Vat::applies() ? $item['tax_amount'] : 0;
-                }
+                $subtotal = round(array_sum(array_column($lines, 'total_price')), 2);
+                $taxAmount = round(array_sum(array_column($lines, 'tax_amount')), 2);
 
                 $totalAmount = $subtotal - $data['discount_amount'] + $taxAmount;
 
@@ -209,14 +193,8 @@ class QuotationController extends Controller
 
                 $quotation->items()->delete();
 
-                foreach ($data['items'] as $itemData) {
-                    QuotationItem::create([
-                        'quotation_id' => $quotation->id,
-                        'item_id' => $itemData['item_id'],
-                        'quantity' => $itemData['quantity'],
-                        'unit_price' => $itemData['unit_price'],
-                        'total_price' => round($itemData['quantity'] * $itemData['unit_price'], 2),
-                    ]);
+                foreach ($lines as $line) {
+                    QuotationItem::create($line + ['quotation_id' => $quotation->id]);
                 }
             });
         } catch (RuntimeException $e) {
@@ -242,9 +220,6 @@ class QuotationController extends Controller
             'invoice:id,quotation_id,number',
         ]);
         
-        $base = (float) $quotation->items->sum('total_price');
-        $offerTax = (float) $quotation->tax_amount;
-
         $data = [
             'quotation' => $this->summarize($quotation) + [
                 'notes' => $quotation->notes,
@@ -260,9 +235,8 @@ class QuotationController extends Controller
                 'quantity' => (float) $l->quantity,
                 'unit_price' => (float) $l->unit_price,
                 'total_price' => (float) $l->total_price,
-                // حصّة السطر من ضريبة العرض المحفوظة، لا حسابٌ جديد بنسبة
-                // الصنف اليوم: العرض يُطبع بما حُرِّر به، وسطوره تجمع إجماليه.
-                'tax_amount' => $base > 0 ? round($offerTax * (float) $l->total_price / $base, 2) : 0.0,
+                'is_taxable' => (bool) $l->is_taxable,
+                'tax_amount' => (float) $l->tax_amount,
             ]),
         ];
 
@@ -334,6 +308,7 @@ class QuotationController extends Controller
                     'item_id' => $line->item_id,
                     'quantity' => (float) $line->quantity,
                     'unit_price' => (float) $line->unit_price,
+                    'taxable' => (bool) $line->is_taxable,
                 ])->all(),
                 'client_id' => $quotation->client_id,
                 'department_id' => $quotation->department_id,
@@ -385,6 +360,26 @@ class QuotationController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => $disposition.'; filename="QT-'.$quotation->number.'.pdf"',
         ]);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private function priceLines(array $items): array
+    {
+        return array_map(function (array $item): array {
+            $taxable = (bool) $item['is_taxable'];
+
+            return [
+                'item_id' => $item['item_id'],
+                'quantity' => $item['quantity'],
+                'unit_price' => $item['unit_price'],
+                'total_price' => round($item['quantity'] * $item['unit_price'], 2),
+                'is_taxable' => $taxable,
+                'tax_amount' => $taxable && Vat::applies() ? round((float) $item['tax_amount'], 2) : 0.0,
+            ];
+        }, $items);
     }
 
     private function summarize(Quotation $quotation): array

@@ -33,6 +33,7 @@ interface QuotationLine {
     quantity: number;
     unit_price: number;
     total_price: number;
+    is_taxable: boolean;
     tax_amount: number;
 }
 
@@ -495,10 +496,11 @@ const changeStatus = (status: string) => {
                                     <td class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">{{ money(l.unit_price) }}</td>
                                     <td
                                         v-if="shows(details.quotation.tax_amount)"
-                                        class="border border-slate-300 px-2 py-1.5 text-center text-slate-500"
-                                        dir="ltr"
+                                        class="border border-slate-300 px-2 py-1.5 text-center"
+                                        :class="l.is_taxable ? 'text-slate-500' : 'text-slate-400'"
+                                        :dir="l.is_taxable ? 'ltr' : 'rtl'"
                                     >
-                                        {{ money(l.tax_amount) }}
+                                        {{ l.is_taxable ? money(l.tax_amount) : 'معفى' }}
                                     </td>
                                     <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold" dir="ltr">
                                         {{ money(l.total_price + l.tax_amount) }}

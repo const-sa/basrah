@@ -13,6 +13,7 @@ interface QuotationItem {
     code: string | null;
     quantity: number;
     unit_price: number;
+    is_taxable: boolean;
     tax_amount: number;
     total_price: number;
 }
@@ -229,8 +230,13 @@ const submitInvoice = () => {
                                     <td class="px-4 py-3 font-extrabold text-slate-900">{{ item.name }}</td>
                                     <td class="px-4 py-3 text-center font-bold text-slate-700" dir="ltr">{{ qty(item.quantity) }}</td>
                                     <td class="px-4 py-3 text-center font-bold text-slate-700" dir="ltr">{{ money(item.unit_price) }}</td>
-                                    <td v-if="showsTax" class="px-4 py-3 text-center font-bold text-slate-700" dir="ltr">
-                                        {{ money(item.tax_amount) }}
+                                    <td
+                                        v-if="showsTax"
+                                        class="px-4 py-3 text-center font-bold"
+                                        :class="item.is_taxable ? 'text-slate-700' : 'text-slate-400'"
+                                        :dir="item.is_taxable ? 'ltr' : 'rtl'"
+                                    >
+                                        {{ item.is_taxable ? money(item.tax_amount) : 'معفى' }}
                                     </td>
                                     <td class="px-4 py-3 text-left font-black text-slate-900" dir="ltr">{{ money(item.total_price) }}</td>
                                 </tr>
