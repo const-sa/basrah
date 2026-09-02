@@ -125,16 +125,21 @@ class Vat
     /**
      * تفصيل تسعيرةٍ صافية كما تُعرَض: الصافي، والضريبة فوقه، والإجمالي.
      *
+     * $taxable is the document's own answer. It overrides the rate downwards
+     * but never upwards: a booking for an exempt body is priced without tax
+     * even though the business is registered, and nothing is taxed while the
+     * system-wide switch is off, whatever the document says.
+     *
      * @return array{is_taxable: bool, tax_rate: float, net_amount: float, tax_amount: float, total_amount: float}
      */
-    public static function breakdown(float $net): array
+    public static function breakdown(float $net, bool $taxable = true): array
     {
         $net = round($net, 2);
-        $tax = self::on($net);
+        $tax = $taxable ? self::on($net) : 0.0;
 
         return [
-            'is_taxable' => self::applies(),
-            'tax_rate' => self::rate(),
+            'is_taxable' => $taxable && self::applies(),
+            'tax_rate' => $taxable ? self::rate() : 0.0,
             'net_amount' => $net,
             'tax_amount' => $tax,
             'total_amount' => round($net + $tax, 2),

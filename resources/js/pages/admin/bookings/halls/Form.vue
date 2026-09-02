@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
+import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
 import { toHijri, weekdayName } from '@/lib/hijri';
@@ -38,6 +39,8 @@ interface ExistingBooking {
     last_day_date: string;
     status: string;
     discount_amount: number;
+    /** Is this booking invoiced with tax? Stored with it, and asked again on every edit. */
+    is_taxable: boolean;
     guests_count: number | null;
     notes: string | null;
 }
@@ -79,6 +82,11 @@ const props = defineProps<{
         section_ids?: number[];
     };
 }>();
+
+// An entry screen, so it follows the switch alone: the booking is not asked
+// about tax where there is no tax in the system at all. The pricing panel
+// answers with `pricing.is_taxable`, not with this.
+const { applies: vatApplies } = useVat();
 
 const isEdit = computed(() => props.booking !== null);
 
@@ -132,6 +140,9 @@ const form = useForm({
     // الحجز الجديد مؤكد افتراضيًا — و«مبدئي» يُختار من القائمة عند الحاجة.
     status: props.booking?.status ?? 'confirmed',
     discount_amount: props.booking?.discount_amount ?? 0,
+    // With tax unless told otherwise, which is the common case; an edit opens
+    // on whatever the booking was written with.
+    is_taxable: props.booking?.is_taxable ?? true,
     guests_count: props.booking?.guests_count ?? null as number | null,
     notes: props.booking?.notes ?? '',
 
@@ -290,6 +301,7 @@ const refreshQuote = () => {
                     event_type_id: form.event_type_id,
                     package_id: form.package_id,
                     discount_amount: form.discount_amount,
+                    is_taxable: form.is_taxable,
                     ignore_booking_id: props.booking?.id ?? null,
                 }),
             });
@@ -316,7 +328,7 @@ const quoteFailure = (status: number) =>
     })[status] ?? `تعذّر احتساب السعر (${status}).`;
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, daysCount.value, form.period, form.client_id, form.event_type_id, form.package_id, form.discount_amount],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, daysCount.value, form.period, form.client_id, form.event_type_id, form.package_id, form.discount_amount, form.is_taxable],
     refreshQuote,
     { deep: true },
 );
@@ -662,7 +674,7 @@ const eventBadge = (color: string) =>
                     </div>
 
                     <div class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
-                        <div class="grid gap-3 sm:grid-cols-2">
+                        <div class="grid gap-3" :class="vatApplies ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
                             <div>
                                 <label class="mb-1 block text-[15px] font-bold text-slate-900">الخصم</label>
                                 <input v-model.number="form.discount_amount" type="number" min="0" step="0.01" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]" />
@@ -672,6 +684,32 @@ const eventBadge = (color: string) =>
                                 <select v-model="form.status" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
                                     <option v-for="s in meta.statuses" :key="s.key" :value="s.key">{{ s.label }}</option>
                                 </select>
+                            </div>
+
+                            <!-- A hall let to an exempt body is invoiced without tax
+                                 while the same hall is let with it to anyone else — so
+                                 the question belongs to the booking, not the unit. -->
+                            <div v-if="vatApplies">
+                                <label class="mb-1 block text-[15px] font-bold text-slate-900">الضريبة</label>
+                                <div class="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                                    <button
+                                        type="button"
+                                        @click="form.is_taxable = true"
+                                        class="rounded-lg px-2 py-2 text-sm font-bold transition"
+                                        :class="form.is_taxable ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'"
+                                    >
+                                        بضريبة
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="form.is_taxable = false"
+                                        class="rounded-lg px-2 py-2 text-sm font-bold transition"
+                                        :class="!form.is_taxable ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'"
+                                    >
+                                        بدون ضريبة
+                                    </button>
+                                </div>
+                                <p v-if="form.errors.is_taxable" class="mt-1 text-sm text-red-700">{{ form.errors.is_taxable }}</p>
                             </div>
                         </div>
 
@@ -741,6 +779,10 @@ const eventBadge = (color: string) =>
                                     <span class="font-bold">+ {{ money(quote.pricing.tax_amount) }}</span>
                                 </div>
                             </template>
+                            <div v-else-if="vatApplies" class="flex justify-between border-t border-slate-200 pt-2.5 text-slate-600">
+                                <span class="font-medium">الضريبة</span>
+                                <span class="font-bold">حجز بلا ضريبة</span>
+                            </div>
                             <div class="flex justify-between border-t border-slate-200 pt-2.5 text-xl">
                                 <span class="font-extrabold text-slate-900">{{ quote.pricing.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                 <span class="font-extrabold text-emerald-700">{{ money(quote.pricing.total_amount) }}</span>

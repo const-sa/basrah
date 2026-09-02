@@ -105,6 +105,7 @@ class Booking extends Model
         'addons_amount',
         'discount_amount',
         'total_amount',
+        'is_taxable',
         'deposit_amount',
         'security_deposit_amount',
         'paid_amount',
@@ -133,6 +134,7 @@ class Booking extends Model
             'deposit_amount' => 'decimal:2',
             'security_deposit_amount' => 'decimal:2',
             'paid_amount' => 'decimal:2',
+            'is_taxable' => 'boolean',
         ];
     }
 
@@ -217,6 +219,9 @@ class Booking extends Model
      * وهو صفرٌ في الحجوزات التي أُنشئت والضريبة معطّلة، بلا حاجة لقراءة
      * الإعدادات: الحجز يحمل ضريبته التي حُسبت يوم إنشائه لا التي تُفعَّل
      * بعده، فلا ينقلب سجلٌ قديم بتغيير إعداد.
+     *
+     * It is zero for a booking taken without tax too: `is_taxable` false means
+     * the total was stored at the net, so the difference is nothing.
      */
     public function taxAmount(): float
     {

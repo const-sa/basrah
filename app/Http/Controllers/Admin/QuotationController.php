@@ -316,6 +316,12 @@ class QuotationController extends Controller
                 'payment_method_id' => $data['payment_method_id'],
                 'discount_amount' => (float) $quotation->discount_amount,
                 'paid_amount' => $data['paid_amount'] ?? null,
+                // The invoice is written with the answer of the offer behind it: an
+                // offer whose every line is exempt becomes an untaxed invoice, so it
+                // prints no zero tax row and no QR code.
+                'is_taxable' => $quotation->items->contains(
+                    fn (QuotationItem $line) => (bool) $line->is_taxable,
+                ),
                 'notes' => $quotation->notes,
             ], $request->user()->id);
         } catch (ValidationException $e) {

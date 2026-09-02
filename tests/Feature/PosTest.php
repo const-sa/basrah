@@ -289,6 +289,9 @@ class PosTest extends TestCase
             ->post('/admin/pos/checkout', [
                 'lines' => [['item_id' => $this->item('SPR-001')->id, 'quantity' => 10]],
                 'payment_method_id' => $this->paymentMethodId('cash'),
+                // The screen always says whether the invoice is taxed — see
+                // SaleTaxChoiceTest.
+                'is_taxable' => true,
                 'paid_amount' => 300,
             ])
             ->assertRedirect();

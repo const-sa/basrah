@@ -260,6 +260,10 @@ abstract class BaseBookingsController extends Controller
             // الموظف أنه يحتاج متابعةً قبل أن يُعامَل كحجز متفق عليه.
             'is_online' => $b->isOnline(),
             'total_amount' => (float) $b->total_amount,
+            // The booking's own answer about tax — the edit screen opens on it
+            // and the invoice reads it back, so it is never inferred from the tax
+            // happening to be zero.
+            'is_taxable' => (bool) $b->is_taxable,
             'deposit_amount' => (float) $b->deposit_amount,
             'paid_amount' => (float) $b->paid_amount,
             'remaining_amount' => $b->remainingAmount(),

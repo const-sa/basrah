@@ -218,6 +218,10 @@ class ChaletBookingsController extends BaseBookingsController
             'client_id' => ['nullable', 'exists:clients,id'],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // With tax or without it — a question about this booking: a chalet let
+            // to an exempt body is invoiced without tax while the same chalet is
+            // let with it to anyone else.
+            'is_taxable' => ['nullable', 'boolean'],
             'ignore_booking_id' => ['nullable', 'integer'],
         ], ['section_ids.max' => self::ONE_SECTION]);
 
@@ -267,6 +271,7 @@ class ChaletBookingsController extends BaseBookingsController
                 $sectionIds,
                 $data['addons'] ?? [],
                 (float) ($data['discount_amount'] ?? 0),
+                (bool) ($data['is_taxable'] ?? true),
             ),
         ]);
     }
@@ -332,6 +337,7 @@ class ChaletBookingsController extends BaseBookingsController
                 $sectionIds,
                 $data['addons'] ?? [],
                 (float) ($data['discount_amount'] ?? 0),
+                (bool) ($data['is_taxable'] ?? true),
             ),
         ]);
     }
@@ -381,6 +387,7 @@ class ChaletBookingsController extends BaseBookingsController
                 null,
                 null,
                 $days,
+                (bool) ($data['is_taxable'] ?? true),
             ),
         ]);
     }
@@ -539,6 +546,10 @@ class ChaletBookingsController extends BaseBookingsController
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // With tax or without it — a question about this booking: a chalet let
+            // to an exempt body is invoiced without tax while the same chalet is
+            // let with it to anyone else.
+            'is_taxable' => ['nullable', 'boolean'],
             // The security deposit is held, not charged, so it has no bearing
             // on the total and is only bounded against a typing slip.
             'security_deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],

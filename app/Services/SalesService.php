@@ -32,7 +32,8 @@ class SalesService
      * @param  array{
      *     lines: list<array{item_id:int, quantity:float, unit_price?:float, discount_amount?:float, taxable?:bool}>,
      *     client_id?:int|null, unit_id?:int|null, booking_id?:int|null, quotation_id?:int|null,
-     *     payment_method_id?:int|null, discount_amount?:float, paid_amount?:float|null, notes?:string|null
+     *     payment_method_id?:int|null, discount_amount?:float, paid_amount?:float|null,
+     *     is_taxable?:bool, notes?:string|null
      * }  $data
      *
      * @throws ValidationException عند نفاد رصيد أي صنف
@@ -47,7 +48,13 @@ class SalesService
             ? PaymentMethod::findOrFail($data['payment_method_id'])
             : PaymentMethod::default();
 
-        return DB::transaction(function () use ($data, $userId, $method) {
+        // Whether tax is due at all belongs to the invoice, not to the catalogue:
+        // the same item is sold with tax to one buyer and without it to an exempt
+        // one. The item's rate says what would have been due, not what was
+        // agreed — so the invoice's answer outranks every rate on it.
+        $taxable = (bool) ($data['is_taxable'] ?? true);
+
+        return DB::transaction(function () use ($data, $userId, $method, $taxable) {
             $sale = Sale::create([
                 'number' => $this->nextNumber('sale'),
                 'user_id' => $userId,
@@ -58,11 +65,12 @@ class SalesService
                 'booking_id' => $data['booking_id'] ?? null,
                 'quotation_id' => $data['quotation_id'] ?? null,
                 'type' => 'sale',
+                'is_taxable' => $taxable,
                 'payment_method_id' => $method->id,
                 'notes' => $data['notes'] ?? null,
             ]);
 
-            [$subtotal, $tax, $cost] = $this->buildLines($sale, $data['lines'], $userId);
+            [$subtotal, $tax, $cost] = $this->buildLines($sale, $data['lines'], $userId, $taxable);
 
             $discount = round((float) ($data['discount_amount'] ?? 0), 2);
             $total = round(max(0, $subtotal + $tax - $discount), 2);
@@ -122,6 +130,9 @@ class SalesService
                 'department_id' => $original->department_id,
                 'booking_id' => $original->booking_id,
                 'type' => 'return',
+                // A return is written with the answer of the invoice it reverses:
+                // what was sold untaxed is refunded untaxed.
+                'is_taxable' => (bool) $original->is_taxable,
                 'original_sale_id' => $original->id,
                 'payment_method_id' => $original->payment_method_id,
                 'notes' => $reason,
@@ -197,9 +208,10 @@ class SalesService
      * بناء سطور الفاتورة مع فحص الرصيد وخصمه.
      *
      * @param  list<array<string, mixed>>  $lines
+     * @param  bool  $taxable  the invoice's own answer — it outranks every line's rate
      * @return array{0: float, 1: float, 2: float} [الإجمالي قبل الضريبة, الضريبة, التكلفة]
      */
-    private function buildLines(Sale $sale, array $lines, ?int $userId): array
+    private function buildLines(Sale $sale, array $lines, ?int $userId, bool $taxable = true): array
     {
         $subtotal = 0.0;
         $tax = 0.0;
@@ -229,7 +241,12 @@ class SalesService
             $price = round((float) ($row['unit_price'] ?? $item->price), 2);
             $lineDiscount = round((float) ($row['discount_amount'] ?? 0), 2);
             $lineTotal = round(max(0, $price * $qty - $lineDiscount), 2);
-            $lineTax = ($row['taxable'] ?? true) ? Vat::onAt($lineTotal, $item->tax_rate) : 0.0;
+            // Three conditions together: the system-wide switch (inside Vat::onAt),
+            // the invoice's answer, then the line's own — a quotation written with
+            // an exempt line converts to an invoice that keeps it exempt.
+            $lineTax = $taxable && ($row['taxable'] ?? true)
+                ? Vat::onAt($lineTotal, $item->tax_rate)
+                : 0.0;
             $lineCost = round((float) $item->cost * $qty, 2);
 
             $sale->lines()->create([

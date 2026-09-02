@@ -23,6 +23,8 @@ interface SaleRow {
     method_label: string;
     amount_before_tax: number;
     tax_amount: number;
+    /** Was the invoice issued with tax? Its answer outranks its items' rates. */
+    is_taxable: boolean;
     total: number;
     returned: number;
     net_total: number;
@@ -150,6 +152,17 @@ const statusClass = (s: string) =>
 // ── نافذة التفاصيل ──────────────────────────────────────────
 const details = ref<SaleDetails | null>(null);
 const detailsLoading = ref(false);
+
+/**
+ * Does the open invoice show tax?
+ *
+ * An invoice issued without tax has no tax row and no tax column, even with
+ * the switch on today: the sheet is read by its own answer, not by the
+ * business's setting now. And tax that was actually collected stays visible
+ * after the switch is turned off — which is what `shows` says.
+ */
+const detailsShowsTax = computed(() => (details.value?.sale.is_taxable ?? true) && shows(details.value?.sale.tax_amount ?? 0));
+
 const activeSale = ref<SaleRow | null>(null);
 
 /** التفاصيل تُجلب عند الفتح فقط — تحميلها لكل صف يثقل القائمة بلا داعٍ. */
@@ -538,7 +551,7 @@ const submitRefund = () => {
                                     {{
                                         details.sale.type === 'return'
                                             ? 'إشعار دائن (مرتجع)'
-                                            : shows(details.sale.tax_amount)
+                                            : detailsShowsTax
                                               ? 'فاتورة ضريبية مبسّطة'
                                               : 'فاتورة مبيعات'
                                     }}
@@ -581,10 +594,7 @@ const submitRefund = () => {
                                     <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الكمية</th>
                                     <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">السعر</th>
                                     <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الخصم</th>
-                                    <th
-                                        v-if="shows(details.sale.tax_amount)"
-                                        class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]"
-                                    >
+                                    <th v-if="detailsShowsTax" class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">
                                         الضريبة
                                     </th>
                                     <th class="border border-slate-300 px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الإجمالي</th>
@@ -602,7 +612,7 @@ const submitRefund = () => {
                                     <td class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">{{ qty(l.quantity) }}</td>
                                     <td class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">{{ money(l.unit_price) }}</td>
                                     <td class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">{{ money(l.discount_amount) }}</td>
-                                    <td v-if="shows(details.sale.tax_amount)" class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">
+                                    <td v-if="detailsShowsTax" class="border border-slate-300 px-2 py-1.5 text-center" dir="ltr">
                                         {{ money(l.tax_amount) }}
                                     </td>
                                     <td class="border border-slate-300 px-2 py-1.5 text-center font-extrabold" dir="ltr">{{ money(l.total) }}</td>
@@ -622,7 +632,7 @@ const submitRefund = () => {
                             <dl class="order-1 space-y-1 text-xs sm:order-2">
                                 <div class="flex justify-between border-b border-slate-100 py-1">
                                     <dt class="font-bold text-slate-600">
-                                        {{ shows(details.sale.tax_amount) ? 'الإجمالي قبل الضريبة' : 'الإجمالي' }}
+                                        {{ detailsShowsTax ? 'الإجمالي قبل الضريبة' : 'الإجمالي' }}
                                     </dt>
                                     <dd class="font-bold text-slate-800" dir="ltr">{{ money(details.sale.subtotal) }}</dd>
                                 </div>
@@ -630,12 +640,12 @@ const submitRefund = () => {
                                     <dt class="font-bold text-slate-600">الخصم</dt>
                                     <dd class="font-bold text-slate-800" dir="ltr">{{ money(details.sale.discount_amount) }}</dd>
                                 </div>
-                                <div v-if="shows(details.sale.tax_amount)" class="flex justify-between border-b border-slate-100 py-1">
+                                <div v-if="detailsShowsTax" class="flex justify-between border-b border-slate-100 py-1">
                                     <dt class="font-bold text-slate-600">ضريبة القيمة المضافة</dt>
                                     <dd class="font-bold text-slate-800" dir="ltr">{{ money(details.sale.tax_amount) }}</dd>
                                 </div>
                                 <div class="flex justify-between bg-slate-800 px-2 py-1.5 text-sm text-white">
-                                    <dt class="font-extrabold">{{ shows(details.sale.tax_amount) ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</dt>
+                                    <dt class="font-extrabold">{{ detailsShowsTax ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</dt>
                                     <dd class="font-extrabold" dir="ltr">{{ money(details.sale.total) }}</dd>
                                 </div>
                                 <div v-if="details.sale.returned > 0" class="flex justify-between py-1">

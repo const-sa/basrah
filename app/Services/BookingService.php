@@ -149,6 +149,11 @@ class BookingService
 
             $this->guardAvailability($unit, $scope, [...$data, 'days_count' => $days], $sectionIds);
 
+            // With tax unless told otherwise, which is the common case. A booking
+            // coming from the public site is never asked, so it takes the common
+            // case along with the rest of its defaults.
+            $taxable = (bool) ($data['is_taxable'] ?? true);
+
             $quote = $this->pricing->quote(
                 $unit,
                 $scope,
@@ -160,6 +165,7 @@ class BookingService
                 isset($data['package_id']) ? (int) $data['package_id'] : null,
                 isset($data['event_type_id']) ? (int) $data['event_type_id'] : null,
                 $days,
+                $taxable,
             );
 
             [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days, $unit);
@@ -190,6 +196,10 @@ class BookingService
                 'addons_amount' => $quote['addons_amount'],
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
+                // The answer is stored with the booking rather than inferred from its
+                // tax being zero: the invoice reads it back, and the edit screen
+                // opens on it.
+                'is_taxable' => $taxable,
                 'deposit_amount' => $quote['deposit_amount'],
                 'paid_amount' => 0,
                 'guests_count' => $data['guests_count'] ?? null,
@@ -227,6 +237,9 @@ class BookingService
                 'client_id' => $data['client_id'] ?? $booking->client_id,
                 'event_type_id' => array_key_exists('event_type_id', $data) ? $data['event_type_id'] : $booking->event_type_id,
                 'package_id' => array_key_exists('package_id', $data) ? $data['package_id'] : $booking->package_id,
+                // An edit keeps what was agreed unless it is being changed: moving a
+                // date must not put back tax waived for an exempt body.
+                'is_taxable' => (bool) ($data['is_taxable'] ?? $booking->is_taxable),
             ];
 
             $this->guardAvailability($unit, $scope, $payload, $sectionIds, $booking->id);
@@ -242,6 +255,7 @@ class BookingService
                 $payload['package_id'] ? (int) $payload['package_id'] : null,
                 $payload['event_type_id'] ? (int) $payload['event_type_id'] : null,
                 $payload['days_count'],
+                $payload['is_taxable'],
             );
 
             [$startsAt, $endsAt] = BookingPeriod::range(
@@ -268,6 +282,7 @@ class BookingService
                 'addons_amount' => $quote['addons_amount'],
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
+                'is_taxable' => $payload['is_taxable'],
                 'deposit_amount' => $quote['deposit_amount'],
                 'guests_count' => $data['guests_count'] ?? $booking->guests_count,
                 'notes' => $data['notes'] ?? $booking->notes,

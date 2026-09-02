@@ -188,7 +188,12 @@ class SalesController extends Controller
         //
         // والفاتورة الصادرة يبقى رمزها ما دامت تحمل ضريبةً حُصّلت: ورقةٌ
         // خرجت للعميل برمزٍ لا يصحّ أن تُطبع بعدها بلا رمز.
-        $taxNumber = Vat::applies() || (float) $sale->tax_amount > 0
+        //
+        // An invoice issued without tax has neither code nor number: a QR
+        // carrying zero tax is rejected by the authority's app, and the switch
+        // being on does not make a tax invoice out of one issued to an exempt
+        // buyer.
+        $taxNumber = ($sale->is_taxable && Vat::applies()) || (float) $sale->tax_amount > 0
             ? $settings->tax_number
             : null;
 
@@ -318,6 +323,7 @@ class SalesController extends Controller
             // السعر + الضريبة = الإجمالي.
             'amount_before_tax' => round((float) $sale->total_amount - (float) $sale->tax_amount, 2),
             'tax_amount' => (float) $sale->tax_amount,
+            'is_taxable' => (bool) $sale->is_taxable,
             'total' => (float) $sale->total_amount,
             'returned' => $sale->returnedAmount(),
             'net_total' => $sale->netTotal(),

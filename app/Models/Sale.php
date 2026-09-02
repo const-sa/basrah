@@ -30,7 +30,7 @@ class Sale extends Model
     protected $fillable = [
         'number', 'user_id', 'client_id', 'unit_id', 'department_id', 'booking_id',
         'quotation_id', 'type', 'original_sale_id', 'subtotal', 'discount_amount', 'tax_amount',
-        'total_amount', 'cost_amount', 'payment_method_id', 'paid_amount', 'notes',
+        'is_taxable', 'total_amount', 'cost_amount', 'payment_method_id', 'paid_amount', 'notes',
     ];
 
     protected function casts(): array
@@ -42,6 +42,7 @@ class Sale extends Model
             'total_amount' => 'decimal:2',
             'cost_amount' => 'decimal:2',
             'paid_amount' => 'decimal:2',
+            'is_taxable' => 'boolean',
         ];
     }
 

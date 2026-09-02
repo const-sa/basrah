@@ -352,6 +352,10 @@ class HallBookingsController extends BaseBookingsController
             'event_type_id' => ['nullable', $this->eventTypeBelongsToUnit($request)],
             'package_id' => ['nullable', 'exists:packages,id'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // With tax or without it — a question about this booking: a hall let
+            // to an exempt body is invoiced without tax while the same hall is let
+            // with it to anyone else.
+            'is_taxable' => ['nullable', 'boolean'],
             'ignore_booking_id' => ['nullable', 'integer'],
         ]);
 
@@ -382,6 +386,7 @@ class HallBookingsController extends BaseBookingsController
                 isset($data['package_id']) ? (int) $data['package_id'] : null,
                 isset($data['event_type_id']) ? (int) $data['event_type_id'] : null,
                 $days,
+                (bool) ($data['is_taxable'] ?? true),
             ),
             // آخر يوم يُحسب في الخادم لا في المتصفح: هو ما سيُخزَّن فعلًا،
             // فيرى الموظف قبل الحفظ ما سيُقفَل بالضبط.
@@ -413,6 +418,10 @@ class HallBookingsController extends BaseBookingsController
             'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // With tax or without it — a question about this booking: a hall let
+            // to an exempt body is invoiced without tax while the same hall is let
+            // with it to anyone else.
+            'is_taxable' => ['nullable', 'boolean'],
             'guests_count' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);

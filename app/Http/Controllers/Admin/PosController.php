@@ -110,6 +110,10 @@ class PosController extends Controller
             'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')
                 ->where('is_active', true)],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // With tax or without it — an answer the invoice gives, not its items.
+            // The screen always asks, so a missing answer is a broken request
+            // rather than a default to be assumed.
+            'is_taxable' => ['required', 'boolean'],
             // المقبوض عند الإصدار — يُحدّه الإجمالي في الخدمة لا هنا، فالإجمالي
             // لا يُحسب إلا بعد بناء السطور.
             'paid_amount' => ['nullable', 'numeric', 'min:0'],

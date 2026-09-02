@@ -64,6 +64,10 @@ class ChaletBookingService
                 $data['client_id'] ?? null,
                 null,
                 $this->hourlyTerms($data),
+                // With tax unless told otherwise, which is the common case. A
+                // booking from the public site is never asked, so it takes the
+                // common case along with the rest of its defaults.
+                (bool) ($data['is_taxable'] ?? true),
             );
 
             $quote = $plan['quote'];
@@ -90,6 +94,10 @@ class ChaletBookingService
                 'addons_amount' => $quote['addons_amount'],
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
+                // The answer is stored with the booking rather than inferred from
+                // its tax being zero: the invoice reads it back, and the edit
+                // screen opens on it.
+                'is_taxable' => (bool) ($data['is_taxable'] ?? true),
                 'deposit_amount' => $quote['deposit_amount'],
                 // The security deposit is the chalet's usual one unless the
                 // form said otherwise. It is stored beside the total, never
@@ -123,6 +131,9 @@ class ChaletBookingService
                 ? array_map('intval', $data['section_ids'] ?? $booking->sections->pluck('id')->all())
                 : [];
             $clientId = $data['client_id'] ?? $booking->client_id;
+            // An edit keeps what was agreed unless it is being changed: moving a
+            // date must not put back tax waived for an exempt body.
+            $taxable = (bool) ($data['is_taxable'] ?? $booking->is_taxable);
 
             $plan = $this->plan(
                 $unit,
@@ -137,6 +148,7 @@ class ChaletBookingService
                 $clientId,
                 $booking->id,
                 $this->hourlyTerms($data, $booking),
+                $taxable,
             );
 
             $quote = $plan['quote'];
@@ -162,6 +174,7 @@ class ChaletBookingService
                 'addons_amount' => $quote['addons_amount'],
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
+                'is_taxable' => $taxable,
                 'deposit_amount' => $quote['deposit_amount'],
                 // An edit keeps what was agreed unless it is being changed:
                 // falling back to the chalet's usual amount here would undo a
@@ -258,6 +271,7 @@ class ChaletBookingService
         ?int $clientId,
         ?int $ignoreId = null,
         array $hourly = [],
+        bool $taxable = true,
     ): array {
         // الحجز بالساعات: ساعتاه في الطلب لا في جدول الفترات، ومبلغه معه.
         if ($period === HourlyPeriod::PERIOD) {
@@ -271,6 +285,7 @@ class ChaletBookingService
                     $sectionIds,
                     $addons,
                     $discount,
+                    $taxable,
                 ),
                 'period' => HourlyPeriod::PERIOD,
                 'starts_at' => $startsAt,
@@ -288,7 +303,7 @@ class ChaletBookingService
             [$startsAt, $endsAt] = StayPeriod::range($date, (string) $checkOut, $unit);
 
             return [
-                'quote' => $this->pricing->quoteStay($unit, $date, (string) $checkOut, $sectionIds, $addons, $discount),
+                'quote' => $this->pricing->quoteStay($unit, $date, (string) $checkOut, $sectionIds, $addons, $discount, $taxable),
                 'period' => StayPeriod::PERIOD,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
@@ -310,7 +325,7 @@ class ChaletBookingService
             // simply passes no package and no event type, which are hall
             // tools and default to null anyway.
             'quote' => $this->pricing->quote(
-                $unit, $scope, $date, $period, $sectionIds, $addons, $discount, null, null, $days,
+                $unit, $scope, $date, $period, $sectionIds, $addons, $discount, null, null, $days, $taxable,
             ),
             'period' => $period,
             'starts_at' => $startsAt,

@@ -68,6 +68,8 @@ const form = useForm({
     client_id: props.defaultClientId as number | null,
     department_id: props.departmentId,
     payment_method_id: props.methods[0]?.id ?? (null as number | null),
+    // With tax unless the cashier says otherwise, which is the common case.
+    is_taxable: true,
     discount_amount: 0,
     paid_amount: 0,
     notes: '',
@@ -160,7 +162,17 @@ const normalizeQuantity = (line: Line) => {
 
 const lineTotal = (line: Line) => Math.max(0, line.unit_price * line.quantity - line.discount_amount);
 
+/**
+ * A line's tax at its item's rate — the invoice's answer outranks it.
+ *
+ * The rate describes what is due on the item, not what was agreed on this
+ * invoice: the same item is sold with tax to one buyer and without it to an
+ * exempt one. So an invoice marked as untaxed zeroes its lines whatever rates
+ * they carry — the same rule the server applies.
+ */
 const lineTax = (line: Line) => {
+    if (!form.is_taxable) return 0;
+
     const item = itemOf(line.item_id);
     return lineTotal(line) * ((item?.tax_rate ?? 0) / 100);
 };
@@ -237,7 +249,10 @@ const submit = () => {
             lines.value = [emptyLine()];
             lastGroup.value = null;
             paidInput.value = null;
-            form.reset('discount_amount', 'notes');
+            // Tax returns to the common case with the next invoice: an exemption
+            // belongs to one buyer, and leaving it latched would untax the next
+            // customer without anyone meaning to.
+            form.reset('discount_amount', 'notes', 'is_taxable');
             form.client_id = props.defaultClientId;
         },
     });
@@ -290,7 +305,7 @@ const numField =
                         </span>
                     </div>
 
-                    <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="grid gap-3" :class="vatApplies ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
                         <div>
                             <label class="mb-1 block text-sm font-extrabold text-slate-950">العميل</label>
                             <SearchableSelect v-model="form.client_id" :options="clients" :search-keys="['mobile']" placeholder="— عميل نقدي —">
@@ -316,6 +331,40 @@ const numField =
                                     "
                                 >
                                     {{ m.label }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Is tax due on this invoice? A question about the invoice, not
+                             its items: the same item is sold with tax to one buyer and
+                             without it to an exempt one. Not asked at all while tax is
+                             switched off system-wide. -->
+                        <div v-if="vatApplies">
+                            <label class="mb-1 block text-sm font-extrabold text-slate-950">الضريبة</label>
+                            <div class="flex gap-1">
+                                <button
+                                    type="button"
+                                    @click="form.is_taxable = true"
+                                    class="flex-1 rounded-lg py-2 text-xs font-extrabold transition"
+                                    :class="
+                                        form.is_taxable
+                                            ? 'bg-emerald-800 text-white shadow'
+                                            : 'border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-200'
+                                    "
+                                >
+                                    بضريبة
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="form.is_taxable = false"
+                                    class="flex-1 rounded-lg py-2 text-xs font-extrabold transition"
+                                    :class="
+                                        !form.is_taxable
+                                            ? 'bg-emerald-800 text-white shadow'
+                                            : 'border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-200'
+                                    "
+                                >
+                                    بدون ضريبة
                                 </button>
                             </div>
                         </div>
@@ -413,7 +462,11 @@ const numField =
 
                                     <td class="px-3 py-2 text-left">
                                         <span class="text-base font-extrabold text-slate-950" dir="ltr">{{ money(lineTotal(line)) }}</span>
-                                        <span v-if="itemOf(line.item_id)?.tax_rate" class="block text-[11px] font-bold text-slate-700" dir="ltr">
+                                        <span
+                                            v-if="form.is_taxable && itemOf(line.item_id)?.tax_rate"
+                                            class="block text-[11px] font-bold text-slate-700"
+                                            dir="ltr"
+                                        >
                                             +{{ money(lineTax(line)) }} ضريبة
                                         </span>
                                     </td>
@@ -479,7 +532,8 @@ const numField =
                             </div>
                             <div v-if="vatApplies" class="flex justify-between">
                                 <span class="font-extrabold text-slate-800">الضريبة</span>
-                                <span class="text-base font-extrabold text-slate-950" dir="ltr">{{ money(tax) }}</span>
+                                <span v-if="form.is_taxable" class="text-base font-extrabold text-slate-950" dir="ltr">{{ money(tax) }}</span>
+                                <span v-else class="text-xs font-extrabold text-slate-600">فاتورة بدون ضريبة</span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="font-extrabold text-slate-800">خصم على الفاتورة</span>

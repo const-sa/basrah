@@ -48,6 +48,7 @@ class BookingPricing
      * @param  list<int>  $sectionIds
      * @param  array<int, int>  $addons  معرّف الخدمة => الكمية
      * @param  int  $days  عدد أيام المناسبة — كل يوم يُسعَّر بيومه ثم تُجمع
+     * @param  bool  $taxable  the booking's own answer — neither the unit nor its price row is asked
      * @return array{
      *     base_amount: float, package_amount: float, event_fee_amount: float,
      *     priced_by_event: bool, addons_amount: float, discount_amount: float,
@@ -69,6 +70,7 @@ class BookingPricing
         ?int $packageId = null,
         ?int $eventTypeId = null,
         int $days = 1,
+        bool $taxable = true,
     ): array {
         $daysCount = BookingPeriod::days($days);
 
@@ -127,8 +129,10 @@ class BookingPricing
 
         // الضريبة تُضاف فوق المبلغ لا تُستخرج منه: الأسعار المُدخَلة صافية،
         // فيُجمع الصافي أولًا ثم تُحتسب ضريبته وتُضاف، ويخرج الإجمالي شاملًا.
+        // And a booking taken without tax carries none: an exempt body is
+        // invoiced at the net, so the total equals it instead of exceeding it.
         $net = (float) max(0, round($base + $packageTotal + $eventFee + $addonsTotal - $discount, 2));
-        $tax = Vat::breakdown($net);
+        $tax = Vat::breakdown($net, $taxable);
         $total = $tax['total_amount'];
 
         return [
@@ -188,6 +192,7 @@ class BookingPricing
         array $sectionIds = [],
         array $addons = [],
         float $discount = 0,
+        bool $taxable = true,
     ): array {
         $scope = $sectionIds === [] ? 'whole' : 'sections';
         $nights = StayPeriod::nightDates($checkIn, $checkOut);
@@ -223,7 +228,7 @@ class BookingPricing
         $base = round($base, 2);
         $discount = (float) max(0, round($discount, 2));
         $net = (float) max(0, round($base + $addonsTotal - $discount, 2));
-        $tax = Vat::breakdown($net);
+        $tax = Vat::breakdown($net, $taxable);
         $total = $tax['total_amount'];
         $count = count($nights);
 
@@ -269,6 +274,7 @@ class BookingPricing
         array $sectionIds = [],
         array $addons = [],
         float $discount = 0,
+        bool $taxable = true,
     ): array {
         $base = round(max(0, $amount), 2);
         $scope = $sectionIds === [] ? 'whole' : 'sections';
@@ -289,7 +295,7 @@ class BookingPricing
 
         $discount = (float) max(0, round($discount, 2));
         $net = (float) max(0, round($base + $addonsTotal - $discount, 2));
-        $tax = Vat::breakdown($net);
+        $tax = Vat::breakdown($net, $taxable);
 
         return [
             'base_amount' => $base,

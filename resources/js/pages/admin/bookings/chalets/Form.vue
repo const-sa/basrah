@@ -2,6 +2,7 @@
 import AvailabilityDatePicker from '@/components/AvailabilityDatePicker.vue';
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
+import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfToken } from '@/lib/csrf';
 import { addDays, daysBetween, formatTime12, startOfMonth, todayString } from '@/lib/dates';
@@ -48,6 +49,8 @@ interface ExistingBooking {
     base_amount: number;
     status: string;
     discount_amount: number;
+    /** Is this booking invoiced with tax? Stored with it, and asked again on every edit. */
+    is_taxable: boolean;
     /** The deposit agreed on this booking, and what is still held of it. */
     security_deposit_amount: number;
     security_held: number;
@@ -86,6 +89,11 @@ const props = defineProps<{
         payment_methods: PaymentMethodOption[];
     };
 }>();
+
+// An entry screen, so it follows the switch alone: the booking is not asked
+// about tax where there is no tax in the system at all. The pricing panel
+// answers with `pricing.is_taxable`, not with this.
+const { applies: vatApplies } = useVat();
 
 const isEdit = computed(() => props.booking !== null);
 
@@ -153,6 +161,9 @@ const form = useForm({
     status: props.booking?.status ?? 'confirmed',
     addons: { ...(props.booking?.addons ?? {}) } as Record<number, number>,
     discount_amount: props.booking?.discount_amount ?? 0,
+    // With tax unless told otherwise, which is the common case; an edit opens
+    // on whatever the booking was written with.
+    is_taxable: props.booking?.is_taxable ?? true,
     // The contract prints it. Left empty it prints «—», which is the honest
     // answer when nobody was asked how many were coming.
     guests_count: props.booking?.guests_count ?? (null as number | null),
@@ -466,6 +477,7 @@ const refreshQuote = () => {
                     client_id: form.client_id,
                     addons: form.addons,
                     discount_amount: form.discount_amount,
+                    is_taxable: form.is_taxable,
                     ignore_booking_id: props.booking?.id ?? null,
                 }),
             });
@@ -477,7 +489,7 @@ const refreshQuote = () => {
 };
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.start_time, form.end_time, form.hourly_amount, form.client_id, JSON.stringify(form.addons), form.discount_amount],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.start_time, form.end_time, form.hourly_amount, form.client_id, JSON.stringify(form.addons), form.discount_amount, form.is_taxable],
     refreshQuote,
     { deep: true },
 );
@@ -726,7 +738,7 @@ const setPayChoice = (choice: 'none' | 'full') => {
  */
 const inlineErrorKeys = computed(() => [
     'unit_id', 'client_id', 'booking_date', 'period', 'days_count',
-    'availability', 'payment_amount', 'discount_amount', 'notes',
+    'availability', 'payment_amount', 'discount_amount', 'is_taxable', 'notes',
     'security_deposit_amount', 'start_time', 'end_time', 'hourly_amount',
     ...(isStay.value ? ['check_out_date'] : []),
 ]);
@@ -976,7 +988,7 @@ const submit = () => {
 
 
                     <div class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
-                        <div class="grid gap-3 sm:grid-cols-3">
+                        <div class="grid gap-3" :class="vatApplies ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'">
                             <div>
                                 <label class="mb-1 block text-sm font-extrabold text-slate-900">الخصم</label>
                                 <input v-model.number="form.discount_amount" type="number" min="0" step="0.01" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
@@ -994,6 +1006,32 @@ const submit = () => {
                                 <input v-model.number="form.guests_count" type="number" min="1" placeholder="—" class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm" />
                                 <p class="mt-1 text-[11px] font-semibold text-slate-600">يُطبع في العقد.</p>
                                 <p v-if="form.errors.guests_count" class="mt-1 text-xs text-red-500">{{ form.errors.guests_count }}</p>
+                            </div>
+
+                            <!-- A chalet let to an exempt body is invoiced without tax
+                                 while the same chalet is let with it to anyone else —
+                                 so the question belongs to the booking, not the unit. -->
+                            <div v-if="vatApplies">
+                                <label class="mb-1 block text-sm font-extrabold text-slate-900">الضريبة</label>
+                                <div class="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                                    <button
+                                        type="button"
+                                        @click="form.is_taxable = true"
+                                        class="rounded-lg px-2 py-2 text-xs font-extrabold transition"
+                                        :class="form.is_taxable ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'"
+                                    >
+                                        بضريبة
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="form.is_taxable = false"
+                                        class="rounded-lg px-2 py-2 text-xs font-extrabold transition"
+                                        :class="!form.is_taxable ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'"
+                                    >
+                                        بدون ضريبة
+                                    </button>
+                                </div>
+                                <p v-if="form.errors.is_taxable" class="mt-1 text-xs text-red-500">{{ form.errors.is_taxable }}</p>
                             </div>
                         </div>
 
@@ -1093,6 +1131,10 @@ const submit = () => {
                                     <span class="font-bold">+ {{ money(pricing.tax_amount) }}</span>
                                 </div>
                             </template>
+                            <div v-else-if="vatApplies" class="flex justify-between border-t border-slate-100 pt-1.5 text-slate-600">
+                                <span class="font-medium">الضريبة</span>
+                                <span class="font-bold">حجز بلا ضريبة</span>
+                            </div>
                             <div class="flex justify-between border-t border-slate-100 pt-1.5 text-base">
                                 <span class="font-extrabold text-slate-700">{{ pricing.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                 <span class="font-extrabold text-teal-600">{{ money(pricing.total_amount) }}</span>
