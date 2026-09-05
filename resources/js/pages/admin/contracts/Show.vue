@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
+import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StayContractDocument from '@/components/contracts/StayContractDocument.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowRight, FileDown, FileText, MessageCircle, Printer, RefreshCw } from 'lucide-vue-next';
+import { ArrowRight, FileDown, FileText, MessageCircle, Pencil, Printer, RefreshCw } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -32,7 +33,11 @@ const props = defineProps<{
         from_quotation: boolean; subject: string | null;
         /** The pools' installation pad — its own sheet, not the standard one. */
         is_installation_form: boolean;
+        /** The pools' monthly-maintenance sheet — likewise its own. */
+        is_maintenance_form: boolean;
         first_installment: string | null; second_installment: string | null;
+        pool_width: string | null; pool_length: string | null;
+        pool_min_depth: string | null; pool_max_depth: string | null;
         quotation_id: number | null; quotation_number: string | null;
         quotation_date: string | null; valid_until: string | null;
         items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string }[];
@@ -48,6 +53,7 @@ const props = defineProps<{
         whatsapp: string | null;
         address: string | null;
         tax_number: string | null;
+        commercial_register: string | null;
         manager_name: string | null;
         manager_signature_url: string | null;
         stamp_url: string | null;
@@ -75,6 +81,7 @@ const isStay = computed(() => props.contract.unit_type === 'chalet');
 // rental terms — that list is what the parties actually agreed on.
 const isQuotation = computed(() => props.contract.from_quotation);
 const isInstallationForm = computed(() => props.contract.is_installation_form);
+const isMaintenanceForm = computed(() => props.contract.is_maintenance_form);
 const lines = computed(() => props.contract.items ?? []);
 
 // المدى الزمني: المناسبة الممتدة والإقامة يُذكر آخر يومهما، واليوم الواحد يُكتفى بتاريخه.
@@ -155,6 +162,14 @@ const print = () => window.print();
                     >
                         <MessageCircle class="h-4 w-4" /> إرسال عبر واتساب
                     </button>
+                    <!-- تعديل العقد نفسه — بخلاف «تحديث من النموذج» الذي يعيد قراءة صياغته -->
+                    <Link
+                        v-if="can('contracts.edit') && contract.status === 'draft'"
+                        :href="`/admin/contracts/${contract.id}/edit`"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                        <Pencil class="h-4 w-4" /> تعديل
+                    </Link>
                     <button
                         v-if="can('contracts.edit') && contract.status === 'draft'"
                         type="button"
@@ -190,6 +205,9 @@ const print = () => window.print();
 
             <!-- Pool piping and installation is sold on its own pad, likewise. -->
             <InstallationContractDocument v-else-if="isInstallationForm" :contract="contract" :issuer="issuer" />
+
+            <!-- Monthly pool maintenance is offered on its own sheet. -->
+            <MaintenanceContractDocument v-else-if="isMaintenanceForm" :contract="contract" :issuer="issuer" />
 
             <!-- العقد نفسه — ما يُطبع ويُوقَّع -->
             <div

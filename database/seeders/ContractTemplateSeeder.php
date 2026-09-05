@@ -6,11 +6,12 @@ use App\Models\ContractTemplate;
 use App\Support\ChaletContractTemplate;
 use App\Support\HallContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
+use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Seeder;
 
 /**
  * The pinned contract templates: the standard one, plus the hall, chalet and
- * pool-installation forms.
+ * the pools' installation and maintenance forms.
  * ⚠️ The legal wording is a draft, reviewed with counsel before use (§4.5).
  */
 class ContractTemplateSeeder extends Seeder
@@ -39,6 +40,14 @@ class ContractTemplateSeeder extends Seeder
         ContractTemplate::firstOrCreate(
             ['name' => PoolInstallationContractTemplate::NAME],
             PoolInstallationContractTemplate::attributes(),
+        );
+
+        // The pools' monthly-maintenance sheet — a different paper from the
+        // installation pad: priced lines with a discount and a visit schedule,
+        // and no equipment grid or two payments.
+        ContractTemplate::firstOrCreate(
+            ['name' => PoolMaintenanceContractTemplate::NAME],
+            PoolMaintenanceContractTemplate::attributes(),
         );
 
         ContractTemplate::updateOrCreate(

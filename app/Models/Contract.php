@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\PoolInstallationContractTemplate;
+use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -81,6 +82,19 @@ class Contract extends Model
     }
 
     /**
+     * Written on a client alone — no booking and no quotation behind it.
+     *
+     * Only such a contract may have its client, value and equipment lines
+     * edited: everywhere else those are the source document's, and correcting
+     * them here would put the contract at odds with the booking or the
+     * quotation it was drawn from.
+     */
+    public function isDirect(): bool
+    {
+        return $this->booking_id === null && $this->quotation_id === null;
+    }
+
+    /**
      * Is this contract printed on the pools' piping-and-installation form?
      *
      * Read from the frozen snapshot, not from the template: the form the
@@ -90,6 +104,16 @@ class Contract extends Model
     public function isInstallationForm(): bool
     {
         return ($this->data['form'] ?? null) === PoolInstallationContractTemplate::FORM;
+    }
+
+    /**
+     * Is this contract printed on the pools' monthly-maintenance sheet?
+     *
+     * Read from the frozen snapshot for the same reason as the pad above.
+     */
+    public function isMaintenanceForm(): bool
+    {
+        return ($this->data['form'] ?? null) === PoolMaintenanceContractTemplate::FORM;
     }
 
     /**

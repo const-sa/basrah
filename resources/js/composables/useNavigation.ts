@@ -91,8 +91,9 @@ export function useNavigation() {
         // كانت مجموعةً باسم «الإدارة»، فكان الوصول إلى أكثر الشاشات ترددًا
         // (لوحة التحكم والعملاء) يمرّ بنقرةِ فتحٍ لا تكشف إلا رابطًا واحدًا؛
         // وهنا تصير مداخل مفردة في أعلى القائمة تُفتح بنقرة.
+        // العملاء ليسوا مدخلًا واحدًا هنا: لكل نشاط سجلّه داخل قائمته، فالموظف
+        // يفتح عملاءه لا دليلًا يجمع الأنشطة الثلاثة.
         { title: t('nav.dashboard'), href: '/admin', icon: LayoutDashboard, perm: 'dashboard.view' },
-        { title: t('nav.clients'), href: '/admin/clients', icon: Contact, perm: 'clients.view' },
         { title: t('nav.reports'), href: '/admin/reports', icon: FileBarChart2, perm: 'reports.view' },
         // نظاما القاعات والشاليهات منفصلان تمامًا: لكلٍّ حجوزاته وتقويمه ونموذجه،
         // لأن القاعة تُحجز بفترة داخل يوم والشاليه يُحجز بليالٍ ممتدة. جمعهما في
@@ -106,6 +107,7 @@ export function useNavigation() {
                 { title: t('nav.hall_bookings'), href: '/admin/bookings/halls', icon: CalendarDays, perm: 'hall_bookings.view' },
                 { title: t('nav.hall_calendar'), href: '/admin/calendar/halls', icon: CalendarRange, perm: 'hall_calendar.view' },
                 { title: t('nav.hall_month_calendar'), href: '/admin/calendar/halls/month', icon: CalendarDays, perm: 'hall_calendar.view' },
+                { title: t('nav.clients'), href: '/admin/halls/clients', icon: Contact, perm: 'clients.view' },
                 { title: t('nav.all_halls'), href: '/admin/units/halls', icon: Building2, perm: 'halls.view' },
                 { title: t('nav.packages'), href: '/admin/packages', icon: PackageIcon, perm: 'packages.view' },
                 { title: t('nav.event_types'), href: '/admin/event-types', icon: PartyPopper, perm: 'event_types.view' },
@@ -128,6 +130,7 @@ export function useNavigation() {
             children: [
                 { title: t('nav.chalet_bookings'), href: '/admin/bookings/chalets', icon: CalendarDays, perm: 'chalet_bookings.view' },
                 { title: t('nav.chalet_calendar'), href: '/admin/calendar/chalets', icon: CalendarRange, perm: 'chalet_calendar.view' },
+                { title: t('nav.clients'), href: '/admin/chalets/clients', icon: Contact, perm: 'clients.view' },
                 { title: t('nav.all_chalets'), href: '/admin/units/chalets', icon: Home, perm: 'chalets.view' },
                 { title: t('nav.chalet_contract_template'), href: '/admin/units/chalet-contract-template', icon: FileText, perm: 'chalet_contract.view' },
                 ...unitsOfType('chalet').map((u) => ({
@@ -155,6 +158,7 @@ export function useNavigation() {
             children: [
                 { title: t('nav.cashier'), href: '/admin/pos', icon: ShoppingCart, perm: 'pos.view' },
                 { title: t('nav.sales'), href: '/admin/sales', icon: Receipt, perm: 'sales.view' },
+                { title: t('nav.clients'), href: '/admin/pools/clients', icon: Contact, perm: 'clients.view' },
                 { title: t('nav.items'), href: '/admin/items', icon: Boxes, perm: 'items.view' },
                 { title: t('nav.item_groups'), href: '/admin/item-groups', icon: Layers, perm: 'item_groups.view' },
                 { title: t('nav.measure_units'), href: '/admin/inventory/units', icon: Ruler, perm: 'items.view' },

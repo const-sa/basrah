@@ -84,6 +84,35 @@ class ClientActivityRegistersTest extends TestCase
         $this->assertSame(ClientType::POOL, Client::where('name', 'مشترٍ جديد')->value('type'));
     }
 
+    public function test_each_activity_opens_its_own_register_pinned_to_it(): void
+    {
+        foreach (['pools' => ClientType::POOL, 'halls' => ClientType::HALL, 'chalets' => ClientType::CHALET] as $segment => $type) {
+            $this->actingAs($this->owner)
+                ->get("/admin/{$segment}/clients")
+                ->assertOk()
+                ->assertInertia(fn ($p) => $p
+                    ->component('admin/clients/Index')
+                    ->where('activity', $type)
+                    ->where('activityLabel', ClientType::label($type))
+                    ->has('clients.data', 1)
+                    ->where('clients.data.0.type', $type)
+                    // المربّعات تعدّ السجل المفتوح لا الدليل كله.
+                    ->where('stats.total', 1),
+                );
+        }
+    }
+
+    public function test_a_pinned_register_cannot_be_widened_by_a_query_string(): void
+    {
+        $this->actingAs($this->owner)
+            ->get('/admin/halls/clients?type='.ClientType::POOL)
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p
+                ->where('filters.type', ClientType::HALL)
+                ->where('clients.data.0.type', ClientType::HALL),
+            );
+    }
+
     public function test_the_directory_filters_by_activity(): void
     {
         $this->actingAs($this->owner)

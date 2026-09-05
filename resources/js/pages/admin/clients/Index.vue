@@ -63,8 +63,14 @@ const props = defineProps<{
     filters: Filters;
     stats: ClientStats;
     types: ClientTypeOption[];
+    /** سجلٌّ مثبَّت حين تُفتح الشاشة من قائمة نشاطه — لا تبويبات ولا تجاوز. */
+    activity: ClientTypeKey | null;
+    activityLabel: string | null;
     cities: string[];
 }>();
+
+/** المسار الذي تعود إليه الفلاتر والتصدير — سجل النشاط أو الدليل كله. */
+const basePath = computed(() => (props.activity ? `/admin/${ACTIVITY_SEGMENT[props.activity]}/clients` : '/admin/clients'));
 
 const money = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
@@ -74,6 +80,9 @@ const TYPE_TONE: Record<ClientTypeKey, string> = {
     hall: 'bg-indigo-50 text-indigo-700',
     chalet: 'bg-amber-50 text-amber-700',
 };
+
+/** مقطع المسار الذي يفتح سجل كل نشاط — يطابق ما في routes/web.php. */
+const ACTIVITY_SEGMENT: Record<ClientTypeKey, string> = { pool: 'pools', hall: 'halls', chalet: 'chalets' };
 
 // خيارات المدينة في نموذج العميل: قائمة المدن المفعّلة، مع تضمين القيمة الحالية
 // إن كانت مخزّنة سابقاً لكنها غير موجودة/موقوفة في قائمة المدن (حفاظاً على البيانات القديمة).
@@ -85,10 +94,10 @@ const cityOptions = computed(() => {
     return list;
 });
 
-const breadcrumbs: BreadcrumbItem[] = [
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
-    { title: 'العملاء', href: '/admin/clients' },
-];
+    { title: props.activityLabel ? `عملاء ${props.activityLabel}` : 'العملاء', href: basePath.value },
+]);
 
 // ===== الفلاتر =====
 const f = reactive<Filters>({
@@ -103,7 +112,7 @@ const f = reactive<Filters>({
 });
 
 const reload = () => {
-    router.get('/admin/clients', { ...f }, { preserveState: true, replace: true, preserveScroll: true });
+    router.get(basePath.value, { ...f }, { preserveState: true, replace: true, preserveScroll: true });
 };
 
 // بحث فوري (live) أثناء الكتابة مع تأخير بسيط لتقليل الطلبات.
@@ -122,6 +131,9 @@ const exportUrl = computed(() => {
     const qs = params.toString();
     return `/admin/clients/export${qs ? `?${qs}` : ''}`;
 });
+
+/** النشاط المثبَّت لا يُختار في النموذج — العميل يُضاف إلى السجل المفتوح. */
+const formTypes = computed(() => (props.activity ? props.types.filter((t) => t.key === props.activity) : props.types));
 
 // ===== نموذج الإضافة/التعديل =====
 const showModal = ref(false);
@@ -144,7 +156,7 @@ const openCreate = () => {
     editingId.value = null;
     form.reset();
     form.clearErrors();
-    form.type = (f.type || props.types[0]?.key || 'pool') as ClientTypeKey;
+    form.type = (props.activity || f.type || props.types[0]?.key || 'pool') as ClientTypeKey;
     showModal.value = true;
 };
 
@@ -183,11 +195,13 @@ const destroy = (c: ClientRow) => {
 </script>
 
 <template>
-    <Head title="العملاء" />
+    <Head :title="activityLabel ? `عملاء ${activityLabel}` : 'العملاء'" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-4 p-5">
-            <h1 class="text-2xl font-extrabold text-slate-900">العملاء</h1>
+            <h1 class="text-2xl font-extrabold text-slate-900">
+                {{ activityLabel ? `عملاء ${activityLabel}` : 'العملاء' }}
+            </h1>
 
             <!-- مربّعات الإحصائيات -->
             <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -203,8 +217,8 @@ const destroy = (c: ClientRow) => {
                 <div class="lte-card-header">
                     <h3 class="lte-card-title">دليل العملاء</h3>
                     <div class="flex flex-wrap items-center gap-2">
-                        <!-- سجلّ كل نشاط على حدة: عملاء المسابح ليسوا نزلاء الشاليهات -->
-                        <div class="inline-flex gap-1 rounded-lg bg-slate-100 p-1">
+                        <!-- التبويبات للدليل الجامع وحده؛ السجل المفتوح من قائمة نشاطه لا يُوسَّع -->
+                        <div v-if="!activity" class="inline-flex gap-1 rounded-lg bg-slate-100 p-1">
                             <button
                                 type="button"
                                 @click="((f.type = ''), reload())"
@@ -269,7 +283,8 @@ const destroy = (c: ClientRow) => {
                                 <th class="px-4 py-3 text-start font-semibold">العميل</th>
                                 <th class="px-4 py-3 text-start font-semibold">الجوال</th>
                                 <th class="px-4 py-3 text-start font-semibold">البريد</th>
-                                <th class="px-4 py-3 text-center font-semibold">النشاط</th>
+                                <!-- في السجل المثبَّت كل صف من نشاطٍ واحد، فالعمود يكرّر نفسه -->
+                                <th v-if="!activity" class="px-4 py-3 text-center font-semibold">النشاط</th>
                                 <th class="px-4 py-3 text-center font-semibold">التعاملات</th>
                                 <th class="px-4 py-3 text-center font-semibold">النوع</th>
                                 <th class="px-4 py-3 text-center font-semibold">الحالة</th>
@@ -296,7 +311,7 @@ const destroy = (c: ClientRow) => {
                                 </td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900" dir="ltr">{{ c.mobile || '—' }}</td>
                                 <td class="px-4 py-2.5" dir="ltr">{{ c.email || '—' }}</td>
-                                <td class="px-4 py-2.5 text-center">
+                                <td v-if="!activity" class="px-4 py-2.5 text-center">
                                     <span
                                         class="rounded px-1.5 py-0.5 text-[11px] font-extrabold"
                                         :class="TYPE_TONE[c.type] ?? 'bg-slate-100 text-slate-600'"
@@ -374,7 +389,7 @@ const destroy = (c: ClientRow) => {
                                 </td>
                             </tr>
                             <tr v-if="clients.data.length === 0">
-                                <td colspan="9" class="px-4 py-12 text-center text-sm text-slate-400">لا يوجد عملاء مطابقون.</td>
+                                <td :colspan="activity ? 8 : 9" class="px-4 py-12 text-center text-sm text-slate-400">لا يوجد عملاء مطابقون.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -430,7 +445,7 @@ const destroy = (c: ClientRow) => {
                         <label class="mb-1 block text-sm font-bold text-slate-700">النشاط</label>
                         <div class="flex gap-1">
                             <button
-                                v-for="t in types"
+                                v-for="t in formTypes"
                                 :key="t.key"
                                 type="button"
                                 @click="form.type = t.key"

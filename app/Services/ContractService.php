@@ -3,15 +3,16 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\Client;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Setting;
-use App\Support\BookingPeriod;
 use App\Support\ChaletContractTemplate;
 use App\Support\Hijri;
 use App\Support\PoolInstallationContractTemplate;
+use App\Support\PoolMaintenanceContractTemplate;
 use App\Support\Tafqeet;
 use App\Support\Weekdays;
 use Carbon\CarbonImmutable;
@@ -29,6 +30,19 @@ use RuntimeException;
  */
 class ContractService
 {
+    /** The pool's measurements, taken at the site and typed onto the contract. */
+    public const DIMENSIONS = ['pool_width', 'pool_length', 'pool_min_depth', 'pool_max_depth'];
+
+    /**
+     * The fields that hold an amount. An edit types «8000» and the sheet
+     * prints «8,000.00», so every figure on it reads the same whether it came
+     * from a quotation or from the keyboard.
+     */
+    private const MONEY = [
+        'total_amount', 'subtotal', 'discount_amount', 'tax_amount', 'deposit_amount',
+        'remaining_amount', 'first_installment', 'second_installment', 'security_deposit',
+    ];
+
     /**
      * توليد عقد من حجز.
      */
@@ -102,6 +116,115 @@ class ContractService
     }
 
     /**
+     * Draw a contract straight onto a client, with no source document.
+     *
+     * Not every job is quoted first: the pools write the installation pad at
+     * the client's house, price it there, and hand it over signed. Making the
+     * quotation mandatory only pushed the employee to invent one, so the form
+     * is drawn on the client and its equipment grid is filled by hand — the
+     * value may be left blank for the same reason.
+     */
+    public function generateDirect(Client $client, ?ContractTemplate $template = null, ?float $total = null, ?int $userId = null): Contract
+    {
+        $template ??= ContractTemplate::defaultTemplate();
+
+        if (! $template) {
+            throw new RuntimeException('لا يوجد قالب عقد فعّال — أضف قالبًا أولًا.');
+        }
+
+        return DB::transaction(function () use ($client, $template, $total, $userId) {
+            $number = $this->nextNumber();
+            $data = $this->buildDirectData($client, $number, $total, $template);
+
+            return Contract::create([
+                'number' => $number,
+                'booking_id' => null,
+                'quotation_id' => null,
+                'client_id' => $client->id,
+                'contract_template_id' => $template->id,
+                'created_by' => $userId,
+                'body' => $this->render($template->body, $data),
+                'terms' => filled($template->terms) ? $this->render($template->terms, $data) : null,
+                'data' => $data,
+                'status' => 'draft',
+            ]);
+        });
+    }
+
+    /**
+     * The snapshot of a contract drawn on a client alone.
+     *
+     * The keys are the ones every contract writes; what has no source here —
+     * the quotation, its priced lines, the tax it carried — is written as «—»,
+     * which the page and the PDF print as an empty fill-in run rather than a
+     * dash. A value left blank is meant to be written on the paper.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildDirectData(Client $client, string $contractNumber, ?float $total = null, ?ContractTemplate $template = null): array
+    {
+        $settings = Setting::current();
+        $contractDate = now()->toDateString();
+
+        return [
+            'contract_number' => $contractNumber,
+            'contract_date' => $contractDate,
+            'contract_date_hijri' => Hijri::short($contractDate) ?: '—',
+            'org_name' => (string) ($settings->site_name ?? config('app.name')),
+            'client_name' => (string) $client->name,
+            'client_mobile' => (string) ($client->mobile ?: '—'),
+            'client_id_number' => (string) ($client->national_id ?: $client->tax_number ?: '—'),
+            'client_address' => (string) ($client->tax_address ?: $client->city ?: '—'),
+            'subject' => $this->subjectFor($template, null),
+            'form' => $this->formFor($template),
+            ...$this->blankBookingFields(),
+            'quotation_number' => '—',
+            'quotation_date' => '—',
+            'valid_until' => '—',
+            'items' => [],
+            'discount_amount' => '—',
+            'tax_amount' => '—',
+            'is_taxable' => '',
+            'tax_rate' => '—',
+            // Nothing is collected at signing here either — the first receipt
+            // voucher is what moves the paid and remaining boxes.
+            ...$this->valueFields($total),
+        ];
+    }
+
+    /**
+     * What a contract with no booking behind it leaves empty — the booking's
+     * own fields, and the pool measurements that are taken at the site and
+     * typed onto the contract afterwards.
+     *
+     * @return array<string, string>
+     */
+    private function blankBookingFields(): array
+    {
+        return [
+            ...array_fill_keys(self::DIMENSIONS, '—'),
+            'unit_name' => '—',
+            'booking_reference' => '—',
+            'sections' => '—',
+            'booking_date' => '—',
+            'booking_date_hijri' => '—',
+            'last_day_date' => '—',
+            'last_day_date_hijri' => '—',
+            'days_count' => '—',
+            'duration_label' => '—',
+            'check_in_day' => '—',
+            'check_out_day' => '—',
+            'check_in_time' => '—',
+            'check_out_time' => '—',
+            'period' => '—',
+            'starts_at' => '—',
+            'ends_at' => '—',
+            'guests_count' => '—',
+            'security_deposit' => '—',
+        ];
+    }
+
+    /**
      * The values that fill the template's placeholders for a quotation contract.
      *
      * The keys are deliberately the same ones a booking contract writes, so a
@@ -142,27 +265,10 @@ class ContractService
             // The layout the contract is printed on, frozen with the rest of
             // the snapshot — see PoolInstallationContractTemplate::FORM.
             'form' => $this->formFor($template),
-            'unit_name' => '—',
-            'booking_reference' => '—',
-            'sections' => '—',
             // A quotation has no booked date or period. Its validity date is the
             // deadline for accepting it, not a term of the contract, so it is
             // carried under its own key rather than dressed up as a booking date.
-            'booking_date' => '—',
-            'booking_date_hijri' => '—',
-            'last_day_date' => '—',
-            'last_day_date_hijri' => '—',
-            'days_count' => '—',
-            'duration_label' => '—',
-            'check_in_day' => '—',
-            'check_out_day' => '—',
-            'check_in_time' => '—',
-            'check_out_time' => '—',
-            'period' => '—',
-            'starts_at' => '—',
-            'ends_at' => '—',
-            'guests_count' => '—',
-            'security_deposit' => '—',
+            ...$this->blankBookingFields(),
             'quotation_number' => (string) $quotation->number,
             'quotation_date' => $quotation->created_at?->toDateString() ?? '—',
             'valid_until' => $quotation->valid_until?->toDateString() ?? '—',
@@ -199,8 +305,13 @@ class ContractService
      *
      * @return array<string, string>
      */
-    private function installments(float $total): array
+    private function installments(?float $total): array
     {
+        // A contract whose value is left to be written by hand splits nothing.
+        if ($total === null) {
+            return ['first_installment' => '—', 'second_installment' => '—'];
+        }
+
         $first = round($total / 2, 2);
 
         return [
@@ -218,11 +329,11 @@ class ContractService
      */
     private function subjectFor(?ContractTemplate $template, ?string $fallback): string
     {
-        if ($this->formFor($template) === PoolInstallationContractTemplate::FORM) {
-            return PoolInstallationContractTemplate::SUBJECT;
-        }
-
-        return (string) ($fallback ?: 'توريد وخدمات');
+        return match ($this->formFor($template)) {
+            PoolInstallationContractTemplate::FORM => PoolInstallationContractTemplate::SUBJECT,
+            PoolMaintenanceContractTemplate::FORM => PoolMaintenanceContractTemplate::SUBJECT,
+            default => (string) ($fallback ?: 'توريد وخدمات'),
+        };
     }
 
     /**
@@ -230,9 +341,183 @@ class ContractService
      */
     private function formFor(?ContractTemplate $template): ?string
     {
-        return $template?->name === PoolInstallationContractTemplate::NAME
-            ? PoolInstallationContractTemplate::FORM
-            : null;
+        return match ($template?->name) {
+            PoolInstallationContractTemplate::NAME => PoolInstallationContractTemplate::FORM,
+            PoolMaintenanceContractTemplate::NAME => PoolMaintenanceContractTemplate::FORM,
+            default => null,
+        };
+    }
+
+    /**
+     * Edit a draft in place, keeping the number it was issued under.
+     *
+     * Every field the contract prints is writable here — its dates, both
+     * parties, the figures, the lines, the notes and the text itself. The
+     * snapshot is what the contract says, so this writes to it rather than
+     * around it: nothing is stored in a second place that could disagree with
+     * the paper. The number is the one exception — it identifies the contract,
+     * and a register whose numbers move is no register.
+     *
+     * @param  array<string, mixed>  $changes
+     */
+    public function applyEdit(Contract $contract, array $changes): Contract
+    {
+        $contract->loadMissing('template');
+
+        $data = $contract->data ?? [];
+
+        // The client is applied first, so an edit to a printed name or number
+        // in the same submit wins over what the client record carries.
+        if (filled($changes['client_id'] ?? null)) {
+            $client = Client::findOrFail((int) $changes['client_id']);
+
+            $contract->client_id = $client->id;
+            $data['client_name'] = (string) $client->name;
+            $data['client_mobile'] = (string) ($client->mobile ?: '—');
+            $data['client_id_number'] = (string) ($client->national_id ?: $client->tax_number ?: '—');
+            $data['client_address'] = (string) ($client->tax_address ?: $client->city ?: '—');
+        }
+
+        $touched = [];
+
+        foreach ((array) ($changes['fields'] ?? []) as $key => $value) {
+            if (! array_key_exists($key, ContractTemplate::PLACEHOLDERS) || $key === 'contract_number') {
+                continue;
+            }
+
+            // «—» is how the snapshot writes an empty field: the page and the
+            // PDF print it as a blank run to be filled by hand.
+            $next = filled($value) ? $this->fieldValue($key, (string) $value) : '—';
+
+            if (($data[$key] ?? null) !== $next) {
+                $touched[] = $key;
+            }
+
+            $data[$key] = $next;
+        }
+
+        // The words and the two payments follow a corrected value, unless they
+        // were rewritten in the same edit — otherwise a fixed figure would
+        // leave the sentence under it contradicting the box above.
+        if (in_array('total_amount', $touched, true)) {
+            $total = $this->amountOf($data['total_amount'] ?? null);
+
+            if (! in_array('total_amount_words', $touched, true)) {
+                $data['total_amount_words'] = $total !== null ? Tafqeet::money($total) : '—';
+            }
+
+            if (! array_intersect(['first_installment', 'second_installment'], $touched)) {
+                $data = [...$data, ...$this->installments($total)];
+            }
+        }
+
+        if (array_key_exists('items', $changes)) {
+            $data['items'] = $this->editedLines((array) $changes['items']);
+        }
+
+        $template = $contract->template;
+
+        $contract->fill([
+            'body' => (string) $this->rewritten($changes, 'body', $contract->body, $template?->body, $data),
+            'terms' => $this->rewritten($changes, 'terms', $contract->terms, $template?->terms, $data),
+            'data' => $data,
+        ]);
+
+        $contract->save();
+
+        return $contract;
+    }
+
+    /**
+     * Text the employee rewrote is kept word for word; text left as it was is
+     * re-rendered from the template, so a corrected figure reaches the
+     * sentences quoting it instead of leaving the old one standing.
+     *
+     * @param  array<string, mixed>  $changes
+     * @param  array<string, mixed>  $data
+     */
+    private function rewritten(array $changes, string $key, ?string $current, ?string $source, array $data): ?string
+    {
+        if (array_key_exists($key, $changes) && trim((string) $changes[$key]) !== trim((string) $current)) {
+            return filled($changes[$key]) ? (string) $changes[$key] : null;
+        }
+
+        return filled($source) ? $this->render($source, $data) : $current;
+    }
+
+    /**
+     * A typed field as the contract will print it — an amount is formatted,
+     * anything else is kept exactly as written, including an amount spelled
+     * out in words rather than digits.
+     */
+    private function fieldValue(string $key, string $value): string
+    {
+        $amount = in_array($key, self::MONEY, true) ? $this->amountOf($value) : null;
+
+        return $amount !== null ? number_format($amount, 2) : $value;
+    }
+
+    /**
+     * A printed figure read back as a number — «8,000.00» is what the snapshot
+     * holds, and it is not something to compute with as it stands.
+     */
+    private function amountOf(?string $value): ?float
+    {
+        $clean = str_replace(',', '', (string) $value);
+
+        return is_numeric($clean) ? (float) $clean : null;
+    }
+
+    /**
+     * The money fields as one block — every box that moves when the value does.
+     *
+     * @return array<string, string>
+     */
+    private function valueFields(?float $total): array
+    {
+        $amount = $total !== null ? number_format($total, 2) : '—';
+
+        return [
+            'total_amount' => $amount,
+            'total_amount_words' => $total !== null ? Tafqeet::money($total) : '—',
+            'subtotal' => $amount,
+            'remaining_amount' => $amount,
+            'deposit_amount' => $total !== null ? number_format(0, 2) : '—',
+            ...$this->installments($total),
+        ];
+    }
+
+    /**
+     * The contract's own lines as typed onto it — a description, a count and,
+     * where the sheet prints them, prices. Blank rows are dropped rather than
+     * printed as empty lines the client is asked to sign against.
+     *
+     * @param  array<int, mixed>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function editedLines(array $lines): array
+    {
+        return collect($lines)
+            ->filter(fn ($line) => filled($line['name'] ?? null))
+            ->map(fn ($line) => [
+                'name' => (string) $line['name'],
+                'code' => filled($line['code'] ?? null) ? (string) $line['code'] : null,
+                'quantity' => (float) ($line['quantity'] ?? 0),
+                'unit_price' => $this->lineMoney($line['unit_price'] ?? null),
+                'total_price' => $this->lineMoney($line['total_price'] ?? null),
+            ])
+            ->values()->all();
+    }
+
+    /**
+     * A line's price as the grid prints it — empty where the form has no
+     * price column at all, as the installation pad has none.
+     */
+    private function lineMoney(mixed $value): string
+    {
+        $amount = $this->amountOf(is_scalar($value) ? (string) $value : null);
+
+        return $amount !== null ? number_format($amount, 2) : '';
     }
 
     /**

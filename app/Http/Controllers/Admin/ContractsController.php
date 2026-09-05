@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\Client;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Quotation;
@@ -11,6 +12,7 @@ use App\Models\Setting;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
+use App\Support\ClientType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -78,11 +80,13 @@ class ContractsController extends Controller
         $poolsOnly = $scope === 'quotation';
 
         $query = Contract::query()
-            // A quotation contract has no unit behind it, so unit visibility
-            // cannot scope it — `contracts.view` is the whole gate there.
-            ->when($poolsOnly, fn ($q) => $q->whereNotNull('quotation_id'))
+            // Anything not drawn from a booking is the pools' — a quotation
+            // contract or one written straight onto a client. Neither has a
+            // unit behind it, so unit visibility cannot scope them and
+            // `contracts.view` is the whole gate there.
+            ->when($poolsOnly, fn ($q) => $q->whereNull('booking_id'))
             ->unless($poolsOnly, fn ($q) => $q->where(fn ($w) => $w
-                ->whereNotNull('quotation_id')
+                ->whereNull('booking_id')
                 ->orWhereHas('booking', fn ($b) => $b->visibleTo($user))))
             ->with([
                 'booking:id,reference,unit_id,booking_date', 'booking.unit:id,name',
@@ -142,6 +146,16 @@ class ContractsController extends Controller
                     'department' => $q->department?->name,
                     'status' => $q->status,
                     'accepted' => $q->status === 'accepted',
+                ]),
+            // Whom a contract with no source document is written for. The pools
+            // screen offers its own clients, as its counter does.
+            'clients' => Client::query()
+                ->when($poolsOnly, fn ($q) => $q->ofType([ClientType::POOL]))
+                ->where('is_active', true)
+                ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
+                ->map(fn (Client $c) => [
+                    'id' => $c->id,
+                    'label' => $c->name.($c->mobile ? ' — '.$c->mobile : ''),
                 ]),
             'stats' => [
                 'total' => (clone $query)->count(),
@@ -218,8 +232,14 @@ class ContractsController extends Controller
                 // Drawn on the pools' piping-and-installation pad — the page
                 // prints that form instead of the standard contract sheet.
                 'is_installation_form' => $contract->isInstallationForm(),
+                // Drawn on the pools' monthly-maintenance sheet — likewise.
+                'is_maintenance_form' => $contract->isMaintenanceForm(),
                 'first_installment' => $data['first_installment'] ?? null,
                 'second_installment' => $data['second_installment'] ?? null,
+                // Measured at the site and typed onto the contract; whatever is
+                // still missing prints as a blank run to be written by hand.
+                ...collect(ContractService::DIMENSIONS)
+                    ->mapWithKeys(fn (string $key) => [$key => $data[$key] ?? null])->all(),
                 'subject' => $contract->subject(),
                 'quotation_id' => $contract->quotation_id,
                 'quotation_number' => $contract->quotation?->number ?? ($data['quotation_number'] ?? null),
@@ -242,6 +262,9 @@ class ContractsController extends Controller
                 'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
                 'address' => $settings->address,
                 'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+                // The maintenance sheet's letterhead carries the CR number
+                // where the installation pad carries the tax number.
+                'commercial_register' => $settings->commercial_register,
                 'manager_name' => $settings->manager_name,
                 'manager_signature_url' => $settings->manager_signature_path
                     ? asset($settings->manager_signature_path)
@@ -321,6 +344,145 @@ class ContractsController extends Controller
         }
 
         return back()->with('success', "تم توليد العقد {$contract->number} من عرض السعر {$quotation->number}");
+    }
+
+    /**
+     * Write a contract straight onto a client — no booking, no quotation.
+     *
+     * The installation pad is filled at the client's house, so the job is often
+     * contracted before anything is quoted. The value may be left out and
+     * written on the paper by hand.
+     */
+    public function storeDirect(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+            'contract_template_id' => ['nullable', 'exists:contract_templates,id'],
+            'total_amount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $template = isset($data['contract_template_id'])
+            ? ContractTemplate::find($data['contract_template_id'])
+            : null;
+
+        try {
+            $contract = $this->contracts->generateDirect(
+                Client::findOrFail($data['client_id']),
+                $template,
+                isset($data['total_amount']) ? (float) $data['total_amount'] : null,
+                $request->user()?->id,
+            );
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        return back()->with('success', "تم تحرير العقد {$contract->number}");
+    }
+
+    /**
+     * Which box on the edit screen each field belongs in. Anything unlisted
+     * falls into the last group, so a field added to the placeholders is
+     * editable the day it exists rather than the day this list is remembered.
+     */
+    private const FIELD_GROUPS = [
+        'بيانات العقد' => ['contract_date', 'contract_date_hijri', 'subject', 'org_name',
+            'quotation_number', 'quotation_date', 'valid_until'],
+        'الطرف الثاني' => ['client_name', 'client_mobile', 'client_id_number', 'client_address'],
+        'القيمة والدفعات' => ['total_amount', 'total_amount_words', 'subtotal', 'discount_amount',
+            'tax_rate', 'tax_amount', 'deposit_amount', 'remaining_amount',
+            'first_installment', 'second_installment', 'security_deposit'],
+        'مقاسات المسبح' => ContractService::DIMENSIONS,
+    ];
+
+    /**
+     * The edit form for a draft — every field the contract prints.
+     */
+    public function edit(Contract $contract): Response|RedirectResponse
+    {
+        if ($contract->isSent()) {
+            return redirect()->route('contracts.show', $contract)
+                ->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
+        }
+
+        $data = $contract->data ?? [];
+
+        // A field the contract carries, plus the site measurements when it is
+        // printed on the form that asks for them. The number is not offered:
+        // it identifies the contract.
+        $keys = collect(ContractTemplate::PLACEHOLDERS)->keys()
+            ->reject(fn (string $key) => $key === 'contract_number')
+            ->filter(fn (string $key) => (isset($data[$key]) && is_scalar($data[$key]))
+                || ($contract->isInstallationForm() && in_array($key, ContractService::DIMENSIONS, true)));
+
+        $groups = $keys
+            ->groupBy(fn (string $key) => collect(self::FIELD_GROUPS)
+                ->search(fn (array $members) => in_array($key, $members, true)) ?: 'تفاصيل العقد')
+            ->map(fn ($members, $title) => [
+                'title' => $title,
+                'fields' => $members->map(fn (string $key) => [
+                    'key' => $key,
+                    'label' => ContractTemplate::PLACEHOLDERS[$key],
+                    // «—» is the snapshot's empty, and an input should show it
+                    // as empty rather than asking the employee to erase a dash.
+                    'value' => ($data[$key] ?? '—') === '—' ? '' : (string) $data[$key],
+                ])->values(),
+            ])->values();
+
+        return Inertia::render('admin/contracts/Edit', [
+            'contract' => [
+                'id' => $contract->id,
+                'number' => $contract->number,
+                'client_id' => $contract->client_id,
+                'items' => $contract->lines(),
+                'body' => $contract->body,
+                'terms' => $contract->terms,
+                'groups' => $groups,
+                // A contract with a source document says so, so an edit that
+                // parts it from its quotation or booking is a knowing one.
+                'quotation_number' => $contract->quotation?->number,
+                'booking_reference' => $contract->booking?->reference,
+                'is_installation_form' => $contract->isInstallationForm(),
+            ],
+            'clients' => Client::where('is_active', true)
+                ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
+                ->map(fn (Client $c) => [
+                    'id' => $c->id,
+                    'label' => $c->name.($c->mobile ? ' — '.$c->mobile : ''),
+                ]),
+        ]);
+    }
+
+    /**
+     * Save the edited draft — same number, same date, rewritten text.
+     */
+    public function update(Request $request, Contract $contract): RedirectResponse
+    {
+        // A sent or signed contract is the paper the client holds: correcting
+        // it under its own number forges what was signed.
+        if ($contract->isSent()) {
+            return back()->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
+        }
+
+        $data = $request->validate([
+            'client_id' => ['nullable', 'exists:clients,id'],
+            // The snapshot's own fields, whatever the contract carries — the
+            // service keeps the write to the known placeholders.
+            'fields' => ['nullable', 'array'],
+            'fields.*' => ['nullable', 'string', 'max:500'],
+            'items' => ['nullable', 'array', 'max:60'],
+            'items.*.name' => ['nullable', 'string', 'max:190'],
+            'items.*.code' => ['nullable', 'string', 'max:60'],
+            'items.*.quantity' => ['nullable', 'numeric', 'min:0'],
+            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.total_price' => ['nullable', 'numeric', 'min:0'],
+            'body' => ['required', 'string', 'max:40000'],
+            'terms' => ['nullable', 'string', 'max:40000'],
+        ]);
+
+        $this->contracts->applyEdit($contract, $data);
+
+        return redirect()->route('contracts.show', $contract)
+            ->with('success', 'تم حفظ تعديل العقد');
     }
 
     /**

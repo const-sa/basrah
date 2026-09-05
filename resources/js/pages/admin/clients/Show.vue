@@ -88,9 +88,13 @@ const props = defineProps<{
 
 const { can, canBooking } = usePermissions();
 
+/** مقطع المسار الذي يفتح سجل كل نشاط — يطابق ما في routes/web.php. */
+const ACTIVITY_SEGMENT: Record<string, string> = { pool: 'pools', hall: 'halls', chalet: 'chalets' };
+
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
-    { title: 'العملاء', href: '/admin/clients' },
+    // العودة إلى سجل نشاط العميل لا إلى الدليل الجامع — منه فُتح الملف.
+    { title: `عملاء ${props.client.type_label}`, href: `/admin/${ACTIVITY_SEGMENT[props.client.type] ?? 'pools'}/clients` },
     { title: props.client.name, href: `/admin/clients/${props.client.id}` },
 ]);
 

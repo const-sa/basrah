@@ -53,6 +53,8 @@ class ContractTemplate extends Model
         'total_amount_words' => 'الإجمالي كتابةً',
         // الضريبة داخل الإجمالي لا فوقه، فقالب العقد يذكرها تفصيلًا لا يزيدها.
         'subtotal' => 'الإجمالي قبل الضريبة',
+        // مجموع البنود قبل الخصم، والخصم عليه — كما يقرأ عرض السعر.
+        'discount_amount' => 'الخصم',
         'tax_rate' => 'نسبة الضريبة',
         'tax_amount' => 'مبلغ الضريبة',
         'deposit_amount' => 'العربون',
@@ -61,7 +63,16 @@ class ContractTemplate extends Model
         // both are derived from the total rather than typed on every contract.
         'first_installment' => 'الدفعة الأولى (50% من قيمة العقد)',
         'second_installment' => 'الدفعة الثانية (50% من قيمة العقد)',
+        // Measured at the site, so they are typed onto the contract itself.
+        'pool_width' => 'عرض المسبح',
+        'pool_length' => 'طول المسبح',
+        'pool_min_depth' => 'أقل عمق',
+        'pool_max_depth' => 'أقصى عمق',
         'security_deposit' => 'مبلغ التأمين المسترد',
+        // The source document a pools contract quotes in its own opening lines.
+        'quotation_number' => 'رقم عرض السعر',
+        'quotation_date' => 'تاريخ عرض السعر',
+        'valid_until' => 'صلاحية العرض حتى',
     ];
 
     protected $fillable = [

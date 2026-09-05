@@ -15,6 +15,10 @@ interface InstallationContract {
     total_amount_words: string | null;
     first_installment: string | null;
     second_installment: string | null;
+    pool_width: string | null;
+    pool_length: string | null;
+    pool_min_depth: string | null;
+    pool_max_depth: string | null;
     items: { name: string; code: string | null; quantity: number }[];
 }
 
@@ -132,16 +136,16 @@ const grid = computed(() => {
             <td class="v" style="width: 90%">{{ contract.total_amount_words }}</td>
         </tr></table>
 
-        <!-- Pool dimensions are measured on site, so the form prints them blank -->
+        <!-- Measured on site: typed onto the contract, or left blank for the pen -->
         <table class="ln"><tr>
             <td class="k" style="width: 10%">عرض المسبح<span class="en">Showing pool</span></td>
-            <td class="v" style="width: 15%">{{ fill(null) }}</td>
+            <td class="v" style="width: 15%">{{ fill(contract.pool_width) }}</td>
             <td class="k pr-2" style="width: 6%">الطول<span class="en">Length</span></td>
-            <td class="v" style="width: 15%">{{ fill(null) }}</td>
+            <td class="v" style="width: 15%">{{ fill(contract.pool_length) }}</td>
             <td class="k pr-2" style="width: 8%">أقل عمق<span class="en">Less depth</span></td>
-            <td class="v" style="width: 15%">{{ fill(null) }}</td>
+            <td class="v" style="width: 15%">{{ fill(contract.pool_min_depth) }}</td>
             <td class="k pr-2" style="width: 10%">أقصى عمق<span class="en">Maximum depth</span></td>
-            <td class="v" style="width: 15%">{{ fill(null) }}</td>
+            <td class="v" style="width: 15%">{{ fill(contract.pool_max_depth) }}</td>
         </tr></table>
 
         <!-- Not «grid»: that is a Tailwind utility, and display:grid on a table

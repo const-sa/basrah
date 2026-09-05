@@ -144,13 +144,13 @@
 {{-- Pool dimensions are measured on site, so the form prints them blank --}}
 <table class="ln"><tr>
     <td class="k" style="width: 10%;">عرض المسبح<span class="en">Showing pool</span></td>
-    <td class="v" style="width: 15%;">{{ $fill(null) }}</td>
+    <td class="v" style="width: 15%;">{{ $fill($data['pool_width'] ?? null) }}</td>
     <td class="k" style="width: 6%; padding-right: 8pt;">الطول<span class="en">Length</span></td>
-    <td class="v" style="width: 15%;">{{ $fill(null) }}</td>
+    <td class="v" style="width: 15%;">{{ $fill($data['pool_length'] ?? null) }}</td>
     <td class="k" style="width: 8%; padding-right: 8pt;">أقل عمق<span class="en">Less depth</span></td>
-    <td class="v" style="width: 15%;">{{ $fill(null) }}</td>
+    <td class="v" style="width: 15%;">{{ $fill($data['pool_min_depth'] ?? null) }}</td>
     <td class="k" style="width: 10%; padding-right: 8pt;">أقصى عمق<span class="en">Maximum depth</span></td>
-    <td class="v" style="width: 15%;">{{ $fill(null) }}</td>
+    <td class="v" style="width: 15%;">{{ $fill($data['pool_max_depth'] ?? null) }}</td>
 </tr></table>
 
 <table class="eqgrid">

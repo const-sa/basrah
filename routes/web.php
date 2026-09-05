@@ -227,6 +227,13 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         // Pools contracts are drawn from a quotation, not a booking — a separate
         // endpoint keeps each source's validation to its own fields.
         Route::post('contracts/from-quotation', [ContractsController::class, 'storeFromQuotation'])->middleware('perm:contracts.create')->name('contracts.from_quotation');
+        // A job contracted before it was quoted — the form is written on the
+        // client alone, and «direct» before {contract} keeps it off show().
+        Route::post('contracts/direct', [ContractsController::class, 'storeDirect'])->middleware('perm:contracts.create')->name('contracts.direct');
+        // Editing the draft itself — its client, value, equipment and notes —
+        // as against refresh, which only re-reads the template's wording.
+        Route::get('contracts/{contract}/edit', [ContractsController::class, 'edit'])->middleware('perm:contracts.edit')->name('contracts.edit');
+        Route::put('contracts/{contract}', [ContractsController::class, 'update'])->middleware('perm:contracts.edit')->name('contracts.update');
         Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->middleware('perm:contracts.edit')->name('contracts.refresh');
         Route::post('contracts/{contract}/send', [ContractsController::class, 'send'])->middleware('perm:contracts.send')->name('contracts.send');
         Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->middleware('perm:contracts.edit')->name('contracts.status');
@@ -434,6 +441,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
     // العملاء
     Route::get('clients', [ClientsController::class, 'index'])->middleware('perm:clients.view')->name('clients.index');
+    // سجل عملاء كل نشاط — الشاشة نفسها مقصورةً على سجلٍّ واحد، يفتحها
+    // الموظف من قائمة نشاطه فلا يمرّ على عملاء نشاطٍ لا يعمل فيه.
+    Route::get('halls/clients', [ClientsController::class, 'hallClients'])->middleware('perm:clients.view')->name('clients.halls');
+    Route::get('chalets/clients', [ClientsController::class, 'chaletClients'])->middleware('perm:clients.view')->name('clients.chalets');
+    Route::get('pools/clients', [ClientsController::class, 'poolClients'])->middleware('perm:clients.view')->name('clients.pools');
     Route::get('clients/export', [ClientsController::class, 'export'])->middleware('perm:clients.view')->name('clients.export');
     Route::post('clients', [ClientsController::class, 'store'])->middleware('perm:clients.create')->name('clients.store');
     // إضافة سريعة من شاشات الحجز — قبل مسارات {client} كي لا تُفسَّر "quick" معرّفًا

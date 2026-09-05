@@ -5,7 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, Eye, MessageCircle, Plus, Search, Trash2, X } from 'lucide-vue-next';
+import { CheckCircle2, Eye, MessageCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -31,6 +31,7 @@ const props = defineProps<{
     templates: { id: number; name: string; is_default: boolean }[];
     bookings: { id: number; label: string }[];
     quotations: QuotationOption[];
+    clients: { id: number; label: string }[];
     stats: { total: number; draft: number; sent: number; signed: number };
 }>();
 
@@ -54,21 +55,32 @@ const apply = () => router.get(basePath.value, filters.value, { preserveState: t
 
 const showModal = ref(false);
 
-// A contract is always drawn from a source document, never typed: a booking for
-// halls and chalets, a quotation for pools. The two never mix in one form —
-// picking a source picks which field is required and where the form posts.
-type Source = 'booking' | 'quotation';
+// Where the contract comes from: a booking for halls and chalets, a quotation
+// for pools, or the client alone when the job was contracted before it was
+// priced. The sources never mix in one form — picking one picks which field is
+// required and where the form posts.
+type Source = 'booking' | 'quotation' | 'client';
 const source = ref<Source>('booking');
+
+const sourceLabels: Record<Source, string> = {
+    booking: 'من حجز',
+    quotation: 'من عرض سعر',
+    client: 'بلا عرض سعر',
+};
 
 const form = useForm({
     booking_id: null as number | null,
     quotation_id: null as number | null,
+    client_id: null as number | null,
+    total_amount: null as number | null,
     contract_template_id: null as number | null,
 });
 
-// The pools register draws from quotations only — a contract made from a
-// booking would not appear in the very screen that created it.
-const sources = computed<Source[]>(() => (poolsOnly.value ? ['quotation'] : ['booking', 'quotation']));
+// The pools register never draws from a booking — that contract would not
+// appear in the very screen that created it.
+const sources = computed<Source[]>(() =>
+    poolsOnly.value ? ['quotation', 'client'] : ['booking', 'quotation', 'client'],
+);
 
 const openCreate = () => {
     form.reset();
@@ -76,7 +88,11 @@ const openCreate = () => {
     form.contract_template_id = props.templates.find((t) => t.is_default)?.id ?? props.templates[0]?.id ?? null;
     // Open on whichever source actually has something to draw from, so the
     // employee does not land on an empty list and think the screen is broken.
-    source.value = poolsOnly.value || (!props.bookings.length && props.quotations.length) ? 'quotation' : 'booking';
+    if (poolsOnly.value) {
+        source.value = props.quotations.length ? 'quotation' : 'client';
+    } else {
+        source.value = !props.bookings.length && props.quotations.length ? 'quotation' : 'booking';
+    }
     showModal.value = true;
 };
 
@@ -85,17 +101,31 @@ const pickSource = (next: Source) => {
     form.clearErrors();
 };
 
-const canSubmit = computed(() => (source.value === 'booking' ? !!form.booking_id : !!form.quotation_id));
+const canSubmit = computed(() => {
+    if (source.value === 'booking') return !!form.booking_id;
+    if (source.value === 'client') return !!form.client_id;
+    return !!form.quotation_id;
+});
+
+const endpoints: Record<Source, string> = {
+    booking: '/admin/contracts',
+    quotation: '/admin/contracts/from-quotation',
+    client: '/admin/contracts/direct',
+};
 
 const submit = () => {
-    const isBooking = source.value === 'booking';
+    const picked = source.value;
 
     form
         .transform((data) => ({
             contract_template_id: data.contract_template_id,
-            ...(isBooking ? { booking_id: data.booking_id } : { quotation_id: data.quotation_id }),
+            ...(picked === 'booking' ? { booking_id: data.booking_id } : {}),
+            ...(picked === 'quotation' ? { quotation_id: data.quotation_id } : {}),
+            // A blank value is left to be written on the paper, so it is sent
+            // as nothing rather than as a zero the contract would print.
+            ...(picked === 'client' ? { client_id: data.client_id, total_amount: data.total_amount || null } : {}),
         }))
-        .post(isBooking ? '/admin/contracts' : '/admin/contracts/from-quotation', {
+        .post(endpoints[picked], {
             preserveScroll: true,
             onSuccess: () => (showModal.value = false),
         });
@@ -190,7 +220,9 @@ const statusClass = (s: string) =>
                                 </td>
                                 <td class="px-4 py-3">
                                     <template v-if="c.from_quotation">
-                                        <div class="font-bold text-slate-700" dir="ltr">{{ c.quotation_number ?? '—' }}</div>
+                                        <!-- A contract written with no quotation says so, rather than showing a bare dash. -->
+                                        <div v-if="c.quotation_number" class="font-bold text-slate-700" dir="ltr">{{ c.quotation_number }}</div>
+                                        <div v-else class="text-[11px] font-bold text-slate-400">بلا عرض سعر</div>
                                         <div class="text-[11px] text-slate-500">{{ c.subject ?? 'عرض سعر' }}</div>
                                     </template>
                                     <template v-else>
@@ -215,6 +247,14 @@ const statusClass = (s: string) =>
                                          يأتيان منه فلا يختلف زرٌّ عن جاره في الخلية -->
                                     <div class="flex items-center justify-center gap-1.5">
                                         <TableActionButton variant="view" :icon="Eye" title="عرض" :href="`/admin/contracts/${c.id}`" />
+                                        <!-- A draft is still ours to correct; once sent it is the client's paper. -->
+                                        <TableActionButton
+                                            v-if="can('contracts.edit') && c.status === 'draft'"
+                                            variant="edit"
+                                            :icon="Pencil"
+                                            title="تعديل"
+                                            :href="`/admin/contracts/${c.id}/edit`"
+                                        />
                                         <TableActionButton
                                             v-if="can('contracts.send') && c.status !== 'cancelled'"
                                             variant="success"
@@ -254,14 +294,19 @@ const statusClass = (s: string) =>
             <div class="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                     <h2 class="text-lg font-extrabold text-slate-900">
-                        {{ source === 'quotation' ? 'تحرير عقد من عرض سعر' : 'توليد عقد من حجز' }}
+                        <template v-if="source === 'quotation'">تحرير عقد من عرض سعر</template>
+                        <template v-else-if="source === 'client'">تحرير عقد بلا عرض سعر</template>
+                        <template v-else>توليد عقد من حجز</template>
                     </h2>
                     <button type="button" @click="showModal = false" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
                 </div>
 
                 <form @submit.prevent="submit" class="space-y-3 px-6 py-4">
                     <!-- المصدر: العقد يُحرَّر على مستند سابق لا يُكتب من فراغ -->
-                    <div v-if="sources.length > 1" class="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                    <div
+                        v-if="sources.length > 1"
+                        :class="['grid gap-1 rounded-xl bg-slate-100 p-1', sources.length > 2 ? 'grid-cols-3' : 'grid-cols-2']"
+                    >
                         <button
                             v-for="s in sources"
                             :key="s"
@@ -272,7 +317,7 @@ const statusClass = (s: string) =>
                                 source === s ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800',
                             ]"
                         >
-                            {{ s === 'booking' ? 'من حجز' : 'من عرض سعر' }}
+                            {{ sourceLabels[s] }}
                         </button>
                     </div>
 
@@ -285,6 +330,36 @@ const statusClass = (s: string) =>
                         <p v-if="form.errors.booking_id" class="mt-1 text-xs text-red-500">{{ form.errors.booking_id }}</p>
                         <p v-if="!bookings.length" class="mt-1 text-xs font-medium text-amber-600">كل الحجوزات لها عقود بالفعل.</p>
                     </div>
+
+                    <!-- No quotation: the contract is written on the client, and its
+                         value may be left for the paper to carry. -->
+                    <template v-else-if="source === 'client'">
+                        <div>
+                            <label class="mb-1 block text-sm font-bold text-slate-700">العميل</label>
+                            <select v-model="form.client_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                <option :value="null">— اختر العميل —</option>
+                                <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.label }}</option>
+                            </select>
+                            <p v-if="form.errors.client_id" class="mt-1 text-xs text-red-500">{{ form.errors.client_id }}</p>
+                            <p v-if="!clients.length" class="mt-1 text-xs font-medium text-amber-600">لا عملاء — أضف عميلًا أولًا.</p>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-sm font-bold text-slate-700">قيمة العقد (اختياري)</label>
+                            <input
+                                v-model.number="form.total_amount"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="اتركه فارغًا ليُكتب على الورقة"
+                                class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                            />
+                            <p v-if="form.errors.total_amount" class="mt-1 text-xs text-red-500">{{ form.errors.total_amount }}</p>
+                            <p class="mt-1 text-xs font-medium text-slate-500">
+                                لا بنود لهذا العقد — جدول المعدات يُملأ بخط اليد، والدفعتان تُحسبان من القيمة إن كُتبت.
+                            </p>
+                        </div>
+                    </template>
 
                     <div v-else>
                         <label class="mb-1 block text-sm font-bold text-slate-700">عرض السعر</label>
@@ -316,7 +391,7 @@ const statusClass = (s: string) =>
                     <div class="flex justify-end gap-2 border-t border-slate-100 pt-4">
                         <button type="button" @click="showModal = false" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600">إلغاء</button>
                         <button type="submit" :disabled="form.processing || !canSubmit" class="rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-                            {{ source === 'quotation' ? 'تحرير العقد' : 'توليد العقد' }}
+                            {{ source === 'booking' ? 'توليد العقد' : 'تحرير العقد' }}
                         </button>
                     </div>
                 </form>

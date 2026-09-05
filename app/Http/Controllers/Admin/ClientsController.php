@@ -29,9 +29,27 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientsController extends Controller
 {
-    public function index(Request $request): Response
+    public function hallClients(Request $request): Response
     {
-        $filters = $this->parseFilters($request);
+        return $this->index($request, ClientType::HALL);
+    }
+
+    public function chaletClients(Request $request): Response
+    {
+        return $this->index($request, ClientType::CHALET);
+    }
+
+    public function poolClients(Request $request): Response
+    {
+        return $this->index($request, ClientType::POOL);
+    }
+
+    /**
+     * دليل العملاء — كله، أو سجل نشاطٍ واحد حين تُفتح الشاشة من قائمته.
+     */
+    public function index(Request $request, ?string $activity = null): Response
+    {
+        $filters = $this->parseFilters($request, $activity);
 
         $clients = $this->filteredQuery($filters)
             // عدّادات الملف في القائمة: الصف يقول كم تعامل معنا العميل وكم بقي
@@ -69,12 +87,15 @@ class ClientsController extends Controller
         // عدّ كل نشاط مرةً واحدة بالتجميع — لا استعلامًا لكل نوع.
         $byType = Client::selectRaw('type, COUNT(*) AS total')->groupBy('type')->pluck('total', 'type');
 
+        // المربّعات تعدّ ما تعرضه الشاشة: سجل النشاط المفتوح لا الدليل كله.
+        $scoped = fn () => Client::query()->when($activity, fn ($q, $type) => $q->where('type', $type));
+
         $stats = [
-            'total' => Client::count(),
-            'active' => Client::where('is_active', true)->count(),
-            'inactive' => Client::where('is_active', false)->count(),
-            'taxable' => Client::where('is_taxable', true)->count(),
-            'non_taxable' => Client::where('is_taxable', false)->count(),
+            'total' => $scoped()->count(),
+            'active' => $scoped()->where('is_active', true)->count(),
+            'inactive' => $scoped()->where('is_active', false)->count(),
+            'taxable' => $scoped()->where('is_taxable', true)->count(),
+            'non_taxable' => $scoped()->where('is_taxable', false)->count(),
             'by_type' => collect(ClientType::keys())
                 ->mapWithKeys(fn (string $key) => [$key => (int) ($byType[$key] ?? 0)])
                 ->all(),
@@ -85,6 +106,9 @@ class ClientsController extends Controller
             'filters' => $filters,
             'stats' => $stats,
             'types' => ClientType::forFrontend(),
+            // النشاط المثبَّت — الشاشة تُخفي تبويبات الأنشطة حين يُفتح سجلٌّ بعينه.
+            'activity' => $activity,
+            'activityLabel' => $activity ? ClientType::label($activity) : null,
             // قائمة المدن المفعّلة لتعبئة قائمة الاختيار في نموذج العميل.
             'cities' => City::where('is_active', true)->orderBy('name')->pluck('name'),
         ]);
@@ -327,16 +351,17 @@ class ClientsController extends Controller
     }
 
     /**
+     * @param  string|null  $activity  نشاطٌ تُثبَّت عليه الشاشة، فلا يُوسّعه فلتر.
      * @return array<string, string>
      */
-    private function parseFilters(Request $request): array
+    private function parseFilters(Request $request, ?string $activity = null): array
     {
         return [
             'name' => trim((string) $request->get('name', '')),
             'mobile' => trim((string) $request->get('mobile', '')),
             'email' => trim((string) $request->get('email', '')),
             'city' => trim((string) $request->get('city', '')),
-            'type' => in_array($request->get('type'), ClientType::keys(), true) ? (string) $request->get('type') : '',
+            'type' => $activity ?? (in_array($request->get('type'), ClientType::keys(), true) ? (string) $request->get('type') : ''),
             'status' => (string) $request->get('status', ''),
             'from' => (string) $request->get('from', ''),
             'to' => (string) $request->get('to', ''),

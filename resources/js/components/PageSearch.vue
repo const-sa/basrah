@@ -208,7 +208,28 @@ const allPages = computed<Page[]>(() => [
     { href: '/admin/hr/payroll', icon: Wallet, title: t('nav.payroll'), perm: 'payroll.view', keywords: ['payroll', 'راتب', 'رواتب', 'مسير'] },
 
     // العملاء والإدارة
-    { href: '/admin/clients', icon: Contact, title: t('nav.clients'), perm: 'clients.view', keywords: ['clients', 'customers', 'عميل', 'عملاء'] },
+    // سجلٌّ لكل نشاط — والبحث يقود إلى السجل المقصود لا إلى دليلٍ يجمعها.
+    {
+        href: '/admin/pools/clients',
+        icon: Contact,
+        title: `${t('nav.clients')} — ${t('nav.pool_clients')}`,
+        perm: 'clients.view',
+        keywords: ['clients', 'customers', 'عميل', 'عملاء', 'مسابح'],
+    },
+    {
+        href: '/admin/halls/clients',
+        icon: Contact,
+        title: `${t('nav.clients')} — ${t('nav.hall_clients')}`,
+        perm: 'clients.view',
+        keywords: ['clients', 'customers', 'عميل', 'عملاء', 'قاعات'],
+    },
+    {
+        href: '/admin/chalets/clients',
+        icon: Contact,
+        title: `${t('nav.clients')} — ${t('nav.chalet_clients')}`,
+        perm: 'clients.view',
+        keywords: ['clients', 'customers', 'عميل', 'عملاء', 'شاليهات', 'نزلاء'],
+    },
     { href: '/admin/suppliers', icon: Truck, title: t('nav.suppliers'), perm: 'suppliers.view', keywords: ['suppliers', 'مورد', 'موردين'] },
     {
         href: '/admin/employees',

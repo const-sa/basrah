@@ -45,6 +45,7 @@ class ContractPdf
         $view = match (true) {
             $data['isChaletForm'] => 'pdf.contract-stay',
             $data['isInstallationForm'] => 'pdf.contract-installation',
+            $data['isMaintenanceForm'] => 'pdf.contract-maintenance',
             default => 'pdf.contract',
         };
 
@@ -147,6 +148,9 @@ class ContractPdf
             // The pools' piping-and-installation pad — its own sheet, with the
             // equipment grid and the two payments the paper form carries.
             'isInstallationForm' => $contract->isInstallationForm(),
+            // The monthly-maintenance sheet — the priced lines, the discount
+            // under them and the visit schedule in its notes.
+            'isMaintenanceForm' => $contract->isMaintenanceForm(),
             // A pools contract prints its priced lines where a rental contract
             // prints unit, period and guest count — different documents behind
             // the same letterhead, numbering and signatures.
@@ -166,6 +170,9 @@ class ContractPdf
                 'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
                 'address' => $settings->address,
                 'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+                // The maintenance sheet's letterhead carries the CR number
+                // where the installation pad carries the tax number.
+                'commercial_register' => $settings->commercial_register,
                 'manager_name' => $settings->manager_name,
             ],
             // الصور تُمرَّر بمساراتها على القرص لا بروابطها: mpdf يقرأ الملف
