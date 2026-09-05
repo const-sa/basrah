@@ -502,7 +502,7 @@ class ContractService
             ->map(fn ($line) => [
                 'name' => (string) $line['name'],
                 'code' => filled($line['code'] ?? null) ? (string) $line['code'] : null,
-                'quantity' => (float) ($line['quantity'] ?? 0),
+                'quantity' => $this->cellValue($line['quantity'] ?? null),
                 'unit_price' => $this->lineMoney($line['unit_price'] ?? null),
                 'total_price' => $this->lineMoney($line['total_price'] ?? null),
             ])
@@ -510,14 +510,27 @@ class ContractService
     }
 
     /**
-     * A line's price as the grid prints it — empty where the form has no
-     * price column at all, as the installation pad has none.
+     * A line's price as the grid prints it — a figure formatted like every
+     * other amount, and words kept as words: a price cell on the paper is
+     * sometimes «حسب الاتفاق», and a sheet that swallowed that would print an
+     * empty box where something was written.
      */
     private function lineMoney(mixed $value): string
     {
         $amount = $this->amountOf(is_scalar($value) ? (string) $value : null);
 
-        return $amount !== null ? number_format($amount, 2) : '';
+        return $amount !== null ? number_format($amount, 2) : trim((string) (is_scalar($value) ? $value : ''));
+    }
+
+    /**
+     * A counted cell: a number stays a number so it prints and adds up as one,
+     * and anything else is kept exactly as typed.
+     */
+    private function cellValue(mixed $value): string|float
+    {
+        $amount = $this->amountOf(is_scalar($value) ? (string) $value : null);
+
+        return $amount ?? trim((string) (is_scalar($value) ? $value : ''));
     }
 
     /**

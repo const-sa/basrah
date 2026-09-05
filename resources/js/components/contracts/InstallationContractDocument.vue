@@ -19,8 +19,21 @@ interface InstallationContract {
     pool_length: string | null;
     pool_min_depth: string | null;
     pool_max_depth: string | null;
-    items: { name: string; code: string | null; quantity: number }[];
+    items: DocLine[];
 }
+
+/**
+ * A line of the equipment grid. The pad prints no prices; other sheets do, and
+ * a blank row carries no count until someone writes one in.
+ */
+type DocLine = {
+    name: string;
+    code: string | null;
+    /** A count, or the words written in its place — «حسب الاتفاق». */
+    quantity: number | string | null;
+    unit_price: string;
+    total_price: string;
+};
 
 interface Issuer {
     business_name: string;
@@ -34,7 +47,25 @@ interface Issuer {
     stamp_url: string | null;
 }
 
-const props = defineProps<{ contract: InstallationContract; issuer: Issuer }>();
+const props = withDefaults(
+    defineProps<{
+        contract: InstallationContract;
+        issuer: Issuer;
+        /**
+         * The same sheet, filled in on screen: every printed run becomes the
+         * input that writes it. The edit screen is the form itself rather than
+         * a list of boxes the employee has to match up to the paper by eye.
+         */
+        editable?: boolean;
+    }>(),
+    { editable: false },
+);
+
+// Models, not props: the edit screen owns the values, and a defineModel ref may
+// be written to from here without mutating what was handed down.
+const fields = defineModel<Record<string, string>>('fields', { default: () => ({}) });
+const items = defineModel<DocLine[]>('items', { default: () => [] });
+const terms = defineModel<string>('terms', { default: '' });
 
 const logoFailed = ref(false);
 watch(() => props.issuer.logo_url, () => (logoFailed.value = false));
@@ -44,22 +75,35 @@ const fill = (value: string | null | undefined) => value || ' ';
 
 // Quantities are printed as written, not as 1.00 — the paper's grid holds
 // hand-written counts and «1» is what the salesman would put there.
-const qty = (value: number | null | undefined) =>
-    value === null || value === undefined ? ' ' : String(Number(value));
+const qty = (value: number | string | null | undefined) => {
+    if (value === null || value === undefined || value === '') return ' ';
 
-const termsText = computed(() => props.contract.terms ?? props.contract.body);
+    // A cell holding words instead of a count prints the words.
+    return Number.isFinite(Number(value)) ? String(Number(value)) : String(value);
+};
+
+const termsText = computed(() => (props.editable ? terms.value : props.contract.terms ?? props.contract.body));
 
 // The equipment grid is two halves side by side, the lines split between them,
 // and padded to the pad's row count so a short contract still prints a grid
-// with room to write in.
+// with room to write in. While editing, the padding is real rows, so any empty
+// cell on the sheet can be typed into.
+const lines = computed(() => (props.editable ? items.value : props.contract.items) ?? []);
+
 const grid = computed(() => {
-    const lines = props.contract.items ?? [];
-    const half = Math.ceil(lines.length / 2);
-    const right = lines.slice(0, half);
-    const left = lines.slice(half);
+    const half = Math.ceil(lines.value.length / 2);
+    const right = lines.value.slice(0, half);
+    const left = lines.value.slice(half);
     const rows = Math.max(right.length, left.length, 9);
 
-    return Array.from({ length: rows }, (_, i) => ({ right: right[i] ?? null, left: left[i] ?? null }));
+    return Array.from({ length: rows }, (_, i) => ({
+        right: right[i] ?? null,
+        left: left[i] ?? null,
+        // Where each half's row sits in the flat list, so an input writes back
+        // to the line it is printed on.
+        rightIndex: i,
+        leftIndex: half + i,
+    }));
 });
 </script>
 
@@ -98,54 +142,99 @@ const grid = computed(() => {
             <td class="k" style="width: 11%">رقم العقد<span class="en">Cont. No.</span></td>
             <td class="v serial" style="width: 21%" dir="ltr">{{ contract.number }}</td>
             <td class="k pr-3" style="width: 12%">تاريخ العقد<span class="en">Cont. Date</span></td>
-            <td class="v" style="width: 24%" dir="ltr">{{ fill(contract.contract_date_hijri) }}</td>
+            <td class="v" style="width: 24%" dir="ltr">
+                <input v-if="editable" v-model="fields.contract_date_hijri" class="fillin" dir="ltr" />
+                <template v-else>{{ fill(contract.contract_date_hijri) }}</template>
+            </td>
             <td class="k" style="width: 8%">هـ الموافق</td>
-            <td class="v" style="width: 24%" dir="ltr">{{ fill(contract.contract_date) }}</td>
+            <td class="v" style="width: 24%" dir="ltr">
+                <input v-if="editable" v-model="fields.contract_date" class="fillin" dir="ltr" />
+                <template v-else>{{ fill(contract.contract_date) }}</template>
+            </td>
         </tr></table>
 
         <table class="ln"><tr>
             <td class="k" style="width: 10%">طرف أول<span class="en">1st Part</span></td>
-            <td class="v" style="width: 90%"><bdi>{{ issuer.business_name }}</bdi></td>
+            <td class="v" style="width: 90%">
+                <input v-if="editable" v-model="fields.org_name" class="fillin" :placeholder="issuer.business_name" />
+                <bdi v-else>{{ issuer.business_name }}</bdi>
+            </td>
         </tr></table>
 
         <table class="ln"><tr>
             <td class="k" style="width: 19%">طرف ثاني: السادة / المكرم<span class="en">M/S</span></td>
-            <td class="v" style="width: 41%">{{ fill(contract.client_name) }}</td>
+            <td class="v" style="width: 41%">
+                <input v-if="editable" v-model="fields.client_name" class="fillin" />
+                <template v-else>{{ fill(contract.client_name) }}</template>
+            </td>
             <td class="k pr-3" style="width: 8%">جوال<span class="en">Mob.</span></td>
-            <td class="v" style="width: 32%" dir="ltr">{{ fill(contract.client_mobile) }}</td>
+            <td class="v" style="width: 32%" dir="ltr">
+                <input v-if="editable" v-model="fields.client_mobile" class="fillin" dir="ltr" />
+                <template v-else>{{ fill(contract.client_mobile) }}</template>
+            </td>
         </tr></table>
 
         <table class="ln"><tr>
             <td class="k" style="width: 11%">عنوان الموقع<span class="en">Place</span></td>
-            <td class="v" style="width: 61%">{{ fill(contract.client_address) }}</td>
+            <td class="v" style="width: 61%">
+                <input v-if="editable" v-model="fields.client_address" class="fillin" />
+                <template v-else>{{ fill(contract.client_address) }}</template>
+            </td>
             <td class="k pr-3" style="width: 12%">الهوية / السجل</td>
-            <td class="v" style="width: 16%" dir="ltr">{{ fill(contract.client_id_number) }}</td>
+            <td class="v" style="width: 16%" dir="ltr">
+                <input v-if="editable" v-model="fields.client_id_number" class="fillin" dir="ltr" />
+                <template v-else>{{ fill(contract.client_id_number) }}</template>
+            </td>
         </tr></table>
 
         <table class="ln"><tr>
             <td class="k" style="width: 14%">قيمة العقد الكلية<span class="en">Total Amount</span></td>
-            <td class="v" style="width: 30%"><b dir="ltr">{{ contract.total_amount ?? '' }}</b> ريال</td>
+            <td class="v" style="width: 30%">
+                <template v-if="editable"><input v-model="fields.total_amount" class="fillin bold" dir="ltr" /></template>
+                <template v-else><b dir="ltr">{{ contract.total_amount ?? '' }}</b> ريال</template>
+            </td>
             <td class="k pr-3" style="width: 10%">الدفعة الأولى</td>
-            <td class="v" style="width: 20%"><b dir="ltr">{{ fill(contract.first_installment) }}</b></td>
+            <td class="v" style="width: 20%">
+                <input v-if="editable" v-model="fields.first_installment" class="fillin bold" dir="ltr" />
+                <b v-else dir="ltr">{{ fill(contract.first_installment) }}</b>
+            </td>
             <td class="k pr-3" style="width: 10%">الدفعة الثانية</td>
-            <td class="v" style="width: 16%"><b dir="ltr">{{ fill(contract.second_installment) }}</b></td>
+            <td class="v" style="width: 16%">
+                <input v-if="editable" v-model="fields.second_installment" class="fillin bold" dir="ltr" />
+                <b v-else dir="ltr">{{ fill(contract.second_installment) }}</b>
+            </td>
         </tr></table>
 
-        <table v-if="contract.total_amount_words" class="ln"><tr>
+        <table v-if="editable || contract.total_amount_words" class="ln"><tr>
             <td class="k" style="width: 10%">فقط وقدره</td>
-            <td class="v" style="width: 90%">{{ contract.total_amount_words }}</td>
+            <td class="v" style="width: 90%">
+                <input v-if="editable" v-model="fields.total_amount_words" class="fillin" />
+                <template v-else>{{ contract.total_amount_words }}</template>
+            </td>
         </tr></table>
 
         <!-- Measured on site: typed onto the contract, or left blank for the pen -->
         <table class="ln"><tr>
             <td class="k" style="width: 10%">عرض المسبح<span class="en">Showing pool</span></td>
-            <td class="v" style="width: 15%">{{ fill(contract.pool_width) }}</td>
+            <td class="v" style="width: 15%">
+                <input v-if="editable" v-model="fields.pool_width" class="fillin" />
+                <template v-else>{{ fill(contract.pool_width) }}</template>
+            </td>
             <td class="k pr-2" style="width: 6%">الطول<span class="en">Length</span></td>
-            <td class="v" style="width: 15%">{{ fill(contract.pool_length) }}</td>
+            <td class="v" style="width: 15%">
+                <input v-if="editable" v-model="fields.pool_length" class="fillin" />
+                <template v-else>{{ fill(contract.pool_length) }}</template>
+            </td>
             <td class="k pr-2" style="width: 8%">أقل عمق<span class="en">Less depth</span></td>
-            <td class="v" style="width: 15%">{{ fill(contract.pool_min_depth) }}</td>
+            <td class="v" style="width: 15%">
+                <input v-if="editable" v-model="fields.pool_min_depth" class="fillin" />
+                <template v-else>{{ fill(contract.pool_min_depth) }}</template>
+            </td>
             <td class="k pr-2" style="width: 10%">أقصى عمق<span class="en">Maximum depth</span></td>
-            <td class="v" style="width: 15%">{{ fill(contract.pool_max_depth) }}</td>
+            <td class="v" style="width: 15%">
+                <input v-if="editable" v-model="fields.pool_max_depth" class="fillin" />
+                <template v-else>{{ fill(contract.pool_max_depth) }}</template>
+            </td>
         </tr></table>
 
         <!-- Not «grid»: that is a Tailwind utility, and display:grid on a table
@@ -161,15 +250,29 @@ const grid = computed(() => {
             </thead>
             <tbody>
                 <tr v-for="(row, i) in grid" :key="i">
-                    <td class="q" dir="ltr">{{ qty(row.right?.quantity) }}</td>
-                    <td>
-                        {{ fill(row.right?.name) }}
-                        <span v-if="row.right?.code" class="code" dir="ltr">({{ row.right.code }})</span>
+                    <!-- While editing, every cell of the grid is typed into directly,
+                         the empty rows included — that is how the pad is filled. -->
+                    <td class="q" dir="ltr">
+                        <input v-if="editable" v-model="items[row.rightIndex].quantity" class="fillin center" dir="ltr" />
+                        <template v-else>{{ qty(row.right?.quantity) }}</template>
                     </td>
-                    <td class="q" dir="ltr">{{ qty(row.left?.quantity) }}</td>
                     <td>
-                        {{ fill(row.left?.name) }}
-                        <span v-if="row.left?.code" class="code" dir="ltr">({{ row.left.code }})</span>
+                        <input v-if="editable" v-model="items[row.rightIndex].name" class="fillin" />
+                        <template v-else>
+                            {{ fill(row.right?.name) }}
+                            <span v-if="row.right?.code" class="code" dir="ltr">({{ row.right.code }})</span>
+                        </template>
+                    </td>
+                    <td class="q" dir="ltr">
+                        <input v-if="editable" v-model="items[row.leftIndex].quantity" class="fillin center" dir="ltr" />
+                        <template v-else>{{ qty(row.left?.quantity) }}</template>
+                    </td>
+                    <td>
+                        <input v-if="editable" v-model="items[row.leftIndex].name" class="fillin" />
+                        <template v-else>
+                            {{ fill(row.left?.name) }}
+                            <span v-if="row.left?.code" class="code" dir="ltr">({{ row.left.code }})</span>
+                        </template>
                     </td>
                 </tr>
             </tbody>
@@ -177,9 +280,10 @@ const grid = computed(() => {
 
         <div class="split">50 % عند التعاقد &nbsp;&nbsp;&nbsp; 50 % عند طلب توريد المعدات</div>
 
-        <div v-if="termsText" class="notes">
+        <div v-if="editable || termsText" class="notes">
             <span class="lbl">ملاحظات أو شروط أخرى<span class="en">Notes</span></span>
-            <pre class="notes-body">{{ termsText }}</pre>
+            <textarea v-if="editable" v-model="terms" rows="9" class="notes-body notes-input"></textarea>
+            <pre v-else class="notes-body">{{ termsText }}</pre>
         </div>
 
         <!-- Signatures stay one block: a signature split from its name proves nothing. -->
@@ -276,6 +380,32 @@ const grid = computed(() => {
 }
 .ln td.v {
     border-bottom: 1px dotted #6b6b6b;
+}
+/* An input on the printed run: the paper's line stays, the box does not. The
+   sheet reads the same whether it is being filled in or read back. */
+.fillin {
+    width: 100%;
+    padding: 0 2px;
+    border: 0;
+    background: #f6f9ff;
+    font: inherit;
+    color: inherit;
+    outline: none;
+}
+.fillin:focus {
+    background: #e6efff;
+}
+.fillin.bold {
+    font-weight: 700;
+}
+.fillin.center {
+    text-align: center;
+}
+.notes-input {
+    display: block;
+    width: 100%;
+    background: #f6f9ff;
+    resize: vertical;
 }
 .serial {
     color: #c8102e;

@@ -10,7 +10,11 @@
     $fill = fn ($value) => filled($value) ? $value : "\u{00A0}";
 
     // Quantities are printed as written — «2», not 2.00.
-    $qty = fn ($value) => filled($value) ? rtrim(rtrim(number_format((float) $value, 2), '0'), '.') : "\u{00A0}";
+    // A count is printed as a count; a cell holding words instead — «حسب
+    // الاتفاق» — is printed as it was written.
+    $qty = fn ($value) => blank($value)
+        ? "\u{00A0}"
+        : (is_numeric($value) ? rtrim(rtrim(number_format((float) $value, 2), '0'), '.') : $value);
 
     // A money row is printed only when it carries an amount: the paper has no
     // «الخصم 0.00» line, and a sheet with no VAT shows no VAT row.

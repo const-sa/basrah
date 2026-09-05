@@ -10,8 +10,18 @@ interface MaintenanceContract {
     discount_amount: string | null;
     tax_amount: string | null;
     total_amount: string | null;
-    items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string }[];
+    items: Line[];
 }
+
+/** A priced line of the sheet; a blank row carries no count until one is typed. */
+type Line = {
+    name: string;
+    code: string | null;
+    /** A count, or the words written in its place — «حسب الاتفاق». */
+    quantity: number | string | null;
+    unit_price: string;
+    total_price: string;
+};
 
 interface Issuer {
     business_name: string;
@@ -21,7 +31,21 @@ interface Issuer {
     commercial_register: string | null;
 }
 
-const props = defineProps<{ contract: MaintenanceContract; issuer: Issuer }>();
+const props = withDefaults(
+    defineProps<{
+        contract: MaintenanceContract;
+        issuer: Issuer;
+        /** The same sheet, filled in on screen — see InstallationContractDocument. */
+        editable?: boolean;
+    }>(),
+    { editable: false },
+);
+
+// Models, not props: the edit screen owns the values, and a defineModel ref may
+// be written to from here without mutating what was handed down.
+const fields = defineModel<Record<string, string>>('fields', { default: () => ({}) });
+const items = defineModel<Line[]>('items', { default: () => [] });
+const terms = defineModel<string>('terms', { default: '' });
 
 const logoFailed = ref(false);
 watch(
@@ -31,14 +55,19 @@ watch(
 
 const fill = (value: string | null | undefined) => value || ' ';
 
-// Quantities are printed as written — «2», not 2.00.
-const qty = (value: number | null | undefined) => (value === null || value === undefined ? ' ' : String(Number(value)));
+// Quantities are printed as written — «2», not 2.00 — and a cell holding words
+// instead of a count prints the words.
+const qty = (value: number | string | null | undefined) => {
+    if (value === null || value === undefined || value === '') return ' ';
+
+    return Number.isFinite(Number(value)) ? String(Number(value)) : String(value);
+};
 
 // A money row is printed only when it carries an amount: the paper has no
 // «الخصم 0.00» line, and a sheet with no VAT shows no VAT row.
 const carries = (value: string | null | undefined) => !!value && Number(String(value).replace(/,/g, '')) !== 0;
 
-const termsText = computed(() => props.contract.terms ?? props.contract.body);
+const termsText = computed(() => (props.editable ? terms.value : props.contract.terms ?? props.contract.body));
 
 // The notes are written one bullet per line, so they are printed as a list;
 // wording that is not bulleted is printed as it stands.
@@ -53,7 +82,7 @@ const bullets = computed(() =>
 // The pad is printed with room to write in, so a short sheet still rules
 // enough lines for the visits to be listed by hand.
 const rows = computed(() => {
-    const lines = props.contract.items ?? [];
+    const lines = (props.editable ? items.value : props.contract.items) ?? [];
     return Array.from({ length: Math.max(lines.length, 4) }, (_, i) => lines[i] ?? null);
 });
 </script>
@@ -81,7 +110,11 @@ const rows = computed(() => {
             </div>
         </div>
 
-        <div class="to">إلى السـادة: {{ fill(contract.client_name) }}</div>
+        <div class="to">
+            إلى السـادة:
+            <input v-if="editable" v-model="fields.client_name" class="fillin to-input" />
+            <template v-else>{{ fill(contract.client_name) }}</template>
+        </div>
 
         <div class="subject">عرض سعر صيانة مسابح شهريًا</div>
 
@@ -96,15 +129,29 @@ const rows = computed(() => {
                 </tr>
             </thead>
             <tbody>
+                <!-- While editing, every cell of the sheet is typed into directly,
+                     the empty rows included — that is how the pad is filled. -->
                 <tr v-for="(line, i) in rows" :key="i">
-                    <td dir="ltr">{{ line ? i + 1 : ' ' }}</td>
+                    <td dir="ltr">{{ line || editable ? i + 1 : ' ' }}</td>
                     <td class="desc">
-                        {{ fill(line?.name) }}
-                        <span v-if="line?.code" class="code" dir="ltr">({{ line.code }})</span>
+                        <input v-if="editable" v-model="items[i].name" class="fillin" />
+                        <template v-else>
+                            {{ fill(line?.name) }}
+                            <span v-if="line?.code" class="code" dir="ltr">({{ line.code }})</span>
+                        </template>
                     </td>
-                    <td dir="ltr">{{ qty(line?.quantity) }}</td>
-                    <td dir="ltr">{{ fill(line?.unit_price) }}</td>
-                    <td dir="ltr">{{ fill(line?.total_price) }}</td>
+                    <td dir="ltr">
+                        <input v-if="editable" v-model="items[i].quantity" class="fillin center" dir="ltr" />
+                        <template v-else>{{ qty(line?.quantity) }}</template>
+                    </td>
+                    <td dir="ltr">
+                        <input v-if="editable" v-model="items[i].unit_price" class="fillin center" dir="ltr" />
+                        <template v-else>{{ fill(line?.unit_price) }}</template>
+                    </td>
+                    <td dir="ltr">
+                        <input v-if="editable" v-model="items[i].total_price" class="fillin center" dir="ltr" />
+                        <template v-else>{{ fill(line?.total_price) }}</template>
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -113,25 +160,40 @@ const rows = computed(() => {
         <table class="totals print-keep">
             <tr>
                 <td class="lbl">الاجمــــالي</td>
-                <td class="val" dir="ltr">{{ fill(contract.subtotal ?? contract.total_amount) }}</td>
+                <td class="val" dir="ltr">
+                    <input v-if="editable" v-model="fields.subtotal" class="fillin center" dir="ltr" />
+                    <template v-else>{{ fill(contract.subtotal ?? contract.total_amount) }}</template>
+                </td>
             </tr>
-            <tr v-if="carries(contract.discount_amount)">
+            <!-- A zero row is not printed on the paper, but it is offered while
+                 editing — that is where a discount is written in. -->
+            <tr v-if="editable || carries(contract.discount_amount)">
                 <td class="lbl">الخصــــم</td>
-                <td class="val" dir="ltr">{{ contract.discount_amount }}</td>
+                <td class="val" dir="ltr">
+                    <input v-if="editable" v-model="fields.discount_amount" class="fillin center" dir="ltr" />
+                    <template v-else>{{ contract.discount_amount }}</template>
+                </td>
             </tr>
-            <tr v-if="carries(contract.tax_amount)">
+            <tr v-if="editable || carries(contract.tax_amount)">
                 <td class="lbl">ضريبة القيمة المضافة</td>
-                <td class="val" dir="ltr">{{ contract.tax_amount }}</td>
+                <td class="val" dir="ltr">
+                    <input v-if="editable" v-model="fields.tax_amount" class="fillin center" dir="ltr" />
+                    <template v-else>{{ contract.tax_amount }}</template>
+                </td>
             </tr>
             <tr>
                 <td class="lbl">الاجمالي المستحق</td>
-                <td class="val" dir="ltr">{{ fill(contract.total_amount) }}</td>
+                <td class="val" dir="ltr">
+                    <input v-if="editable" v-model="fields.total_amount" class="fillin center" dir="ltr" />
+                    <template v-else>{{ fill(contract.total_amount) }}</template>
+                </td>
             </tr>
         </table>
 
-        <div v-if="termsText" class="notes print-keep">
+        <div v-if="editable || termsText" class="notes print-keep">
             <span class="lbl">ملاحظـــات :</span>
-            <ul v-if="bulleted">
+            <textarea v-if="editable" v-model="terms" rows="8" class="fillin notes-input"></textarea>
+            <ul v-else-if="bulleted">
                 <li v-for="(bullet, i) in bullets" :key="i">{{ bullet }}</li>
             </ul>
             <pre v-else class="plain">{{ termsText }}</pre>
@@ -238,6 +300,32 @@ const rows = computed(() => {
     font-size: 14px;
     white-space: pre-wrap;
     margin-top: 10px;
+}
+/* An input on the printed line: the paper's rule stays, the box does not. */
+.fillin {
+    width: 100%;
+    padding: 0 2px;
+    border: 0;
+    background: #f6f9ff;
+    font: inherit;
+    color: inherit;
+    outline: none;
+}
+.fillin:focus {
+    background: #e6efff;
+}
+.fillin.center {
+    text-align: center;
+}
+.to-input {
+    width: 60%;
+}
+.notes-input {
+    display: block;
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.7;
+    resize: vertical;
 }
 
 @media print {

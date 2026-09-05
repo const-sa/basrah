@@ -12,7 +12,11 @@
 
     // Quantities are printed as written, not as 1.00 — the paper's grid holds
     // hand-written counts and «1» is what the salesman would put there.
-    $qty = fn ($value) => filled($value) ? rtrim(rtrim(number_format((float) $value, 2), '0'), '.') : "\u{00A0}";
+    // A count is printed as a count; a cell holding words instead — «حسب
+    // الاتفاق» — is printed as it was written.
+    $qty = fn ($value) => blank($value)
+        ? "\u{00A0}"
+        : (is_numeric($value) ? rtrim(rtrim(number_format((float) $value, 2), '0'), '.') : $value);
 
     // The equipment grid is two halves side by side, the lines split between
     // them, and padded to the pad's row count so a short contract still prints

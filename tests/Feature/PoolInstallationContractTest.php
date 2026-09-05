@@ -232,6 +232,28 @@ class PoolInstallationContractTest extends TestCase
         $this->assertStringContainsString('8,000.00', $contract->body);
     }
 
+    public function test_the_edit_screen_serves_the_sheet_itself(): void
+    {
+        $client = Client::create(['name' => 'سلطان القرني', 'mobile' => '0512121212', 'type' => 'pool']);
+        $contract = app(ContractService::class)->generateDirect($client, $this->form(), 1000);
+
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}/edit")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('admin/contracts/Edit')
+                ->where('contract.is_installation_form', true)
+                // The letterhead the document prints under, so the screen is
+                // the same sheet whether it is read or filled in.
+                ->has('issuer.business_name')
+                ->has('clients')
+                // Every printed field is offered, the number excepted.
+                ->where('contract.groups', fn ($groups) => collect($groups)
+                    ->flatMap(fn ($group) => collect($group['fields'])->pluck('key'))
+                    ->contains('pool_width')
+                    && ! collect($groups)->flatMap(fn ($group) => collect($group['fields'])->pluck('key'))
+                        ->contains('contract_number')));
+    }
+
     public function test_every_printed_field_is_editable(): void
     {
         $client = Client::create(['name' => 'راكان الشهري', 'mobile' => '0577777777', 'type' => 'pool']);

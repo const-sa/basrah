@@ -170,8 +170,6 @@ class ContractsController extends Controller
     {
         $contract->load(['booking.unit', 'booking.eventType', 'quotation', 'client', 'template']);
 
-        $settings = Setting::current();
-
         // بيانات العقد تُقرأ من اللقطة المجمَّدة لا من الحجز: العقد يشهد على
         // ما اتُّفق عليه يوم توقيعه، وتعديل الحجز بعده لا يغيّر ما وُقّع.
         //
@@ -255,22 +253,7 @@ class ContractsController extends Controller
                 'sent_at' => $contract->sent_at?->format('Y-m-d H:i'),
                 'signed_at' => $contract->signed_at?->format('Y-m-d H:i'),
             ],
-            'issuer' => [
-                'business_name' => $data['org_name'] ?? ($settings->business_name ?: config('app.name')),
-                'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
-                'phone' => $settings->phone,
-                'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
-                'address' => $settings->address,
-                'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
-                // The maintenance sheet's letterhead carries the CR number
-                // where the installation pad carries the tax number.
-                'commercial_register' => $settings->commercial_register,
-                'manager_name' => $settings->manager_name,
-                'manager_signature_url' => $settings->manager_signature_path
-                    ? asset($settings->manager_signature_path)
-                    : null,
-                'stamp_url' => $settings->stamp_path ? asset($settings->stamp_path) : null,
-            ],
+            'issuer' => $this->issuer($data['org_name'] ?? null),
         ]);
     }
 
@@ -380,6 +363,34 @@ class ContractsController extends Controller
     }
 
     /**
+     * The letterhead the contract is printed under — the same one whether the
+     * sheet is being read or filled in, so the edit screen is the document.
+     *
+     * @return array<string, mixed>
+     */
+    private function issuer(?string $orgName = null): array
+    {
+        $settings = Setting::current();
+
+        return [
+            'business_name' => $orgName ?: ($settings->business_name ?: config('app.name')),
+            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
+            'phone' => $settings->phone,
+            'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
+            'address' => $settings->address,
+            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
+            // The maintenance sheet's letterhead carries the CR number where
+            // the installation pad carries the tax number.
+            'commercial_register' => $settings->commercial_register,
+            'manager_name' => $settings->manager_name,
+            'manager_signature_url' => $settings->manager_signature_path
+                ? asset($settings->manager_signature_path)
+                : null,
+            'stamp_url' => $settings->stamp_path ? asset($settings->stamp_path) : null,
+        ];
+    }
+
+    /**
      * Which box on the edit screen each field belongs in. Anything unlisted
      * falls into the last group, so a field added to the placeholders is
      * editable the day it exists rather than the day this list is remembered.
@@ -403,6 +414,8 @@ class ContractsController extends Controller
             return redirect()->route('contracts.show', $contract)
                 ->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
         }
+
+        $contract->load(['booking.unit', 'booking.eventType', 'quotation', 'client']);
 
         $data = $contract->data ?? [];
 
@@ -442,7 +455,17 @@ class ContractsController extends Controller
                 'quotation_number' => $contract->quotation?->number,
                 'booking_reference' => $contract->booking?->reference,
                 'is_installation_form' => $contract->isInstallationForm(),
+                'is_maintenance_form' => $contract->isMaintenanceForm(),
+                // What the sheet draws around the editable runs: the logo it is
+                // headed with, and the few facts it states rather than asks for.
+                'from_quotation' => $contract->fromQuotation(),
+                'unit_type' => $contract->booking?->unit?->type,
+                'unit_logo_url' => $contract->booking?->unit?->logoUrl(),
+                'event_name' => $contract->booking?->eventType?->name,
+                'quotation_date' => ($data['quotation_date'] ?? '—') === '—' ? null : $data['quotation_date'],
+                'is_taxable' => (bool) ($data['is_taxable'] ?? false),
             ],
+            'issuer' => $this->issuer($data['org_name'] ?? null),
             'clients' => Client::where('is_active', true)
                 ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
                 ->map(fn (Client $c) => [
@@ -463,6 +486,20 @@ class ContractsController extends Controller
             return back()->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
         }
 
+        // A count may arrive as a number from one client and as the words «حسب
+        // الاتفاق» from another; it is read as text either way, so it is made
+        // text before the rules see it rather than being guessed at twice.
+        $text = fn ($value) => is_scalar($value) ? (string) $value : null;
+
+        $request->merge(['items' => collect($request->input('items', []))
+            ->map(fn ($line) => is_array($line) ? [
+                ...$line,
+                'quantity' => $text($line['quantity'] ?? null),
+                'unit_price' => $text($line['unit_price'] ?? null),
+                'total_price' => $text($line['total_price'] ?? null),
+            ] : $line)
+            ->all()]);
+
         $data = $request->validate([
             'client_id' => ['nullable', 'exists:clients,id'],
             // The snapshot's own fields, whatever the contract carries — the
@@ -472,9 +509,14 @@ class ContractsController extends Controller
             'items' => ['nullable', 'array', 'max:60'],
             'items.*.name' => ['nullable', 'string', 'max:190'],
             'items.*.code' => ['nullable', 'string', 'max:60'],
-            'items.*.quantity' => ['nullable', 'numeric', 'min:0'],
-            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
-            'items.*.total_price' => ['nullable', 'numeric', 'min:0'],
+            // A count is usually a number, but a cell of the paper may say
+            // «حسب الاتفاق» — the sheet prints whichever was written.
+            'items.*.quantity' => ['nullable', 'string', 'max:30'],
+            // Prices come back as the sheet prints them — «1,200.00» — so they
+            // are read as text and parsed, not rejected for the commas the
+            // document itself put there.
+            'items.*.unit_price' => ['nullable', 'string', 'max:30'],
+            'items.*.total_price' => ['nullable', 'string', 'max:30'],
             'body' => ['required', 'string', 'max:40000'],
             'terms' => ['nullable', 'string', 'max:40000'],
         ]);
