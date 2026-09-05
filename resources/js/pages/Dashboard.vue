@@ -50,7 +50,7 @@ const props = defineProps<{
     bookings: {
         today: number;
         upcoming: number;
-        tentative: number;
+        deposit_paid: number;
         month_count: number;
         month_value: number;
         outstanding: number;
@@ -140,7 +140,7 @@ const kpis = computed<Kpi[]>(() => {
             {
                 label: 'مستحق على العملاء',
                 value: money(b.outstanding),
-                sub: 'حجز مبدئي: ' + b.tentative,
+                sub: 'مدفوع العربون: ' + b.deposit_paid,
                 icon: Coins,
                 mark: ORANGE,
                 soft: ORANGE_S,
@@ -485,9 +485,9 @@ const CARD = 'rounded-xl border border-white/10 bg-[#0D1F38] shadow-[0_10px_30px
                                 <span class="font-bold" :style="{ color: BLUE_S }" dir="ltr">{{ bookings.units_occupied }}</span>
                             </div>
                             <div class="flex justify-between">
-                                <span class="text-slate-400">حجوزات مبدئية</span>
-                                <span class="font-bold" :style="{ color: bookings.tentative ? ORANGE_S : TEAL_S }" dir="ltr">
-                                    {{ bookings.tentative }}
+                                <span class="text-slate-400">مدفوع العربون</span>
+                                <span class="font-bold" :style="{ color: bookings.deposit_paid ? ORANGE_S : TEAL_S }" dir="ltr">
+                                    {{ bookings.deposit_paid }}
                                 </span>
                             </div>
                         </div>

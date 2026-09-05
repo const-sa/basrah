@@ -19,8 +19,6 @@ import {
     FileSignature,
     FileText,
     Loader2,
-    LogIn,
-    LogOut,
     MoreVertical,
     Paperclip,
     Pencil,
@@ -154,7 +152,7 @@ const props = defineProps<{
         periods: { key: string; label: string; start: string; end: string }[];
         payment_methods: PaymentMethodOption[];
     };
-    stats: { total: number; tentative: number; pending_deposit: number; confirmed: number; unpaid: number };
+    stats: { total: number; deposit_paid: number; paid_in_full: number; unpaid: number };
     methods: MethodColumn[];
     totals: { page: LedgerTotals; all: LedgerTotals };
 }>();
@@ -434,11 +432,10 @@ const colorClass = statusChipClass;
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatPill label="إجمالي الحجوزات" :value="stats.total" variant="primary" />
-                <StatPill label="حجز مبدئي" :value="stats.tentative" variant="warning" />
-                <StatPill label="بانتظار العربون" :value="stats.pending_deposit" variant="dark" />
-                <StatPill label="حجز مؤكد" :value="stats.confirmed" variant="success" />
+                <StatPill label="مدفوع العربون" :value="stats.deposit_paid" variant="warning" />
+                <StatPill label="مسدد كامل" :value="stats.paid_in_full" variant="success" />
                 <StatPill label="عليه متبقٍ" :value="stats.unpaid" variant="danger" />
             </div>
 
@@ -789,28 +786,14 @@ const colorClass = statusChipClass;
                                             @click="sendBalanceReminder(b)"
                                         />
 
-                                        <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في
-                                             المسار، فلا يحتار الموظف بين أزرار لا تنطبق. -->
+                                        <!-- خطوة واحدة تظهر في كل مرة: الحجز المدفوع عربونه يُقفَل
+                                             مسدَّدًا، وعندها يُثبَت إيراده في الدفاتر. -->
                                         <TableActionButton
-                                            v-if="can('hall_bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
-                                            variant="primary"
-                                            :icon="Check"
-                                            title="تأكيد الحجز"
-                                            @click="changeStatus(b, 'confirmed')"
-                                        />
-                                        <TableActionButton
-                                            v-if="can('hall_bookings.edit') && b.status === 'confirmed'"
-                                            variant="primary"
-                                            :icon="LogIn"
-                                            title="تسجيل الدخول"
-                                            @click="changeStatus(b, 'checked_in')"
-                                        />
-                                        <TableActionButton
-                                            v-if="can('hall_bookings.edit') && b.status === 'checked_in'"
+                                            v-if="can('hall_bookings.edit') && b.status === 'deposit_paid'"
                                             variant="success"
-                                            :icon="LogOut"
-                                            title="تسجيل الخروج"
-                                            @click="changeStatus(b, 'checked_out')"
+                                            :icon="Check"
+                                            title="إقفال مسدَّدًا بالكامل"
+                                            @click="changeStatus(b, 'paid_in_full')"
                                         />
                                         <TableActionButton
                                             v-if="can('hall_bookings.edit') && !isClosedStatus(b.status)"

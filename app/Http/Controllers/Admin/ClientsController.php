@@ -15,6 +15,7 @@ use App\Models\Setting;
 use App\Models\Voucher;
 use App\Services\WaGateway;
 use Illuminate\Database\Eloquent\Builder;
+use App\Support\ClientType;
 use App\Support\NotificationCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -50,6 +51,8 @@ class ClientsController extends Controller
                 'mobile' => $c->mobile,
                 'email' => $c->email,
                 'city' => $c->city,
+                'type' => $c->type,
+                'type_label' => $c->typeLabel(),
                 'national_id' => $c->national_id,
                 'is_taxable' => $c->is_taxable,
                 'tax_number' => $c->tax_number,
@@ -63,18 +66,25 @@ class ClientsController extends Controller
                 'created_at' => $c->created_at?->format('Y-m-d'),
             ]);
 
+        // عدّ كل نشاط مرةً واحدة بالتجميع — لا استعلامًا لكل نوع.
+        $byType = Client::selectRaw('type, COUNT(*) AS total')->groupBy('type')->pluck('total', 'type');
+
         $stats = [
             'total' => Client::count(),
             'active' => Client::where('is_active', true)->count(),
             'inactive' => Client::where('is_active', false)->count(),
             'taxable' => Client::where('is_taxable', true)->count(),
             'non_taxable' => Client::where('is_taxable', false)->count(),
+            'by_type' => collect(ClientType::keys())
+                ->mapWithKeys(fn (string $key) => [$key => (int) ($byType[$key] ?? 0)])
+                ->all(),
         ];
 
         return Inertia::render('admin/clients/Index', [
             'clients' => $clients,
             'filters' => $filters,
             'stats' => $stats,
+            'types' => ClientType::forFrontend(),
             // قائمة المدن المفعّلة لتعبئة قائمة الاختيار في نموذج العميل.
             'cities' => City::where('is_active', true)->orderBy('name')->pluck('name'),
         ]);
@@ -91,7 +101,7 @@ class ClientsController extends Controller
         $filename = 'clients-'.now()->format('Ymd-His').'.csv';
 
         $columns = [
-            '#', 'الاسم', 'الجوال', 'البريد', 'المدينة', 'رقم الهوية',
+            '#', 'الاسم', 'الجوال', 'البريد', 'المدينة', 'النشاط', 'رقم الهوية',
             'النوع', 'الرقم الضريبي', 'العنوان الضريبي', 'الحالة', 'تاريخ الإنشاء',
         ];
 
@@ -118,6 +128,7 @@ class ClientsController extends Controller
                         $safe($c->mobile),
                         $safe($c->email),
                         $safe($c->city),
+                        $c->typeLabel(),
                         $safe($c->national_id),
                         $c->is_taxable ? 'ضريبي' : 'عادي',
                         $safe($c->tax_number),
@@ -162,6 +173,8 @@ class ClientsController extends Controller
                 'mobile' => $client->mobile,
                 'email' => $client->email,
                 'city' => $client->city,
+                'type' => $client->type,
+                'type_label' => $client->typeLabel(),
                 'national_id' => $client->national_id,
                 'is_taxable' => $client->is_taxable,
                 'tax_number' => $client->tax_number,
@@ -323,6 +336,7 @@ class ClientsController extends Controller
             'mobile' => trim((string) $request->get('mobile', '')),
             'email' => trim((string) $request->get('email', '')),
             'city' => trim((string) $request->get('city', '')),
+            'type' => in_array($request->get('type'), ClientType::keys(), true) ? (string) $request->get('type') : '',
             'status' => (string) $request->get('status', ''),
             'from' => (string) $request->get('from', ''),
             'to' => (string) $request->get('to', ''),
@@ -339,6 +353,7 @@ class ClientsController extends Controller
             ->when($filters['mobile'] !== '', fn ($q) => $q->where('mobile', 'like', "%{$filters['mobile']}%"))
             ->when($filters['email'] !== '', fn ($q) => $q->where('email', 'like', "%{$filters['email']}%"))
             ->when($filters['city'] !== '', fn ($q) => $q->where('city', 'like', "%{$filters['city']}%"))
+            ->when($filters['type'] !== '', fn ($q) => $q->where('type', $filters['type']))
             ->when($filters['status'] === 'active', fn ($q) => $q->where('is_active', true))
             ->when($filters['status'] === 'inactive', fn ($q) => $q->where('is_active', false))
             ->when($filters['status'] === 'taxable', fn ($q) => $q->where('is_taxable', true))
@@ -351,16 +366,16 @@ class ClientsController extends Controller
     {
         $client = $this->persist($request, new Client);
 
-        $this->sendWelcome($client);
+        $this->sendWelcome($client, $client->type);
 
         return back()->with('success', 'تم إضافة العميل بنجاح');
     }
 
     /**
-     * إضافة سريعة من داخل شاشة الحجز: الاسم والجوال فقط.
+     * إضافة سريعة من داخل شاشة الحجز أو الفواتير: الاسم والجوال فقط.
      *
      * تُعيد العميل بصيغة JSON — لا إعادة توجيه — حتى يُضاف إلى قائمة الاختيار
-     * ويُحدَّد فورًا دون مغادرة نموذج الحجز وفقدان ما عُبِّئ فيه.
+     * ويُحدَّد فورًا دون مغادرة النموذج وفقدان ما عُبِّئ فيه.
      * وبقية الحقول (المدينة، الهوية، البيانات الضريبية) تُستكمل لاحقًا من شاشة العملاء.
      */
     public function quickStore(Request $request): JsonResponse
@@ -368,24 +383,30 @@ class ClientsController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'mobile' => ['nullable', 'string', 'max:50'],
-            'category' => ['nullable', Rule::in(['chalet', 'hall', 'pool'])],
+            // نشاط الشاشة التي أُضيف منها: العميل يُقيَّد في سجلّها لا في سجلٍّ
+            // يبحث عنه الموظف بعد حين. وهو نفسه قسم قالب الترحيب.
+            'type' => ['nullable', Rule::in(ClientType::keys())],
         ]);
+
+        $type = ClientType::normalize($data['type'] ?? null);
 
         $client = (new Client)->fill([
             'name' => $data['name'],
             'mobile' => $data['mobile'] ?? null,
+            'type' => $type,
             'is_active' => true,
         ]);
 
         $client->save();
 
-        $this->sendWelcome($client, $data['category'] ?? null);
+        $this->sendWelcome($client, $type);
 
         return response()->json([
             'client' => [
                 'id' => $client->id,
                 'name' => $client->name,
                 'mobile' => $client->mobile,
+                'type' => $client->type,
             ],
         ], 201);
     }
@@ -427,6 +448,7 @@ class ClientsController extends Controller
             'mobile' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],
+            'type' => ['nullable', Rule::in(ClientType::keys())],
             // رقم الهوية اختياري — لا يُشترط في أي من النوعين.
             'national_id' => ['nullable', 'string', 'max:50'],
             'is_taxable' => ['boolean'],
@@ -445,6 +467,9 @@ class ClientsController extends Controller
             'mobile' => $data['mobile'] ?? null,
             'email' => $data['email'] ?? null,
             'city' => $data['city'] ?? null,
+            // كالملاحظات: نموذجٌ لا يرسل النشاط لا يغيّره، والعميل الجديد
+            // بلا نشاط يقع على سجل المسابح.
+            'type' => $data['type'] ?? $client->type ?? ClientType::DEFAULT,
             'national_id' => $data['national_id'] ?? null,
             'is_taxable' => $taxable,
             'tax_number' => $taxable ? ($data['tax_number'] ?? null) : null,
@@ -462,7 +487,7 @@ class ClientsController extends Controller
      * إرسال رسالة الترحيب عبر الواتساب عند إضافة عميل جديد (إن كان التكامل والترحيب مفعّلين وللعميل رقم جوال).
      * لا يجب أن يُفشل إنشاء العميل إن تعذّر الإرسال — نلتقط أي خطأ ونسجّله فقط.
      *
-     * @param  'chalet'|'hall'|'pool'|null  $category  قسم القالب عند الإضافة من نموذج حجز بعينه.
+     * @param  'chalet'|'hall'|'pool'|null  $category  نشاط العميل — وهو نفسه قسم القالب.
      */
     private function sendWelcome(Client $client, ?string $category = null): void
     {

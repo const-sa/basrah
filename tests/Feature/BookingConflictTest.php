@@ -50,7 +50,7 @@ class BookingConflictTest extends TestCase
             'section_ids' => $sectionIds,
             'booking_date' => $date,
             'period' => $period,
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
     }
 
@@ -133,7 +133,7 @@ class BookingConflictTest extends TestCase
 
         $again = $this->book('whole');
 
-        $this->assertSame('confirmed', $again->status);
+        $this->assertSame('deposit_paid', $again->status);
         $this->assertSame('cancelled', $booking->fresh()->status);
     }
 
@@ -144,22 +144,22 @@ class BookingConflictTest extends TestCase
 
         $again = $this->book('whole');
 
-        $this->assertSame('confirmed', $again->status);
+        $this->assertSame('deposit_paid', $again->status);
         $this->assertSame('postponed', $booking->fresh()->status);
     }
 
     /**
-     * «بانتظار العربون» يحجز التاريخ كالمؤكد، وإلا بيع اليوم مرتين قبل
-     * وصول العربون.
+     * «مدفوع العربون» يحجز التاريخ كالمسدَّد كاملًا، وإلا بيع اليوم مرتين
+     * قبل اكتمال المبلغ.
      */
-    public function test_booking_pending_a_deposit_still_blocks_the_slot(): void
+    public function test_booking_paid_only_a_deposit_still_blocks_the_slot(): void
     {
         $this->service->create([
             'unit_id' => $this->unit->id,
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
             'period' => 'full_day',
-            'status' => 'pending_deposit',
+            'status' => 'deposit_paid',
         ]);
 
         $this->expectException(ValidationException::class);
@@ -167,12 +167,12 @@ class BookingConflictTest extends TestCase
     }
 
     /**
-     * تسجيل الدخول لا يحرّر الفترة — الوحدة مشغولة فعلًا في هذه اللحظة.
+     * اكتمال المبلغ لا يحرّر الفترة — الحجز قائم وقد سُدِّد، لا مُلغى.
      */
-    public function test_checked_in_booking_still_blocks_the_slot(): void
+    public function test_fully_settled_booking_still_blocks_the_slot(): void
     {
         $booking = $this->book('whole');
-        $this->service->checkIn($booking);
+        $this->service->settleInFull($booking);
 
         $this->assertTrue($booking->fresh()->isBlocking());
 

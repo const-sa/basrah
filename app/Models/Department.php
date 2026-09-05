@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ClientType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -68,6 +69,16 @@ class Department extends Model
                 ->value('v'),
             2,
         );
+    }
+
+    /**
+     * سجلّات العملاء التي يبيع لها هذا القسم — بها تُصفّى قائمة شاشة الفواتير.
+     *
+     * @return list<string>|null
+     */
+    public function clientTypes(): ?array
+    {
+        return ClientType::forDepartmentCode($this->code);
     }
 
     /**

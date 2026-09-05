@@ -57,6 +57,10 @@ class ContractTemplate extends Model
         'tax_amount' => 'مبلغ الضريبة',
         'deposit_amount' => 'العربون',
         'remaining_amount' => 'المتبقي',
+        // The installation form splits the value into two equal payments, so
+        // both are derived from the total rather than typed on every contract.
+        'first_installment' => 'الدفعة الأولى (50% من قيمة العقد)',
+        'second_installment' => 'الدفعة الثانية (50% من قيمة العقد)',
         'security_deposit' => 'مبلغ التأمين المسترد',
     ];
 

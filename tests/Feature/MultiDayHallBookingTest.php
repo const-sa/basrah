@@ -59,7 +59,7 @@ class MultiDayHallBookingTest extends TestCase
             // 2026-10-14 أربعاء — المناسبة تمتد إلى الخميس والجمعة
             'booking_date' => '2026-10-14',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             ...$overrides,
         ];
     }

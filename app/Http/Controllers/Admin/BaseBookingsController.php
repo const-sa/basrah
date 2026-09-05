@@ -116,10 +116,11 @@ abstract class BaseBookingsController extends Controller
     {
         return [
             'total' => (clone $query)->count(),
-            'tentative' => (clone $query)->where('status', 'tentative')->count(),
-            // طابور المتابعة: حجوزات تحجز التاريخ وعربونها لم يصل بعد
-            'pending_deposit' => (clone $query)->where('status', 'pending_deposit')->count(),
-            'confirmed' => (clone $query)->where('status', 'confirmed')->count(),
+            // طابور المتابعة: حجوزات تشغل التاريخ ولم يكتمل مبلغها بعد
+            'deposit_paid' => (clone $query)->where('status', 'deposit_paid')->count(),
+            'paid_in_full' => (clone $query)->where('status', 'paid_in_full')->count(),
+            // المال لا الحالة: الحالة تُكتب يدويًا وقد تتأخر عن آخر دفعة،
+            // وهذا العدّ يُقرأ من المسدَّد نفسه فلا يخطئ من عليه متبقٍ.
             'unpaid' => (clone $query)->blocking()->whereColumn('paid_amount', '<', 'total_amount')->count(),
         ];
     }
@@ -399,11 +400,16 @@ abstract class BaseBookingsController extends Controller
     }
 
     /**
+     * عملاء هذا النشاط وحدهم، ومعهم عميل الحجز المفتوح مهما كان نشاطه —
+     * وإلا فُتح التعديل على خانة فارغة فأُعيد الحفظ بلا عميل.
+     *
      * @return Collection<int, array<string, mixed>>
      */
-    protected function clientOptions()
+    protected function clientOptions(?int $keepId = null)
     {
-        return Client::orderBy('name')->limit(500)->get(['id', 'name', 'mobile']);
+        return Client::query()
+            ->where(fn ($q) => $q->ofType($this->unitType())->when($keepId, fn ($w, $id) => $w->orWhere('id', $id)))
+            ->orderBy('name')->limit(500)->get(['id', 'name', 'mobile']);
     }
 
     /**

@@ -116,7 +116,7 @@ class SystemRoutesGuardTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-12-01',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
         $contract = app(ContractService::class)->generate($booking);
 

@@ -89,7 +89,7 @@ class NotificationTemplatesTest extends TestCase
         $this->actingAs($owner)->postJson('/admin/clients/quick', [
             'name' => 'عميل شاليه',
             'mobile' => '0551113333',
-            'category' => 'chalet',
+            'type' => 'chalet',
         ])->assertCreated();
 
         Queue::assertPushed(SendWhatsappMessage::class, function (SendWhatsappMessage $job) {
@@ -111,7 +111,7 @@ class NotificationTemplatesTest extends TestCase
             'booking_date' => '2026-08-20',
             'starts_at' => '2026-08-20 18:00:00',
             'ends_at' => '2026-08-20 23:00:00',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'base_amount' => 1000,
             'total_amount' => 1000,
             'paid_amount' => 400,

@@ -73,3 +73,11 @@ export interface PaymentMethodOption {
     label: string;
     is_credit: boolean;
 }
+
+/** نشاط العميل — المفاتيح نفسها التي يرسلها `App\Support\ClientType`. */
+export type ClientTypeKey = 'pool' | 'hall' | 'chalet';
+
+export interface ClientTypeOption {
+    key: ClientTypeKey;
+    label: string;
+}

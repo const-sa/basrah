@@ -11,6 +11,7 @@ use App\Models\Setting;
 use App\Support\BookingPeriod;
 use App\Support\ChaletContractTemplate;
 use App\Support\Hijri;
+use App\Support\PoolInstallationContractTemplate;
 use App\Support\Tafqeet;
 use App\Support\Weekdays;
 use Carbon\CarbonImmutable;
@@ -83,7 +84,7 @@ class ContractService
             $quotation->loadMissing(['client', 'department', 'items.item']);
 
             $number = $this->nextNumber();
-            $data = $this->buildQuotationData($quotation, $number);
+            $data = $this->buildQuotationData($quotation, $number, $template);
 
             return Contract::create([
                 'number' => $number,
@@ -110,7 +111,7 @@ class ContractService
      *
      * @return array<string, mixed>
      */
-    public function buildQuotationData(Quotation $quotation, string $contractNumber): array
+    public function buildQuotationData(Quotation $quotation, string $contractNumber, ?ContractTemplate $template = null): array
     {
         $settings = Setting::current();
 
@@ -133,10 +134,14 @@ class ContractService
             'client_mobile' => (string) ($quotation->client?->mobile ?? '—'),
             'client_id_number' => (string) ($quotation->client?->national_id ?: $quotation->client?->tax_number ?: '—'),
             'client_address' => (string) ($quotation->client?->tax_address ?: $quotation->client?->city ?: '—'),
-            // The department is the activity being contracted for (pools, halls…),
-            // which is what belongs in the contract's heading — not the item list,
-            // which can run to a dozen lines and is printed in full below anyway.
-            'subject' => (string) ($quotation->department?->name ?? 'توريد وخدمات'),
+            // A named form titles its own contract; otherwise the department is
+            // the activity being contracted for (pools, halls…), which is what
+            // belongs in the heading — not the item list, which can run to a
+            // dozen lines and is printed in full below anyway.
+            'subject' => $this->subjectFor($template, $quotation->department?->name),
+            // The layout the contract is printed on, frozen with the rest of
+            // the snapshot — see PoolInstallationContractTemplate::FORM.
+            'form' => $this->formFor($template),
             'unit_name' => '—',
             'booking_reference' => '—',
             'sections' => '—',
@@ -179,7 +184,55 @@ class ContractService
             // first receipt voucher is what moves them.
             'deposit_amount' => number_format(0, 2),
             'remaining_amount' => number_format($total, 2),
+            ...$this->installments($total),
         ];
+    }
+
+    /**
+     * The installation form's two equal payments — half at signing, half when
+     * the equipment is ordered.
+     *
+     * The second is the remainder rather than a second half, so an odd value
+     * still adds up to the total: two halves of 747.50 written as 373.75 each
+     * is right, but rounding both up would contract for one halala more than
+     * the client agreed to pay.
+     *
+     * @return array<string, string>
+     */
+    private function installments(float $total): array
+    {
+        $first = round($total / 2, 2);
+
+        return [
+            'first_installment' => number_format($first, 2),
+            'second_installment' => number_format($total - $first, 2),
+        ];
+    }
+
+    /**
+     * The title the contract prints under.
+     *
+     * A pinned form names its own contract, so a page drawn on the pools'
+     * installation form is headed «عقد التمديد والتركيب» and not by the
+     * department that happened to draw it.
+     */
+    private function subjectFor(?ContractTemplate $template, ?string $fallback): string
+    {
+        if ($this->formFor($template) === PoolInstallationContractTemplate::FORM) {
+            return PoolInstallationContractTemplate::SUBJECT;
+        }
+
+        return (string) ($fallback ?: 'توريد وخدمات');
+    }
+
+    /**
+     * The layout a template is printed on, or null for the standard one.
+     */
+    private function formFor(?ContractTemplate $template): ?string
+    {
+        return $template?->name === PoolInstallationContractTemplate::NAME
+            ? PoolInstallationContractTemplate::FORM
+            : null;
     }
 
     /**
@@ -191,7 +244,7 @@ class ContractService
      */
     public function refresh(Contract $contract, ?ContractTemplate $template = null): Contract
     {
-        $contract->loadMissing('booking.unit');
+        $contract->loadMissing(['booking.unit', 'quotation.department']);
 
         // A chalet drawn before the daily-rental form existed is rebuilt on it;
         // anything else keeps the template it was issued on.
@@ -210,10 +263,28 @@ class ContractService
         if ($contract->fromQuotation()) {
             $data = $contract->data ?? [];
 
+            // A contract drawn before the installation form existed carries no
+            // payments in its snapshot, so they are derived from the total it
+            // was frozen at — moving it onto the form must not print the
+            // placeholder itself where an amount belongs.
+            $data += $this->installments((float) str_replace(',', '', (string) ($data['total_amount'] ?? 0)));
+
+            // The form is part of the template's wording: moving a draft onto
+            // the installation form must retitle it and print it on that form's
+            // layout. The priced snapshot underneath is left untouched.
+            $data['form'] = $this->formFor($template);
+            // Moving back off the form retitles it by the activity again, so a
+            // draft does not keep a heading its template no longer prints.
+            $data['subject'] = $this->subjectFor(
+                $template,
+                $contract->quotation?->department?->name ?: ($data['subject'] ?? null),
+            );
+
             $contract->update([
                 'contract_template_id' => $template->id,
                 'body' => $this->render($template->body, $data),
                 'terms' => filled($template->terms) ? $this->render($template->terms, $data) : null,
+                'data' => $data,
             ]);
 
             return $contract;

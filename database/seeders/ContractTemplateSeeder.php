@@ -5,10 +5,12 @@ namespace Database\Seeders;
 use App\Models\ContractTemplate;
 use App\Support\ChaletContractTemplate;
 use App\Support\HallContractTemplate;
+use App\Support\PoolInstallationContractTemplate;
 use Illuminate\Database\Seeder;
 
 /**
- * The pinned contract templates: the standard one, plus the hall and chalet forms.
+ * The pinned contract templates: the standard one, plus the hall, chalet and
+ * pool-installation forms.
  * ⚠️ The legal wording is a draft, reviewed with counsel before use (§4.5).
  */
 class ContractTemplateSeeder extends Seeder
@@ -29,6 +31,14 @@ class ContractTemplateSeeder extends Seeder
         ContractTemplate::firstOrCreate(
             ['name' => ChaletContractTemplate::NAME],
             ChaletContractTemplate::attributes(),
+        );
+
+        // The pools' piping-and-installation form. It is drawn on a quotation,
+        // so it is picked by name from «تحرير عقد من عرض سعر» — not promoted to
+        // the default, which the halls and chalets still fall back to.
+        ContractTemplate::firstOrCreate(
+            ['name' => PoolInstallationContractTemplate::NAME],
+            PoolInstallationContractTemplate::attributes(),
         );
 
         ContractTemplate::updateOrCreate(

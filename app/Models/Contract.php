@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PoolInstallationContractTemplate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -77,6 +78,18 @@ class Contract extends Model
     public function fromQuotation(): bool
     {
         return $this->booking_id === null;
+    }
+
+    /**
+     * Is this contract printed on the pools' piping-and-installation form?
+     *
+     * Read from the frozen snapshot, not from the template: the form the
+     * client signed is settled the day the contract is drawn, and editing or
+     * deleting the template afterwards must not relayout it.
+     */
+    public function isInstallationForm(): bool
+    {
+        return ($this->data['form'] ?? null) === PoolInstallationContractTemplate::FORM;
     }
 
     /**

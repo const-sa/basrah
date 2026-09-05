@@ -12,6 +12,7 @@ use App\Services\BookingService;
 use App\Services\ChaletBookingService;
 use App\Services\WhatsappNotifier;
 use App\Support\BookingPeriod;
+use App\Support\ClientType;
 use App\Support\SiteIdentity;
 use App\Support\StayPeriod;
 use Illuminate\Http\JsonResponse;
@@ -30,10 +31,11 @@ use Inertia\Response;
  * والتسعير والخصوصية يجب أن تكون واحدة، وإلا باع الموقع ليلةً باعتها
  * الإدارة قبله بدقيقة.
  *
- * الفرق الوحيد أن الحجز يُسجَّل «بانتظار العربون» لا «مؤكدًا»: خلف حجز
- * الإدارة موظفٌ اتفق مع العميل، وخلف حجز الموقع زائرٌ ضغط زرًّا. والحالة
- * تحجز التاريخ فعلًا (فهي ضمن BLOCKING_STATUSES) فلا يُباع مرتين، وتبقى
- * موسومةً بأنها تنتظر عربونًا حتى تراجعها الإدارة.
+ * الحجز يُسجَّل «مدفوع العربون» كحجز الإدارة — وهي حالة كل حجز لم يكتمل
+ * مبلغه — فيحجز التاريخ فعلًا (لأنها ضمن BLOCKING_STATUSES) ولا يُباع مرتين.
+ * وما يفرّقه عن حجز الموظف ليس حالته بل مصدره: خلف حجز الإدارة موظفٌ اتفق
+ * مع العميل، وخلف هذا زائرٌ ضغط زرًّا، فيصل السجل موسومًا `online` ليعرف
+ * الموظف أنه يحتاج مراجعةً قبل أن يُعامَل كحجز متفق عليه.
  *
  * الدفع الإلكتروني خارج النطاق حاليًا، فالسداد يتم بالتحويل أو في المقر.
  */
@@ -132,7 +134,7 @@ class OnlineBookingController extends Controller
 
         $data = $this->validateRequest($request, $unit);
 
-        $client = $this->resolveClient($data['client_name'], $data['client_mobile']);
+        $client = $this->resolveClient($data['client_name'], $data['client_mobile'], $unit->type);
 
         $payload = [
             'unit_id' => $unit->id,
@@ -143,7 +145,7 @@ class OnlineBookingController extends Controller
             'guests_count' => $data['guests_count'] ?? null,
             'notes' => $data['notes'] ?? null,
             'source' => 'online',
-            'status' => 'pending_deposit',
+            'status' => 'deposit_paid',
         ];
 
         // التعارض يخرج من الخدمة كـValidationException برسالتها المفصّلة
@@ -207,7 +209,7 @@ class OnlineBookingController extends Controller
      * يميّز الشخص فعلًا. وبلا مطابقة يمتلئ سجل العملاء بنسخٍ من الشخص
      * نفسه بعد كل حجز.
      */
-    private function resolveClient(string $name, string $mobile): Client
+    private function resolveClient(string $name, string $mobile, string $unitType): Client
     {
         $normalized = preg_replace('/\D+/', '', $mobile) ?? $mobile;
 
@@ -221,6 +223,8 @@ class OnlineBookingController extends Controller
         return Client::create([
             'name' => $name,
             'mobile' => $mobile,
+            // نشاط الوحدة المحجوزة هو سجلّ العميل: من حجز قاعةً عميلُ قاعات.
+            'type' => ClientType::normalize($unitType),
             'is_active' => true,
         ]);
     }

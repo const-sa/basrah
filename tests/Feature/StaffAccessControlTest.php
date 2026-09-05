@@ -144,7 +144,7 @@ class StaffAccessControlTest extends TestCase
         foreach ([$mine, $other] as $i => $unit) {
             $service->create([
                 'unit_id' => $unit->id, 'scope' => 'whole',
-                'booking_date' => '2026-12-0'.($i + 1), 'period' => 'full_day', 'status' => 'confirmed',
+                'booking_date' => '2026-12-0'.($i + 1), 'period' => 'full_day', 'status' => 'deposit_paid',
             ]);
         }
 

@@ -48,7 +48,7 @@ const props = defineProps<{
     units: { id: number; name: string; code: string }[];
     periods: { key: string; label: string; start: string; end: string }[];
     filters: { unit_id: number | null };
-    summary: { bookings: number; confirmed: number; tentative: number; total_amount: number; remaining_amount: number };
+    summary: { bookings: number; paid_in_full: number; total_amount: number; remaining_amount: number };
 }>();
 
 const { can } = usePermissions();
@@ -142,8 +142,8 @@ const statusChip = statusRingChipClass;
                         <div class="text-lg font-extrabold text-slate-900">{{ summary.bookings }}</div>
                     </div>
                     <div class="rounded-xl bg-emerald-50 px-3 py-2">
-                        <div class="text-xs font-bold text-emerald-700">مؤكدة</div>
-                        <div class="text-lg font-extrabold text-emerald-800">{{ summary.confirmed }}</div>
+                        <div class="text-xs font-bold text-emerald-700">مسدد كامل</div>
+                        <div class="text-lg font-extrabold text-emerald-800">{{ summary.paid_in_full }}</div>
                     </div>
                     <div class="rounded-xl bg-sky-50 px-3 py-2">
                         <div class="text-xs font-bold text-sky-700">إجمالي القيمة</div>

@@ -140,8 +140,8 @@ class PublicSiteBookingTest extends TestCase
         $booking = Booking::firstOrFail();
 
         $this->assertSame('online', $booking->source);
-        // الطلب يحجز الموعد وينتظر العربون — لا يُسجَّل مؤكدًا كحجز الموظف
-        $this->assertSame('pending_deposit', $booking->status);
+        // الطلب يحجز الموعد بحالة كل حجز لم يكتمل مبلغه، ويُميّزه مصدره
+        $this->assertSame('deposit_paid', $booking->status);
         $this->assertNull($booking->created_by);
         $this->assertTrue($booking->isBlocking());
         $this->assertSame('زائر الموقع', $booking->client->name);

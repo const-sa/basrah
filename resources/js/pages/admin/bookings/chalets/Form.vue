@@ -157,8 +157,8 @@ const form = useForm({
     start_time: props.booking?.period === HOURLY ? timeOf(props.booking.starts_at) : '16:00',
     end_time: props.booking?.period === HOURLY ? timeOf(props.booking.ends_at) : '21:00',
     hourly_amount: props.booking?.period === HOURLY ? props.booking.base_amount : 0,
-    // الإقامة الجديدة مؤكدة افتراضيًا — و«مبدئي» يُختار من القائمة عند الحاجة.
-    status: props.booking?.status ?? 'confirmed',
+    // الإقامة الجديدة «مدفوع العربون» — وهي حالة كل حجز حتى يكتمل مبلغه.
+    status: props.booking?.status ?? 'deposit_paid',
     addons: { ...(props.booking?.addons ?? {}) } as Record<number, number>,
     discount_amount: props.booking?.discount_amount ?? 0,
     // With tax unless told otherwise, which is the common case; an edit opens
@@ -696,18 +696,15 @@ const securityChanged = computed(() =>
 /**
  * The statuses this form may set.
  *
- * Neither end of the stay is picked from here: «تم الدخول» and «تم الخروج»
- * follow from the stay itself, not from a choice made while editing. Each one
- * stays on the list for a booking already sitting in it, so an older one can
- * still be opened and corrected instead of quietly changing status the moment
- * it is saved.
+ * «مسدد كامل» is not picked from here: closing a booking as settled posts its
+ * revenue to the ledger, and that runs through the booking service from the
+ * register. Written from here it would only land as text in the column, with
+ * no entry behind it. It stays on the list for a booking already sitting in
+ * it, so an older one can still be opened and corrected instead of quietly
+ * changing status the moment it is saved.
  */
-const HIDDEN_STATUSES = ['checked_in', 'checked_out'];
-
 const statusOptions = computed(() =>
-    props.meta.statuses.filter(
-        (s) => !HIDDEN_STATUSES.includes(s.key) || props.booking?.status === s.key,
-    ),
+    props.meta.statuses.filter((s) => s.key !== 'paid_in_full' || props.booking?.status === s.key),
 );
 
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
@@ -861,7 +858,7 @@ const submit = () => {
                             <div>
                                 <div class="mb-1 flex items-center justify-between gap-2">
                                     <label class="block text-sm font-extrabold text-slate-900">النزيل</label>
-                                    <ClientQuickAdd category="chalet" @created="onClientCreated" />
+                                    <ClientQuickAdd type="chalet" @created="onClientCreated" />
                                 </div>
                                 <SearchableSelect
                                     v-model="form.client_id"

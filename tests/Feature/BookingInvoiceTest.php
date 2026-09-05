@@ -50,7 +50,7 @@ class BookingInvoiceTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'guests_count' => 30,
         ]);
     }
@@ -196,7 +196,7 @@ class BookingInvoiceTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-15',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'guests_count' => 30,
         ]);
     }

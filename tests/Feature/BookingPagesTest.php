@@ -97,7 +97,7 @@ class BookingPagesTest extends TestCase
                 ->has('bookings.data')
                 // الشاشة تعرض قاعاتها وحدها: الشاليه لا يُحجز من هنا فلا يُعرض
                 ->has('units', $halls)
-                ->has('meta.statuses', 7)
+                ->has('meta.statuses', 4)
                 ->has('meta.periods', 1),
             );
     }
@@ -138,7 +138,7 @@ class BookingPagesTest extends TestCase
 
         $booking = app(BookingService::class)->create([
             'unit_id' => $hall->id, 'scope' => 'whole',
-            'booking_date' => '2026-11-15', 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => '2026-11-15', 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)
@@ -184,12 +184,12 @@ class BookingPagesTest extends TestCase
 
         app(BookingService::class)->create([
             'unit_id' => $hall->id, 'scope' => 'whole',
-            'booking_date' => '2026-11-15', 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => '2026-11-15', 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         app(ChaletBookingService::class)->create([
             'unit_id' => $chalet->id, 'scope' => 'whole',
-            'booking_date' => '2026-11-10', 'check_out_date' => '2026-11-13', 'status' => 'confirmed',
+            'booking_date' => '2026-11-10', 'check_out_date' => '2026-11-13', 'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)
@@ -222,7 +222,7 @@ class BookingPagesTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-11-15',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)
@@ -235,7 +235,7 @@ class BookingPagesTest extends TestCase
                 ->has('units', $halls)
                 ->has('bookings', 1)
                 ->where('bookings.0.scope', 'whole')
-                ->where('bookings.0.color', 'emerald'),
+                ->where('bookings.0.color', 'amber'),
             );
     }
 
@@ -248,7 +248,7 @@ class BookingPagesTest extends TestCase
 
         app(ChaletBookingService::class)->create([
             'unit_id' => $chalet->id, 'scope' => 'whole',
-            'booking_date' => '2026-11-10', 'check_out_date' => '2026-11-13', 'status' => 'confirmed',
+            'booking_date' => '2026-11-10', 'check_out_date' => '2026-11-13', 'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)
@@ -277,7 +277,7 @@ class BookingPagesTest extends TestCase
 
         app(ChaletBookingService::class)->create([
             'unit_id' => $chalet->id, 'scope' => 'whole',
-            'booking_date' => '2026-10-29', 'check_out_date' => '2026-11-03', 'status' => 'confirmed',
+            'booking_date' => '2026-10-29', 'check_out_date' => '2026-11-03', 'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)
@@ -303,7 +303,7 @@ class BookingPagesTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-11-20',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
         $service->cancel($booking, 'اعتذر العميل');
 
@@ -318,15 +318,15 @@ class BookingPagesTest extends TestCase
         $unit = Unit::where('type', 'hall')->firstOrFail();
         $service = app(BookingService::class);
 
-        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-01', 'period' => 'full_day', 'status' => 'confirmed']);
-        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-02', 'period' => 'full_day', 'status' => 'tentative']);
+        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-01', 'period' => 'full_day', 'status' => 'deposit_paid']);
+        $service->create(['unit_id' => $unit->id, 'scope' => 'whole', 'booking_date' => '2026-11-02', 'period' => 'full_day', 'status' => 'paid_in_full']);
 
         $this->actingAs($this->owner)
-            ->get('/admin/bookings/halls?status=confirmed')
+            ->get('/admin/bookings/halls?status=deposit_paid')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->has('bookings.data', 1)
-                ->where('bookings.data.0.status', 'confirmed'),
+                ->where('bookings.data.0.status', 'deposit_paid'),
             );
     }
 
@@ -365,10 +365,10 @@ class BookingPagesTest extends TestCase
         $chalet = Unit::where('type', 'chalet')->firstOrFail();
 
         $this->actingAs($this->owner)
-            ->get("/admin/bookings/halls?unit_id={$hall->id}&status=confirmed")
+            ->get("/admin/bookings/halls?unit_id={$hall->id}&status=deposit_paid")
             ->assertInertia(fn ($page) => $page
                 ->where('filters.unit_id', $hall->id)
-                ->where('filters.status', 'confirmed')
+                ->where('filters.status', 'deposit_paid')
                 ->etc(),
             );
 

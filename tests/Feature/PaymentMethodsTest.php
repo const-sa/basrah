@@ -250,7 +250,7 @@ class PaymentMethodsTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-12-15',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
     }
 

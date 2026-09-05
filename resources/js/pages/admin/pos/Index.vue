@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import ItemGroupPicker from '@/components/ItemGroupPicker.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
+import { type BreadcrumbItem, type ClientTypeKey, type PaymentMethodOption } from '@/types';
 import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { AlertTriangle, Plus, Receipt, Trash2 } from 'lucide-vue-next';
@@ -31,6 +32,12 @@ interface PosItem {
     low_stock: boolean;
 }
 
+interface ClientOption {
+    id: number;
+    name: string;
+    mobile: string | null;
+}
+
 interface Line {
     /** مفتاح ثابت للسطر — الفهرس لا يصلح مفتاحًا مع الحذف والدمج. */
     uid: number;
@@ -46,9 +53,12 @@ const props = defineProps<{
     items: PosItem[];
     /** المجموعات المحفوظة المتاحة لهذا القسم — أعضاؤها من أصناف `items` وحدها. */
     groups: ItemGroupOption[];
-    clients: { id: number; name: string; mobile: string | null }[];
+    /** عملاء نشاط القسم المعروض وحدهم، ومعهم العميل النقدي. */
+    clients: ClientOption[];
     /** العميل النقدي — المختار تلقائيًا ما لم يُحدَّد غيره. */
     defaultClientId: number;
+    /** نشاط القسم المعروض — يُقيَّد فيه العميل المضاف من هذه الشاشة. */
+    clientType: ClientTypeKey | null;
     methods: PaymentMethodOption[];
     recentSales: { id: number; number: string; type: string; total: number; method_label: string; time: string }[];
 }>();
@@ -75,9 +85,17 @@ const form = useForm({
     notes: '',
 });
 
-/** تبديل القسم يعيد تحميل أصنافه — مستودع كل نشاط مستقل. */
+/** تبديل القسم يعيد تحميل أصنافه وعملائه — مستودع كل نشاط مستقل وسجلّه كذلك. */
 const changeDepartment = (id: number | string | null) => {
     router.get('/admin/pos', { department_id: id }, { preserveState: false });
+};
+
+// نسخة محليّة تقبل العميل المضاف من الشاشة دون إعادة تحميلها وفقدان الفاتورة.
+const clients = ref<ClientOption[]>([...props.clients]);
+
+const onClientCreated = (client: ClientOption) => {
+    clients.value = [client, ...clients.value];
+    form.client_id = client.id;
 };
 
 let uid = 0;
@@ -307,7 +325,10 @@ const numField =
 
                     <div class="grid gap-3" :class="vatApplies ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
                         <div>
-                            <label class="mb-1 block text-sm font-extrabold text-slate-950">العميل</label>
+                            <div class="mb-1 flex items-center justify-between gap-2">
+                                <label class="text-sm font-extrabold text-slate-950">العميل</label>
+                                <ClientQuickAdd :type="clientType" @created="onClientCreated" />
+                            </div>
                             <SearchableSelect v-model="form.client_id" :options="clients" :search-keys="['mobile']" placeholder="— عميل نقدي —">
                                 <template #option="{ option }">
                                     <span class="font-bold">{{ option.name }}</span>

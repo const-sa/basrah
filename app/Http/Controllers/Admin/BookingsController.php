@@ -62,9 +62,8 @@ class BookingsController extends Controller
     ) {}
 
     /**
-     * تغيير حالة الحجز في مساره:
-     * مبدئي ← بانتظار العربون ← مؤكد ← تم الدخول ← تم الخروج،
-     * ويخرج منه في أي نقطة إلى «مؤجل» أو «ملغي».
+     * تغيير حالة الحجز: مدفوع العربون ← مسدد كامل،
+     * ويخرج من مساره في أي نقطة إلى «مؤجل» أو «ملغى».
      */
     public function changeStatus(Request $request, Booking $booking): RedirectResponse
     {
@@ -86,8 +85,7 @@ class BookingsController extends Controller
         match ($data['status']) {
             'cancelled' => $this->bookings->cancel($booking, $reason),
             'postponed' => $this->bookings->postpone($booking, $reason),
-            'checked_in' => $this->bookings->checkIn($booking),
-            'checked_out' => $this->bookings->checkOut($booking, $request->user()?->id),
+            'paid_in_full' => $this->bookings->settleInFull($booking, $request->user()?->id),
             default => $booking->update(['status' => $data['status']]),
         };
 
@@ -101,8 +99,7 @@ class BookingsController extends Controller
         return back()->with('success', match ($data['status']) {
             'cancelled' => 'تم إلغاء الحجز',
             'postponed' => 'تم تأجيل الحجز وتحرير الفترة',
-            'checked_in' => 'تم تسجيل دخول العميل',
-            'checked_out' => 'تم تسجيل الخروج وإثبات الإيراد محاسبيًا',
+            'paid_in_full' => 'تم إقفال الحجز مسدَّدًا وإثبات الإيراد محاسبيًا',
             default => 'تم تحديث حالة الحجز',
         });
     }

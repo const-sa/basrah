@@ -52,7 +52,7 @@ class ContractWhatsappTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'guests_count' => 30,
         ]);
     }
@@ -95,7 +95,7 @@ class ContractWhatsappTest extends TestCase
             'section_ids' => [$men->id],
             'booking_date' => '2026-09-12',
             'period' => 'evening',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $contract = $this->contracts->generate($booking);
@@ -151,7 +151,7 @@ class ContractWhatsappTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-11-20',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         // الحجز هو الأصل: غياب القالب يمنع العقد ولا يمنع الحجز.

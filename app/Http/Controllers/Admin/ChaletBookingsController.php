@@ -142,7 +142,7 @@ class ChaletBookingsController extends BaseBookingsController
                     fn ($a) => [$a->id => (int) $a->pivot->quantity],
                 ),
             ],
-            ...$this->formData($request),
+            ...$this->formData($request, $booking),
         ]);
     }
 
@@ -178,11 +178,11 @@ class ChaletBookingsController extends BaseBookingsController
      *
      * @return array<string, mixed>
      */
-    private function formData(Request $request): array
+    private function formData(Request $request, ?Booking $booking = null): array
     {
         return [
             'units' => $this->unitOptions($request->user()),
-            'clients' => $this->clientOptions(),
+            'clients' => $this->clientOptions($booking?->client_id),
             'addons' => Addon::where('is_active', true)->orderBy('sort_order')
                 ->get(['id', 'name', 'price', 'pricing']),
             'meta' => static::meta(),

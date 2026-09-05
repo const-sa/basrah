@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\ClientType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -19,6 +21,7 @@ class Client extends Model
         'mobile',
         'email',
         'city',
+        'type',
         'national_id',
         'is_taxable',
         'tax_number',
@@ -46,13 +49,38 @@ class Client extends Model
     {
         return static::firstOrCreate(
             ['is_walk_in' => true],
-            ['name' => self::WALK_IN_NAME, 'is_active' => true, 'is_taxable' => false],
+            [
+                'name' => self::WALK_IN_NAME,
+                'is_active' => true,
+                'is_taxable' => false,
+                'type' => ClientType::DEFAULT,
+            ],
         );
     }
 
     public function isWalkIn(): bool
     {
         return (bool) $this->is_walk_in;
+    }
+
+    public function typeLabel(): string
+    {
+        return ClientType::label($this->type);
+    }
+
+    /**
+     * The register of one activity, plus the walk-in client that every counter
+     * bills to.
+     *
+     * @param  list<string>|string|null  $types  Null asks for the whole directory.
+     */
+    public function scopeOfType(Builder $query, array|string|null $types): Builder
+    {
+        $types = array_filter((array) $types);
+
+        return $types === []
+            ? $query
+            : $query->where(fn ($q) => $q->whereIn('type', $types)->orWhere('is_walk_in', true));
     }
 
     public function bookings(): HasMany

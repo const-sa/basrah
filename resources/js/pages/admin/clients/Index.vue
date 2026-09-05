@@ -2,7 +2,7 @@
 import { StatusBadge } from '@/components/data-table';
 import SmallBox from '@/components/lte/SmallBox.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type ClientTypeKey, type ClientTypeOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Eye, FileSpreadsheet, Pencil, Plus, Power, ReceiptText, Search, Trash2, UserCheck, Users, UserX, X } from 'lucide-vue-next';
 import { computed, reactive, ref, watch } from 'vue';
@@ -13,6 +13,9 @@ interface ClientRow {
     mobile: string | null;
     email: string | null;
     city: string | null;
+    /** النشاط الذي جاءنا منه العميل — به تُفصل السجلّات الثلاثة. */
+    type: ClientTypeKey;
+    type_label: string;
     national_id: string | null;
     is_taxable: boolean;
     tax_number: string | null;
@@ -41,6 +44,7 @@ interface ClientStats {
     inactive: number;
     taxable: number;
     non_taxable: number;
+    by_type: Record<ClientTypeKey, number>;
 }
 
 interface Filters {
@@ -48,6 +52,7 @@ interface Filters {
     mobile: string;
     email: string;
     city: string;
+    type: string;
     status: string;
     from: string;
     to: string;
@@ -57,10 +62,18 @@ const props = defineProps<{
     clients: Paginated<ClientRow>;
     filters: Filters;
     stats: ClientStats;
+    types: ClientTypeOption[];
     cities: string[];
 }>();
 
 const money = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
+
+/** لونٌ لكل نشاط — يُقرأ السجل بلمحة دون قراءة كل شارة. */
+const TYPE_TONE: Record<ClientTypeKey, string> = {
+    pool: 'bg-teal-50 text-teal-700',
+    hall: 'bg-indigo-50 text-indigo-700',
+    chalet: 'bg-amber-50 text-amber-700',
+};
 
 // خيارات المدينة في نموذج العميل: قائمة المدن المفعّلة، مع تضمين القيمة الحالية
 // إن كانت مخزّنة سابقاً لكنها غير موجودة/موقوفة في قائمة المدن (حفاظاً على البيانات القديمة).
@@ -83,6 +96,7 @@ const f = reactive<Filters>({
     mobile: props.filters.mobile ?? '',
     email: props.filters.email ?? '',
     city: props.filters.city ?? '',
+    type: props.filters.type ?? '',
     status: props.filters.status ?? '',
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
@@ -117,6 +131,8 @@ const form = useForm({
     mobile: '',
     email: '',
     city: '',
+    // النشاط يبدأ من المفلتر عليه: من يفتح سجل الشاليهات يضيف نزيلًا غالبًا.
+    type: (props.filters.type || props.types[0]?.key || 'pool') as ClientTypeKey,
     national_id: '',
     is_taxable: false,
     tax_number: '',
@@ -128,6 +144,7 @@ const openCreate = () => {
     editingId.value = null;
     form.reset();
     form.clearErrors();
+    form.type = (f.type || props.types[0]?.key || 'pool') as ClientTypeKey;
     showModal.value = true;
 };
 
@@ -139,6 +156,7 @@ const openEdit = (c: ClientRow) => {
     form.mobile = c.mobile ?? '';
     form.email = c.email ?? '';
     form.city = c.city ?? '';
+    form.type = c.type;
     form.national_id = c.national_id ?? '';
     form.is_taxable = c.is_taxable;
     form.tax_number = c.tax_number ?? '';
@@ -185,6 +203,28 @@ const destroy = (c: ClientRow) => {
                 <div class="lte-card-header">
                     <h3 class="lte-card-title">دليل العملاء</h3>
                     <div class="flex flex-wrap items-center gap-2">
+                        <!-- سجلّ كل نشاط على حدة: عملاء المسابح ليسوا نزلاء الشاليهات -->
+                        <div class="inline-flex gap-1 rounded-lg bg-slate-100 p-1">
+                            <button
+                                type="button"
+                                @click="((f.type = ''), reload())"
+                                class="rounded-md px-3 py-1.5 text-xs font-extrabold transition"
+                                :class="f.type === '' ? 'bg-white text-slate-900 shadow' : 'text-slate-500 hover:text-slate-700'"
+                            >
+                                الكل
+                            </button>
+                            <button
+                                v-for="t in types"
+                                :key="t.key"
+                                type="button"
+                                @click="((f.type = t.key), reload())"
+                                class="rounded-md px-3 py-1.5 text-xs font-extrabold transition"
+                                :class="f.type === t.key ? 'bg-white text-slate-900 shadow' : 'text-slate-500 hover:text-slate-700'"
+                            >
+                                {{ t.label }}
+                                <span class="text-[10px] font-bold text-slate-400">{{ stats.by_type[t.key] ?? 0 }}</span>
+                            </button>
+                        </div>
                         <!-- بحث -->
                         <div class="flex items-stretch overflow-hidden rounded-md border border-slate-300">
                             <span class="flex items-center bg-slate-50 px-2.5 text-slate-400"><Search class="h-4 w-4" /></span>
@@ -229,6 +269,7 @@ const destroy = (c: ClientRow) => {
                                 <th class="px-4 py-3 text-start font-semibold">العميل</th>
                                 <th class="px-4 py-3 text-start font-semibold">الجوال</th>
                                 <th class="px-4 py-3 text-start font-semibold">البريد</th>
+                                <th class="px-4 py-3 text-center font-semibold">النشاط</th>
                                 <th class="px-4 py-3 text-center font-semibold">التعاملات</th>
                                 <th class="px-4 py-3 text-center font-semibold">النوع</th>
                                 <th class="px-4 py-3 text-center font-semibold">الحالة</th>
@@ -255,6 +296,13 @@ const destroy = (c: ClientRow) => {
                                 </td>
                                 <td class="px-4 py-2.5 font-bold text-slate-900" dir="ltr">{{ c.mobile || '—' }}</td>
                                 <td class="px-4 py-2.5" dir="ltr">{{ c.email || '—' }}</td>
+                                <td class="px-4 py-2.5 text-center">
+                                    <span
+                                        class="rounded px-1.5 py-0.5 text-[11px] font-extrabold"
+                                        :class="TYPE_TONE[c.type] ?? 'bg-slate-100 text-slate-600'"
+                                        >{{ c.type_label }}</span
+                                    >
+                                </td>
                                 <!-- التعاملات: بابٌ إلى ملفه — الأرقام تُغري بالنقر قبل السؤال -->
                                 <td class="px-4 py-2.5 text-center">
                                     <Link :href="`/admin/clients/${c.id}`" class="inline-flex flex-col items-center gap-1">
@@ -326,7 +374,7 @@ const destroy = (c: ClientRow) => {
                                 </td>
                             </tr>
                             <tr v-if="clients.data.length === 0">
-                                <td colspan="8" class="px-4 py-12 text-center text-sm text-slate-400">لا يوجد عملاء مطابقون.</td>
+                                <td colspan="9" class="px-4 py-12 text-center text-sm text-slate-400">لا يوجد عملاء مطابقون.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -377,6 +425,27 @@ const destroy = (c: ClientRow) => {
                             class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                         />
                         <p v-if="form.errors.name" class="mt-1 text-xs text-red-500">{{ form.errors.name }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">النشاط</label>
+                        <div class="flex gap-1">
+                            <button
+                                v-for="t in types"
+                                :key="t.key"
+                                type="button"
+                                @click="form.type = t.key"
+                                class="flex-1 rounded-xl border py-2 text-xs font-extrabold transition"
+                                :class="
+                                    form.type === t.key
+                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                                "
+                            >
+                                {{ t.label }}
+                            </button>
+                        </div>
+                        <p class="mt-1 text-[11px] font-medium text-slate-500">به يظهر العميل في شاشة نشاطه وحدها.</p>
+                        <p v-if="form.errors.type" class="mt-1 text-xs text-red-500">{{ form.errors.type }}</p>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>

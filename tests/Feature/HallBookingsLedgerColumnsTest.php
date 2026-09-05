@@ -50,7 +50,7 @@ class HallBookingsLedgerColumnsTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'discount_amount' => 100,
         ]);
     }
@@ -182,7 +182,7 @@ class HallBookingsLedgerColumnsTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-12-20',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)
@@ -216,7 +216,7 @@ class HallBookingsLedgerColumnsTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-15',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $net = $taxed->netAmount();

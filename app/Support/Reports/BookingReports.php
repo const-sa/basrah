@@ -58,7 +58,7 @@ class BookingReports
             columns: [
                 ['key' => 'period', 'label' => 'الفترة'],
                 ['key' => 'count', 'label' => 'عدد الحجوزات', 'type' => 'number'],
-                ['key' => 'confirmed', 'label' => 'مؤكدة', 'type' => 'number'],
+                ['key' => 'standing', 'label' => 'قائمة', 'type' => 'number'],
                 ['key' => 'cancelled', 'label' => 'ملغاة', 'type' => 'number'],
                 ['key' => 'guests', 'label' => 'الضيوف', 'type' => 'number'],
                 ['key' => 'total', 'label' => 'إجمالي المبالغ', 'type' => 'currency'],
@@ -75,7 +75,8 @@ class BookingReports
                         'period' => self::periodLabel($period, $unit),
                         'sort' => $period,
                         'count' => $group->count(),
-                        'confirmed' => $group->whereIn('status', ['confirmed', 'checked_in', 'checked_out'])->count(),
+                        // القائمة: ما يشغل وحدته فعلًا — لا المؤجل ولا الملغى.
+                        'standing' => $group->whereIn('status', Booking::BLOCKING_STATUSES)->count(),
                         'cancelled' => $group->where('status', 'cancelled')->count(),
                         'guests' => (int) $group->sum('guests_count'),
                         'total' => round((float) $group->sum('total_amount'), 2),

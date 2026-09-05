@@ -131,7 +131,7 @@ class AccountingTest extends TestCase
         $service = app(BookingService::class);
 
         $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
-        $service->checkOut($booking->fresh());
+        $service->settleInFull($booking->fresh());
 
         $total = (float) $booking->fresh()->total_amount;
 
@@ -146,8 +146,8 @@ class AccountingTest extends TestCase
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
 
-        $service->checkOut($booking);
-        $service->checkOut($booking->fresh());
+        $service->settleInFull($booking);
+        $service->settleInFull($booking->fresh());
 
         $entries = JournalEntry::where('source', 'booking')->where('reference_id', $booking->id)->count();
         $this->assertSame(1, $entries);
@@ -189,9 +189,9 @@ class AccountingTest extends TestCase
                 'scope' => 'whole',
                 'booking_date' => $date,
                 'period' => 'full_day',
-                'status' => 'confirmed',
+                'status' => 'deposit_paid',
             ]);
-            $service->checkOut($booking);
+            $service->settleInFull($booking);
         }
 
         $profitA = CostCenter::forUnit($unitA)->profitability();
@@ -257,7 +257,7 @@ class AccountingTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
     }
 }

@@ -82,7 +82,7 @@ class DashboardController extends Controller
         return [
             'today' => $base()->blocking()->whereDate('booking_date', $today->toDateString())->count(),
             'upcoming' => $base()->blocking()->whereDate('booking_date', '>', $today->toDateString())->count(),
-            'tentative' => $base()->where('status', 'tentative')->count(),
+            'deposit_paid' => $base()->where('status', 'deposit_paid')->count(),
             'month_count' => (clone $monthly)->count(),
             'month_value' => round((float) (clone $monthly)->sum('total_amount'), 2),
             'outstanding' => round(

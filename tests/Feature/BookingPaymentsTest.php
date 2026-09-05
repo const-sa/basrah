@@ -53,7 +53,7 @@ class BookingPaymentsTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-12-15',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
     }
 
@@ -87,15 +87,15 @@ class BookingPaymentsTest extends TestCase
             'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650, 'paid_on' => '2026-11-01', 'notify' => false,
         ]);
 
-        // تسجيل الخروج من الواجهة يجب أن يمرّ بالخدمة لا بتحديث مباشر،
+        // الإقفال مسدَّدًا من الواجهة يجب أن يمرّ بالخدمة لا بتحديث مباشر،
         // وإلا بقي الإيراد غير مثبت في الدفاتر.
         $this->actingAs($this->owner)
-            ->patch("/admin/bookings/{$this->booking->id}/status", ['status' => 'checked_out'])
+            ->patch("/admin/bookings/{$this->booking->id}/status", ['status' => 'paid_in_full'])
             ->assertSessionHasNoErrors();
 
         $total = (float) $this->booking->fresh()->total_amount;
 
-        $this->assertSame('checked_out', $this->booking->fresh()->status);
+        $this->assertSame('paid_in_full', $this->booking->fresh()->status);
         $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
         $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
     }
@@ -287,7 +287,7 @@ class BookingPaymentsTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-12-20',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         // رقم الدفعة في الرابط لا يفتحها إلا تحت حجزها.

@@ -106,13 +106,13 @@ class UnitManagementTest extends TestCase
 
         $booking = app(BookingService::class)->create([
             'unit_id' => $unit->id, 'scope' => 'whole',
-            'booking_date' => '2026-12-22', 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => '2026-12-22', 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $unit->update(['is_active' => false]);
 
         // الإيقاف يمنع الجديد ولا يمسّ القائم
-        $this->assertSame('confirmed', $booking->fresh()->status);
+        $this->assertSame('deposit_paid', $booking->fresh()->status);
     }
 
     // ── سعة القسم محذوفة ─────────────────────────────────────

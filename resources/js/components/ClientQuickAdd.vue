@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * إضافة عميل سريعة من داخل نموذج الحجز.
+ * إضافة عميل سريعة من داخل نموذج الحجز أو شاشة الفواتير.
  *
  * الموظف على الهاتف مع النزيل: مغادرة النموذج إلى شاشة العملاء تُفقده ما عبّأه،
  * فتُفتح نافذة صغيرة بالاسم والجوال فقط، ويعود العميل عبر JSON ليُحدَّد فورًا.
@@ -8,6 +8,7 @@
  */
 import { usePermissions } from '@/composables/usePermissions';
 import { jsonHeaders } from '@/lib/csrf';
+import { type ClientTypeKey } from '@/types';
 import { Loader2, UserPlus, X } from 'lucide-vue-next';
 import { nextTick, ref } from 'vue';
 
@@ -19,9 +20,10 @@ export interface QuickClient {
 
 const emit = defineEmits<{ created: [client: QuickClient] }>();
 
+/** نشاط الشاشة: العميل يُقيَّد في سجلّه، وبه يُختار قالب الترحيب. */
 const props = withDefaults(
-    defineProps<{ category?: 'chalet' | 'hall' | 'pool' }>(),
-    { category: undefined },
+    defineProps<{ type?: ClientTypeKey | null }>(),
+    { type: undefined },
 );
 
 const { can } = usePermissions();
@@ -69,7 +71,7 @@ const submit = async () => {
             body: JSON.stringify({
                 name: name.value.trim(),
                 mobile: mobile.value.trim() || null,
-                category: props.category ?? null,
+                type: props.type ?? null,
             }),
         });
 

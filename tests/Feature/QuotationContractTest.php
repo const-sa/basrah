@@ -234,7 +234,7 @@ class QuotationContractTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-09-10',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'guests_count' => 30,
         ]);
     }

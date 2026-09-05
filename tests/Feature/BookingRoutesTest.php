@@ -66,7 +66,7 @@ class BookingRoutesTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-05',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($supervisor)
@@ -120,7 +120,7 @@ class BookingRoutesTest extends TestCase
                 'scope' => 'whole',
                 'booking_date' => '2026-10-08',
                 'period' => 'full_day',
-                'status' => 'confirmed',
+                'status' => 'deposit_paid',
             ]);
         }
 
@@ -140,7 +140,7 @@ class BookingRoutesTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-09',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $response = $this->actingAs($owner)->postJson('/admin/bookings/halls/quote', [
@@ -166,7 +166,7 @@ class BookingRoutesTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-10',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $booking->payments()->create([
@@ -195,7 +195,7 @@ class BookingRoutesTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-11',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($owner)

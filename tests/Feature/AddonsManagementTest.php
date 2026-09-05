@@ -103,7 +103,7 @@ class AddonsManagementTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-12-24',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
         $booking->addons()->attach($addon->id, ['quantity' => 1, 'unit_price' => 800, 'total' => 800]);

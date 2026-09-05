@@ -75,7 +75,7 @@ class BookingTaxChoiceTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-07',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'discount_amount' => 0,
             'is_taxable' => $taxable,
             ...$overrides,

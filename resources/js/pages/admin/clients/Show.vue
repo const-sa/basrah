@@ -29,6 +29,8 @@ const props = defineProps<{
         mobile: string | null;
         email: string | null;
         city: string | null;
+        type: string;
+        type_label: string;
         national_id: string | null;
         is_taxable: boolean;
         tax_number: string | null;
@@ -122,6 +124,7 @@ const notes = useForm({
     mobile: props.client.mobile ?? '',
     email: props.client.email ?? '',
     city: props.client.city ?? '',
+    type: props.client.type,
     national_id: props.client.national_id ?? '',
     is_taxable: props.client.is_taxable,
     tax_number: props.client.tax_number ?? '',
@@ -154,6 +157,9 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                                 :class="client.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
                             >
                                 {{ client.is_active ? 'مفعّل' : 'موقوف' }}
+                            </span>
+                            <span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                                {{ client.type_label }}
                             </span>
                             <span v-if="client.is_taxable" class="rounded-md bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">
                                 عميل ضريبي

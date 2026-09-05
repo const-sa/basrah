@@ -56,7 +56,7 @@ class EventTypeBookingTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-15',
             'period' => 'full_day',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             ...$overrides,
         ];
     }

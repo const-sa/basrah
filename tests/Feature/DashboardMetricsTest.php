@@ -54,11 +54,11 @@ class DashboardMetricsTest extends TestCase
 
         $service->create([
             'unit_id' => $unit->id, 'scope' => 'whole',
-            'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
         $service->create([
             'unit_id' => $unit->id, 'scope' => 'whole',
-            'booking_date' => now()->addDays(5)->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->addDays(5)->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->user('super-admin'))
@@ -82,7 +82,7 @@ class DashboardMetricsTest extends TestCase
             $service->create([
                 'unit_id' => $unit->id, 'scope' => 'whole',
                 'booking_date' => now()->addDays($d)->toDateString(),
-                'period' => 'full_day', 'status' => 'confirmed',
+                'period' => 'full_day', 'status' => 'deposit_paid',
             ]);
         }
 
@@ -134,7 +134,7 @@ class DashboardMetricsTest extends TestCase
 
         $booking = $service->create([
             'unit_id' => Unit::firstOrFail()->id, 'scope' => 'whole',
-            'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $service->recordPayment($booking, [
@@ -190,7 +190,7 @@ class DashboardMetricsTest extends TestCase
         foreach ([$mine, $other] as $unit) {
             $service->create([
                 'unit_id' => $unit->id, 'scope' => 'whole',
-                'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+                'booking_date' => now()->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
             ]);
         }
 
@@ -213,7 +213,7 @@ class DashboardMetricsTest extends TestCase
         foreach (['morning', 'evening'] as $period) {
             $service->create([
                 'unit_id' => $unit->id, 'scope' => 'whole',
-                'booking_date' => now()->toDateString(), 'period' => $period, 'status' => 'confirmed',
+                'booking_date' => now()->toDateString(), 'period' => $period, 'status' => 'deposit_paid',
             ]);
         }
 
@@ -238,7 +238,7 @@ class DashboardMetricsTest extends TestCase
 
         $booking = $service->create([
             'unit_id' => Unit::firstOrFail()->id, 'scope' => 'whole',
-            'booking_date' => now()->addDay()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->addDay()->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $service->recordPayment($booking, [
@@ -266,7 +266,7 @@ class DashboardMetricsTest extends TestCase
 
         $booking = $service->create([
             'unit_id' => Unit::firstOrFail()->id, 'scope' => 'whole',
-            'booking_date' => now()->addDay()->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->addDay()->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $service->cancel($booking, 'ظرف طارئ');

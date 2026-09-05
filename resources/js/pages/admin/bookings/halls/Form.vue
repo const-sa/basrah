@@ -137,8 +137,8 @@ const form = useForm({
     // المناسبة يوم واحد في الغالب، والامتداد استثناء يطلبه الموظف صراحةً.
     days_count: props.booking?.days_count ?? 1,
     period: props.booking?.period ?? pre.period ?? 'full_day',
-    // الحجز الجديد مؤكد افتراضيًا — و«مبدئي» يُختار من القائمة عند الحاجة.
-    status: props.booking?.status ?? 'confirmed',
+    // الحجز الجديد «مدفوع العربون» — وهي حالة كل حجز حتى يكتمل مبلغه.
+    status: props.booking?.status ?? 'deposit_paid',
     discount_amount: props.booking?.discount_amount ?? 0,
     // With tax unless told otherwise, which is the common case; an edit opens
     // on whatever the booking was written with.
@@ -154,6 +154,18 @@ const form = useForm({
     payment_paid_on: today,
     payment_notify: true,
 });
+
+/**
+ * الحالات التي يجوز ضبطها من هذه الشاشة.
+ *
+ * «مسدد كامل» ليست منها: إقفال الحجز مسدَّدًا يُثبت إيراده في الدفاتر، وذلك
+ * يجري من السجل حيث يمرّ الطلب بخدمة الحجز. لو كُتب من هنا لحُفظ نصًّا في
+ * العمود بلا قيد يقابله. وتبقى في القائمة لحجزٍ هو فيها أصلًا، حتى يُفتح
+ * القديم ويُصحَّح بدل أن تنقلب حالته لحظة الحفظ.
+ */
+const statusOptions = computed(() =>
+    props.meta.statuses.filter((s) => s.key !== 'paid_in_full' || props.booking?.status === s.key),
+);
 
 const selectedUnit = computed(() => props.units.find((u) => u.id === form.unit_id) ?? null);
 
@@ -431,7 +443,7 @@ const eventBadge = (color: string) =>
                                         <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs font-extrabold text-white">2</span>
                                         العميل
                                     </label>
-                                    <ClientQuickAdd category="hall" @created="onClientCreated" />
+                                    <ClientQuickAdd type="hall" @created="onClientCreated" />
                                 </div>
                                 <SearchableSelect
                                     v-model="form.client_id"
@@ -682,7 +694,7 @@ const eventBadge = (color: string) =>
                             <div>
                                 <label class="mb-1 block text-[15px] font-bold text-slate-900">الحالة</label>
                                 <select v-model="form.status" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
-                                    <option v-for="s in meta.statuses" :key="s.key" :value="s.key">{{ s.label }}</option>
+                                    <option v-for="s in statusOptions" :key="s.key" :value="s.key">{{ s.label }}</option>
                                 </select>
                             </div>
 

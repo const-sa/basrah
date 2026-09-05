@@ -61,7 +61,7 @@ class ScheduledRemindersTest extends TestCase
             'booking_date' => $date,
             'starts_at' => $date.' 18:00:00',
             'ends_at' => $date.' 23:00:00',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'base_amount' => 1000,
             'total_amount' => 1000,
             'paid_amount' => 400,

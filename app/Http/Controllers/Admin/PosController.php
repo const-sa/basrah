@@ -37,6 +37,9 @@ class PosController extends Controller
         $departmentId = $request->integer('department_id')
             ?: ($departments->first()->id ?? null);
 
+        $department = $departments->firstWhere('id', $departmentId);
+        $clientTypes = $department?->clientTypes();
+
         // أصناف القسم المختار فقط — مستودع كل نشاط مستقل عن غيره
         $items = Item::where('is_active', true)
             ->when($departmentId, fn ($q, $id) => $q->where('department_id', $id))
@@ -78,10 +81,14 @@ class PosController extends Controller
                     ->orderBy('sort_order')->orderBy('id')->get(),
                 allowedItemIds: $items->pluck('id')->all(),
             ),
-            // العميل النقدي أولًا في القائمة لأنه المختار افتراضيًا وأكثرها استعمالًا.
-            'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')
+            // عملاء نشاط القسم المعروض وحدهم — لا يعرض كاشير المسابح نزلاء
+            // الشاليهات. والعميل النقدي أولًا: هو المختار افتراضيًا في كل قسم.
+            'clients' => Client::ofType($clientTypes)
+                ->orderByDesc('is_walk_in')->orderBy('name')
                 ->limit(300)->get(['id', 'name', 'mobile']),
             'defaultClientId' => Client::walkIn()->id,
+            // نشاط العميل الجديد المضاف من هذه الشاشة — أول أنشطة القسم.
+            'clientType' => $clientTypes[0] ?? null,
             'methods' => PaymentMethod::options(),
             // آخر فواتير المستخدم نفسه.
             'recentSales' => Sale::where('user_id', $user->id)

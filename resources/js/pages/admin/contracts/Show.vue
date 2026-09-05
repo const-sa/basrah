@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
 import StayContractDocument from '@/components/contracts/StayContractDocument.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -29,6 +30,9 @@ const props = defineProps<{
         deposit_amount: string | null; remaining_amount: string | null; security_deposit: string | null;
         // Quotation contracts (pools): the priced lines are the scope of work.
         from_quotation: boolean; subject: string | null;
+        /** The pools' installation pad — its own sheet, not the standard one. */
+        is_installation_form: boolean;
+        first_installment: string | null; second_installment: string | null;
         quotation_id: number | null; quotation_number: string | null;
         quotation_date: string | null; valid_until: string | null;
         items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string }[];
@@ -70,6 +74,7 @@ const isStay = computed(() => props.contract.unit_type === 'chalet');
 // A quotation contract prints the priced lines it was drawn from instead of the
 // rental terms — that list is what the parties actually agreed on.
 const isQuotation = computed(() => props.contract.from_quotation);
+const isInstallationForm = computed(() => props.contract.is_installation_form);
 const lines = computed(() => props.contract.items ?? []);
 
 // المدى الزمني: المناسبة الممتدة والإقامة يُذكر آخر يومهما، واليوم الواحد يُكتفى بتاريخه.
@@ -182,6 +187,9 @@ const print = () => window.print();
 
             <!-- A chalet is let on its own daily-rental form, the same document the PDF prints. -->
             <StayContractDocument v-if="isStay" :contract="contract" :issuer="issuer" />
+
+            <!-- Pool piping and installation is sold on its own pad, likewise. -->
+            <InstallationContractDocument v-else-if="isInstallationForm" :contract="contract" :issuer="issuer" />
 
             <!-- العقد نفسه — ما يُطبع ويُوقَّع -->
             <div

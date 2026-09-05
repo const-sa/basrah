@@ -63,11 +63,11 @@ class UnitWorkspaceTest extends TestCase
 
         $service->create([
             'unit_id' => $this->unit->id, 'scope' => 'whole',
-            'booking_date' => now()->addDays(3)->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->addDays(3)->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
         $service->create([
             'unit_id' => $other->id, 'scope' => 'whole',
-            'booking_date' => now()->addDays(4)->toDateString(), 'period' => 'full_day', 'status' => 'confirmed',
+            'booking_date' => now()->addDays(4)->toDateString(), 'period' => 'full_day', 'status' => 'deposit_paid',
         ]);
 
         $this->actingAs($this->owner)

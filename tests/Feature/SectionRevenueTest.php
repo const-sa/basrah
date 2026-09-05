@@ -77,7 +77,7 @@ class SectionRevenueTest extends TestCase
             'section_ids' => [$sectionId],
             'booking_date' => $from,
             'check_out_date' => $to,
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
     }
 
@@ -112,7 +112,7 @@ class SectionRevenueTest extends TestCase
         $this->priceSection($section->id, 500);
 
         $booking = $this->stayInRoom($section->id);
-        app(BookingService::class)->checkOut($booking);
+        app(BookingService::class)->settleInFull($booking);
 
         $centre = CostCenter::where('unit_section_id', $section->id)->value('id');
         $unitCentre = CostCenter::where('unit_id', $this->chalet->id)->value('id');
@@ -137,10 +137,10 @@ class SectionRevenueTest extends TestCase
             'section_ids' => $sections->pluck('id')->all(),
             'booking_date' => '2027-03-10',
             'check_out_date' => '2027-03-11',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
-        app(BookingService::class)->checkOut($booking);
+        app(BookingService::class)->settleInFull($booking);
 
         $total = round((float) $booking->fresh()->total_amount, 2);
         $byCentre = $this->revenueByCenter();
@@ -165,10 +165,10 @@ class SectionRevenueTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2027-04-10',
             'check_out_date' => '2027-04-11',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
-        app(BookingService::class)->checkOut($booking);
+        app(BookingService::class)->settleInFull($booking);
 
         $unitCentre = CostCenter::where('unit_id', $whole->id)->value('id');
 
@@ -185,7 +185,7 @@ class SectionRevenueTest extends TestCase
         $this->priceSection($section->id, 400);
 
         $booking = $this->stayInRoom($section->id);
-        app(BookingService::class)->checkOut($booking);
+        app(BookingService::class)->settleInFull($booking);
 
         $centre = CostCenter::where('unit_section_id', $section->id)->value('id');
         $total = round((float) $booking->fresh()->total_amount, 2);
@@ -220,7 +220,7 @@ class SectionRevenueTest extends TestCase
         $this->priceSection($section->id, 500);
 
         $booking = $this->stayInRoom($section->id, '2027-08-10', '2027-08-11');
-        app(BookingService::class)->checkOut($booking);
+        app(BookingService::class)->settleInFull($booking);
 
         $account = Account::where('code', Ledger::BOOKING_REVENUE)->value('id');
         $entry = JournalEntry::where('reference_type', Booking::class)
@@ -263,10 +263,10 @@ class SectionRevenueTest extends TestCase
             'section_ids' => $sections->pluck('id')->all(),
             'booking_date' => '2027-05-10',
             'check_out_date' => '2027-05-11',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
 
-        app(BookingService::class)->checkOut($booking);
+        app(BookingService::class)->settleInFull($booking);
 
         $account = Account::where('code', Ledger::BOOKING_REVENUE)->value('id');
         $entry = JournalEntry::where('reference_type', Booking::class)

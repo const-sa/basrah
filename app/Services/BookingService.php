@@ -94,25 +94,16 @@ class BookingService
     }
 
     /**
-     * تسجيل دخول العميل — الوحدة صارت مشغولة فعلًا.
+     * إقفال الحجز مسدَّدًا بالكامل — والاعتراف بإيراده.
      *
-     * لا أثر محاسبي هنا: الإيراد يُعترف به عند الخروج، والعربون يبقى التزامًا
-     * حتى تُستهلك الخدمة.
+     * هذه هي النقطة التي يُثبَت عندها الإيراد في الدفاتر: العربون يبقى قبله
+     * التزامًا على المنشأة، فإذا اكتمل المبلغ صار إيرادًا مكتسبًا. ولذلك لا
+     * تُكتب الحالة تحديثًا مباشرًا من أي شاشة — القيد يُنشأ هنا وحده.
      */
-    public function checkIn(Booking $booking): Booking
-    {
-        $booking->update(['status' => 'checked_in']);
-
-        return $booking->fresh();
-    }
-
-    /**
-     * تسجيل خروج العميل — نهاية الخدمة والاعتراف بإيرادها.
-     */
-    public function checkOut(Booking $booking, ?int $userId = null): Booking
+    public function settleInFull(Booking $booking, ?int $userId = null): Booking
     {
         return DB::transaction(function () use ($booking, $userId) {
-            $booking->update(['status' => 'checked_out']);
+            $booking->update(['status' => 'paid_in_full']);
             $this->accounting->recognizeRevenue($booking->fresh(), $userId);
 
             return $booking->fresh();
@@ -186,10 +177,10 @@ class BookingService
                 'days_count' => $days,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
-                // الحجز يُسجَّل مؤكدًا: الموظف لا يفتح الشاشة إلا وقد اتفق مع
-                // العميل، فجعله مبدئيًا كان يفرض خطوة تأكيدٍ ثانية على كل حجز.
-                // و«مبدئي» يبقى في قائمة الحالات لمن يحتاجه فعلًا.
-                'status' => $data['status'] ?? 'confirmed',
+                // الحجز يُسجَّل «مدفوع العربون»: هي حالة كل حجز جديد — قُبض
+                // عربونه أو لم يُقبض بعد — حتى يكتمل مبلغه فيُقفَل مسدَّدًا
+                // بالكامل من السجل، حيث يُثبَت إيراده.
+                'status' => $data['status'] ?? 'deposit_paid',
                 'base_amount' => $quote['base_amount'],
                 'package_amount' => $quote['package_amount'],
                 'event_fee_amount' => $quote['event_fee_amount'],

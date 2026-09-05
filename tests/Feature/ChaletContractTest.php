@@ -57,7 +57,7 @@ class ChaletContractTest extends TestCase
             'scope' => 'whole',
             'booking_date' => '2026-10-05',
             'check_out_date' => '2026-10-08',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
         ]);
     }
 

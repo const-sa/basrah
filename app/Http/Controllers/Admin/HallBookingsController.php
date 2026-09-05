@@ -249,7 +249,7 @@ class HallBookingsController extends BaseBookingsController
                 'event_type_id' => $booking->event_type_id,
                 'discount_amount' => (float) $booking->discount_amount,
             ],
-            ...$this->formData($request),
+            ...$this->formData($request, $booking),
         ]);
     }
 
@@ -288,13 +288,13 @@ class HallBookingsController extends BaseBookingsController
      *
      * @return array<string, mixed>
      */
-    private function formData(Request $request): array
+    private function formData(Request $request, ?Booking $booking = null): array
     {
         $user = $request->user();
 
         return [
             'units' => $this->unitOptions($user),
-            'clients' => $this->clientOptions(),
+            'clients' => $this->clientOptions($booking?->client_id),
             // بنود الباقة تُرسل معها لتُعرض تحتها فور اختيارها: الموظف يقرأ
             // للعميل ما تشمله الباقة من عدد المعازيم والصبّابين والضيافة.
             'packages' => Package::with('items:id,package_id,name,quantity,unit_label,sort_order')

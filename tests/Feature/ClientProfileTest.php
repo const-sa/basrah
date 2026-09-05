@@ -62,7 +62,7 @@ class ClientProfileTest extends TestCase
             'booking_date' => '2026-08-16',
             'starts_at' => '2026-08-16 18:00:00',
             'ends_at' => '2026-08-16 23:00:00',
-            'status' => 'confirmed',
+            'status' => 'deposit_paid',
             'base_amount' => 1000,
             'total_amount' => 1000,
             'paid_amount' => 400,

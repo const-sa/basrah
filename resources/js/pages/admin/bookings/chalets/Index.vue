@@ -121,7 +121,7 @@ const props = defineProps<{
         stay: { check_in_time: string; check_out_time: string; max_nights: number };
         payment_methods: PaymentMethodOption[];
     };
-    stats: { total: number; tentative: number; pending_deposit: number; confirmed: number; unpaid: number };
+    stats: { total: number; deposit_paid: number; paid_in_full: number; unpaid: number };
 }>();
 
 const { can } = usePermissions();
@@ -357,11 +357,10 @@ const generateContract = (b: Booking) => {
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatPill label="إجمالي الإقامات" :value="stats.total" variant="primary" />
-                <StatPill label="حجز مبدئي" :value="stats.tentative" variant="warning" />
-                <StatPill label="بانتظار العربون" :value="stats.pending_deposit" variant="dark" />
-                <StatPill label="حجز مؤكد" :value="stats.confirmed" variant="success" />
+                <StatPill label="مدفوع العربون" :value="stats.deposit_paid" variant="warning" />
+                <StatPill label="مسدد كامل" :value="stats.paid_in_full" variant="success" />
                 <StatPill label="عليه متبقٍ" :value="stats.unpaid" variant="danger" />
             </div>
 
@@ -565,13 +564,14 @@ const generateContract = (b: Booking) => {
                                             @click="sendBalanceReminder(b)"
                                         />
 
-                                        <!-- خطوة واحدة تظهر في كل مرة: الحالة الحالية تحدّد التالية في المسار -->
+                                        <!-- خطوة واحدة تظهر في كل مرة: الإقامة المدفوع عربونها تُقفَل
+                                             مسدَّدةً، وعندها يُثبَت إيرادها في الدفاتر. -->
                                         <TableActionButton
-                                            v-if="can('chalet_bookings.edit') && ['tentative', 'pending_deposit'].includes(b.status)"
-                                            variant="primary"
+                                            v-if="can('chalet_bookings.edit') && b.status === 'deposit_paid'"
+                                            variant="success"
                                             :icon="Check"
-                                            title="تأكيد الحجز"
-                                            @click="changeStatus(b, 'confirmed')"
+                                            title="إقفال مسدَّدًا بالكامل"
+                                            @click="changeStatus(b, 'paid_in_full')"
                                         />
                                         <TableActionButton
                                             v-if="can('chalet_bookings.edit') && !isClosedStatus(b.status)"

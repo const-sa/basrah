@@ -86,8 +86,8 @@ class ChaletBookingService
                 'days_count' => $plan['days_count'],
                 'starts_at' => $plan['starts_at'],
                 'ends_at' => $plan['ends_at'],
-                // الإقامة تُسجَّل مؤكدة كحجز القاعة — راجع BookingService.
-                'status' => $data['status'] ?? 'confirmed',
+                // الإقامة تُسجَّل «مدفوع العربون» كحجز القاعة — راجع BookingService.
+                'status' => $data['status'] ?? 'deposit_paid',
                 'base_amount' => $quote['base_amount'],
                 'package_amount' => 0,
                 'event_fee_amount' => 0,

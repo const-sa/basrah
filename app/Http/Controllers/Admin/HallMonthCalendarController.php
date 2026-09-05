@@ -276,8 +276,7 @@ class HallMonthCalendarController extends BaseCalendarController
     {
         return [
             'bookings' => $bookings->count(),
-            'confirmed' => $bookings->where('status', 'confirmed')->count(),
-            'tentative' => $bookings->where('status', 'tentative')->count(),
+            'paid_in_full' => $bookings->where('status', 'paid_in_full')->count(),
             'total_amount' => round((float) $bookings->sum('total_amount'), 2),
             'remaining_amount' => round($bookings->sum(fn (Booking $b) => $b->remainingAmount()), 2),
         ];

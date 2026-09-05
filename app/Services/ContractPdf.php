@@ -40,9 +40,13 @@ class ContractPdf
     {
         $data = $this->viewData($contract);
 
-        // The chalet's daily-rental form is a different document from the hall
-        // and pools contract, not a variant of it, so it has its own view.
-        $view = $data['isChaletForm'] ? 'pdf.contract-stay' : 'pdf.contract';
+        // A form that replaces a printed pad is a different document, not a
+        // variant of the standard contract, so each has its own view.
+        $view = match (true) {
+            $data['isChaletForm'] => 'pdf.contract-stay',
+            $data['isInstallationForm'] => 'pdf.contract-installation',
+            default => 'pdf.contract',
+        };
 
         $html = View::make($view, $data)->render();
 
@@ -140,6 +144,9 @@ class ContractPdf
             // Only a chalet is let on the daily-rental form; a hall booked
             // overnight is still a hall contract.
             'isChaletForm' => $contract->booking?->unit?->type === 'chalet',
+            // The pools' piping-and-installation pad — its own sheet, with the
+            // equipment grid and the two payments the paper form carries.
+            'isInstallationForm' => $contract->isInstallationForm(),
             // A pools contract prints its priced lines where a rental contract
             // prints unit, period and guest count — different documents behind
             // the same letterhead, numbering and signatures.

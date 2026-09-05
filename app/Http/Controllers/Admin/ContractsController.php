@@ -215,6 +215,11 @@ class ContractsController extends Controller
                 // read from the snapshot so a later edit to the quotation
                 // cannot change what a contract already issued says.
                 'from_quotation' => $contract->fromQuotation(),
+                // Drawn on the pools' piping-and-installation pad — the page
+                // prints that form instead of the standard contract sheet.
+                'is_installation_form' => $contract->isInstallationForm(),
+                'first_installment' => $data['first_installment'] ?? null,
+                'second_installment' => $data['second_installment'] ?? null,
                 'subject' => $contract->subject(),
                 'quotation_id' => $contract->quotation_id,
                 'quotation_number' => $contract->quotation?->number ?? ($data['quotation_number'] ?? null),
