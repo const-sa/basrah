@@ -175,8 +175,11 @@ const errors = computed(() => Object.values(form.errors).filter(Boolean));
 
 const showText = ref(false);
 
+// POST, not PUT: shared hosting refuses PUT before the request reaches the
+// application, and the save comes back 403 with nothing to report. The route
+// answers to both.
 const submit = () =>
-    form.put(`/admin/contracts/${props.contract.id}`, {
+    form.post(`/admin/contracts/${props.contract.id}`, {
         onError: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
     });
 </script>

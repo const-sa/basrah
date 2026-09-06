@@ -109,6 +109,21 @@ class HallRentalContractTest extends TestCase
         $this->assertStringContainsString('الرياض', $contract->body);
     }
 
+    public function test_the_edit_is_saved_by_post_as_well_as_by_put(): void
+    {
+        $contract = $this->contractFor($this->hall());
+
+        // Shared hosting refuses PUT before the request reaches the app, so the
+        // sheet posts and the route answers to both.
+        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}", [
+            'fields' => ['client_birth_place' => 'جدة'],
+            'body' => $contract->body,
+            'terms' => $contract->terms,
+        ])->assertRedirect("/admin/contracts/{$contract->id}");
+
+        $this->assertSame('جدة', $contract->fresh()->data['client_birth_place']);
+    }
+
     public function test_a_sheet_with_no_grid_does_not_erase_the_lines(): void
     {
         $contract = $this->contractFor($this->hall());

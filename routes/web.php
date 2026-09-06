@@ -233,7 +233,10 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         // Editing the draft itself — its client, value, equipment and notes —
         // as against refresh, which only re-reads the template's wording.
         Route::get('contracts/{contract}/edit', [ContractsController::class, 'edit'])->middleware('perm:contracts.edit')->name('contracts.edit');
-        Route::put('contracts/{contract}', [ContractsController::class, 'update'])->middleware('perm:contracts.edit')->name('contracts.update');
+        // POST as well as PUT: shared hosting commonly refuses PUT outright —
+        // the request never reaches Laravel, and the save comes back 403 with
+        // no message to show. The verb is not what protects this route.
+        Route::match(['put', 'post'], 'contracts/{contract}', [ContractsController::class, 'update'])->middleware('perm:contracts.edit')->name('contracts.update');
         Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->middleware('perm:contracts.edit')->name('contracts.refresh');
         Route::post('contracts/{contract}/send', [ContractsController::class, 'send'])->middleware('perm:contracts.send')->name('contracts.send');
         // سند قبض على عقد مسابح — العربون وما تلاه من دفعات. القبض تحرير
