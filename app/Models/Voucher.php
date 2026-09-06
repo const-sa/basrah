@@ -27,7 +27,7 @@ class Voucher extends Model
 
     protected $fillable = [
         'number', 'type', 'voucher_date', 'amount', 'treasury_id', 'account_id',
-        'cost_center_id', 'client_id', 'supplier_id', 'sale_id', 'payment_method_id', 'reference',
+        'cost_center_id', 'client_id', 'supplier_id', 'sale_id', 'contract_id', 'payment_method_id', 'reference',
         'description', 'status', 'journal_entry_id', 'created_by',
     ];
 
@@ -85,10 +85,27 @@ class Voucher extends Model
         return $this->paymentMethod?->name ?? '—';
     }
 
+    /** العقد الذي يسدّده السند — فارغ في السندات العامة. */
+    public function contract(): BelongsTo
+    {
+        return $this->belongsTo(Contract::class);
+    }
+
     /** هل يزيد هذا السند المسدَّد من فاتورة؟ */
     public function settlesSale(): bool
     {
         return $this->sale_id !== null && $this->type === 'receipt';
+    }
+
+    /**
+     * هل يزيد هذا السند المقبوض على عقد؟
+     *
+     * The deposit taken when a pools contract is drawn, and every payment
+     * after it — what moves «المدفوع والمتبقي» on the sheet.
+     */
+    public function settlesContract(): bool
+    {
+        return $this->contract_id !== null && $this->type === 'receipt';
     }
 
     public function isPosted(): bool

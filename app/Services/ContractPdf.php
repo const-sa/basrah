@@ -136,6 +136,10 @@ class ContractPdf
             ->map(fn ($value) => $value === '—' ? null : $value)
             ->all();
 
+        // The paid and remaining boxes are the receipt book's on a pools form,
+        // so the printed sheet says what the screen does.
+        $data = [...$data, ...$contract->paidBoxes($data)];
+
         $isStay = $contract->booking?->unit?->type === 'chalet'
             || ($contract->booking?->period === StayPeriod::PERIOD);
 

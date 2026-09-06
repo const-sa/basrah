@@ -81,6 +81,12 @@ class VoucherService
                 $voucher->sale?->addSettlement($amount);
             }
 
+            // وكذلك السند المحرَّر على عقد — «المدفوع والمتبقي» على ورقة
+            // العقد هو ما رحّلته الخزينة، لا ما كُتب بخط اليد.
+            if ($voucher->settlesContract()) {
+                $voucher->contract?->addSettlement($amount);
+            }
+
             return $voucher->fresh();
         });
     }
@@ -100,6 +106,10 @@ class VoucherService
             // ما لم يُرحَّل لم يُحتسب سدادًا، فلا يُخصم عند الإلغاء.
             if ($wasPosted && $voucher->settlesSale()) {
                 $voucher->sale?->reverseSettlement((float) $voucher->amount);
+            }
+
+            if ($wasPosted && $voucher->settlesContract()) {
+                $voucher->contract?->reverseSettlement((float) $voucher->amount);
             }
 
             $voucher->update(['status' => 'cancelled']);

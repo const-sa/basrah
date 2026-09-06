@@ -7,8 +7,12 @@ use App\Models\Booking;
 use App\Models\Client;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
+use App\Models\PaymentMethod;
 use App\Models\Quotation;
 use App\Models\Setting;
+use App\Models\Treasury;
+use App\Models\Voucher;
+use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
@@ -23,10 +27,24 @@ use RuntimeException;
 
 class ContractsController extends Controller
 {
+    /**
+     * حقول العربون المقبوض وقت تحرير العقد — مشتركة بين مصدري عقود المسابح.
+     */
+    private const DEPOSIT_RULES = [
+        'deposit_amount' => ['nullable', 'numeric', 'min:0'],
+        'deposit_paid_on' => ['nullable', 'date'],
+        'payment_method_id' => ['nullable', 'exists:payment_methods,id'],
+        'treasury_id' => ['nullable', 'exists:treasuries,id'],
+    ];
+
+    /** @var array<string, string> */
+    private const DEPOSIT_LABELS = ['deposit_amount' => 'العربون'];
+
     public function __construct(
         private readonly ContractService $contracts,
         private readonly ContractPdf $pdf,
         private readonly WhatsappNotifier $whatsapp,
+        private readonly ContractReceipts $receipts,
     ) {}
 
     /**
@@ -114,13 +132,30 @@ class ContractsController extends Controller
                     'unit_name' => $c->booking?->unit?->name,
                     'booking_date' => $c->booking?->booking_date?->toDateString(),
                     'total_amount' => $c->data['total_amount'] ?? null,
+                    // ما قُبض على العقد وما بقي — من دفتر السندات لا من اللقطة.
+                    'paid_amount' => $c->isPoolsForm() ? number_format($c->paidAmount(), 2) : null,
+                    'remaining_amount' => $c->isPoolsForm() && $c->remainingAmount() !== null
+                        ? number_format($c->remainingAmount(), 2)
+                        : null,
                     'sent_at' => $c->sent_at?->format('Y-m-d H:i'),
                     'created_at' => $c->created_at->toDateString(),
                 ]),
             'scope' => $scope,
+            // The عربون taken as the pools' sheet is drawn needs a till and a
+            // way of paying to be written against.
+            'payment_methods' => PaymentMethod::options(),
+            'treasuries' => Treasury::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['status', 'search']),
             'statuses' => collect(Contract::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
-            'templates' => ContractTemplate::where('is_active', true)->get(['id', 'name', 'is_default']),
+            // وأيُّ منها يحمل دفتر سنداته — فتظهر خانة العربون على نموذج
+            // التركيب والصيانة وحدهما.
+            'templates' => ContractTemplate::where('is_active', true)->get(['id', 'name', 'is_default'])
+                ->map(fn (ContractTemplate $t) => [
+                    'id' => $t->id,
+                    'name' => $t->name,
+                    'is_default' => (bool) $t->is_default,
+                    'takes_deposit' => ContractService::takesDeposit($t),
+                ]),
             // الحجوزات التي لا عقد لها بعد — هي المرشّحة للتوليد.
             // The pools screen offers no booking source at all: a contract
             // drawn there would land outside the register that drew it.
@@ -168,7 +203,10 @@ class ContractsController extends Controller
 
     public function show(Contract $contract): Response
     {
-        $contract->load(['booking.unit', 'booking.eventType', 'quotation', 'client', 'template']);
+        $contract->load([
+            'booking.unit', 'booking.eventType', 'quotation', 'client', 'template',
+            'vouchers' => fn ($q) => $q->with(['treasury:id,name', 'paymentMethod:id,name'])->latest('id'),
+        ]);
 
         // بيانات العقد تُقرأ من اللقطة المجمَّدة لا من الحجز: العقد يشهد على
         // ما اتُّفق عليه يوم توقيعه، وتعديل الحجز بعده لا يغيّر ما وُقّع.
@@ -220,8 +258,13 @@ class ContractsController extends Controller
                 'guests_count' => $data['guests_count'] ?? null,
                 'total_amount' => $data['total_amount'] ?? null,
                 'total_amount_words' => $data['total_amount_words'] ?? null,
-                'deposit_amount' => $data['deposit_amount'] ?? null,
-                'remaining_amount' => $data['remaining_amount'] ?? null,
+                // On a pools form these two are the receipt book's answer, not
+                // the snapshot's: the sheet is drawn before a riyal is paid, so
+                // a frozen «0.00» would still be printed the day the job is
+                // settled in full. Everywhere else the snapshot stands — a
+                // booking contract froze its booking's real figures, and a
+                // plain sheet's are written on the paper.
+                ...$contract->paidBoxes($data),
                 'security_deposit' => $data['security_deposit'] ?? null,
                 // Quotation contracts: the priced lines are the scope of work,
                 // read from the snapshot so a later edit to the quotation
@@ -255,7 +298,26 @@ class ContractsController extends Controller
                 'tax_rate' => $data['tax_rate'] ?? null,
                 'sent_at' => $contract->sent_at?->format('Y-m-d H:i'),
                 'signed_at' => $contract->signed_at?->format('Y-m-d H:i'),
+                // The pools' own forms carry their receipt book on the page:
+                // the عربون taken at signing and every payment after it.
+                'takes_receipts' => $contract->isPoolsForm(),
+                'accepts_receipt' => $contract->isPoolsForm() && $contract->acceptsSettlement(),
+                'receipts' => $contract->vouchers->map(fn (Voucher $v) => [
+                    'id' => $v->id,
+                    'number' => $v->number,
+                    'date' => $v->voucher_date->toDateString(),
+                    'amount' => (float) $v->amount,
+                    'method' => $v->methodLabel(),
+                    'treasury' => $v->treasury?->name,
+                    'status' => $v->status,
+                    'status_label' => $v->statusLabel(),
+                    'description' => $v->description,
+                ])->values(),
             ],
+            'payment_methods' => $contract->isPoolsForm() ? PaymentMethod::options() : [],
+            'treasuries' => $contract->isPoolsForm()
+                ? Treasury::where('is_active', true)->orderBy('name')->get(['id', 'name'])
+                : [],
             'issuer' => $this->issuer($data['org_name'] ?? null),
         ]);
     }
@@ -299,7 +361,8 @@ class ContractsController extends Controller
         $data = $request->validate([
             'quotation_id' => ['required', 'exists:quotations,id'],
             'contract_template_id' => ['nullable', 'exists:contract_templates,id'],
-        ]);
+            ...self::DEPOSIT_RULES,
+        ], [], self::DEPOSIT_LABELS);
 
         $quotation = Quotation::findOrFail($data['quotation_id']);
 
@@ -329,7 +392,13 @@ class ContractsController extends Controller
             $quotation->update(['status' => 'accepted']);
         }
 
-        return back()->with('success', "تم توليد العقد {$contract->number} من عرض السعر {$quotation->number}");
+        $taken = $this->takeDeposit($contract, $data, $request->user()?->id);
+
+        if ($taken instanceof RuntimeException) {
+            return back()->with('warning', "تم توليد العقد {$contract->number} ولم يُسجل العربون — ".$taken->getMessage());
+        }
+
+        return back()->with('success', "تم توليد العقد {$contract->number} من عرض السعر {$quotation->number}".$this->depositNote($taken));
     }
 
     /**
@@ -345,7 +414,8 @@ class ContractsController extends Controller
             'client_id' => ['required', 'exists:clients,id'],
             'contract_template_id' => ['nullable', 'exists:contract_templates,id'],
             'total_amount' => ['nullable', 'numeric', 'min:0'],
-        ]);
+            ...self::DEPOSIT_RULES,
+        ], [], self::DEPOSIT_LABELS);
 
         $template = isset($data['contract_template_id'])
             ? ContractTemplate::find($data['contract_template_id'])
@@ -362,7 +432,89 @@ class ContractsController extends Controller
             return back()->with('warning', $e->getMessage());
         }
 
-        return back()->with('success', "تم تحرير العقد {$contract->number}");
+        $taken = $this->takeDeposit($contract, $data, $request->user()?->id);
+
+        if ($taken instanceof RuntimeException) {
+            return back()->with('warning', "تم تحرير العقد {$contract->number} ولم يُسجل العربون — ".$taken->getMessage());
+        }
+
+        return back()->with('success', "تم تحرير العقد {$contract->number}".$this->depositNote($taken));
+    }
+
+    /**
+     * سند قبض على عقد قائم — دفعة بعد العربون، أو العربون نفسه إن لم يُقبض
+     * وقت التحرير.
+     */
+    public function receipt(Request $request, Contract $contract): RedirectResponse
+    {
+        abort_unless($contract->isPoolsForm(), 404);
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'payment_method_id' => ['nullable', Rule::exists('payment_methods', 'id')->where('is_active', true)],
+            'treasury_id' => ['nullable', Rule::exists('treasuries', 'id')->where('is_active', true)],
+            'voucher_date' => ['nullable', 'date'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ], [], ['amount' => 'المبلغ']);
+
+        try {
+            $voucher = $this->receipts->record($contract, $data, $request->user()?->id);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        $remaining = $contract->fresh()->remainingAmount();
+
+        return back()->with('success', "تم سند القبض {$voucher->number}"
+            .($remaining === null ? '' : ' — المتبقي '.number_format($remaining, 2)));
+    }
+
+    /**
+     * العربون المقبوض لحظة تحرير العقد.
+     *
+     * The note the request carries is the whole point of the field: the money
+     * changes hands as the sheet is signed, and asking the employee to open
+     * the contract afterwards and write a second document is how a deposit
+     * ends up recorded nowhere. So the receipt is drawn in the same action
+     * that draws the contract.
+     *
+     * Only the pools' own forms take one — a hall or chalet contract is drawn
+     * from a booking, and that booking's payment ledger is where its عربون
+     * belongs.
+     *
+     * Returns the posted voucher, null when nothing was paid, and the failure
+     * itself when the receipt could not be written: the contract is already
+     * drawn by then and must not be rolled back for it, so the caller says so
+     * rather than reporting a clean save.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function takeDeposit(Contract $contract, array $data, ?int $userId): Voucher|RuntimeException|null
+    {
+        $amount = round((float) ($data['deposit_amount'] ?? 0), 2);
+
+        if ($amount <= 0 || ! $contract->isPoolsForm()) {
+            return null;
+        }
+
+        try {
+            return $this->receipts->record($contract, [
+                'amount' => $amount,
+                'payment_method_id' => $data['payment_method_id'] ?? null,
+                'treasury_id' => $data['treasury_id'] ?? null,
+                'voucher_date' => $data['deposit_paid_on'] ?? null,
+            ], $userId);
+        } catch (RuntimeException $e) {
+            return $e;
+        }
+    }
+
+    /** ذيل رسالة النجاح حين قُبض عربون مع العقد. */
+    private function depositNote(Voucher|RuntimeException|null $voucher): string
+    {
+        return $voucher instanceof Voucher
+            ? " — وسند القبض {$voucher->number} بمبلغ ".number_format((float) $voucher->amount, 2)
+            : '';
     }
 
     /**
@@ -422,11 +574,22 @@ class ContractsController extends Controller
 
         $data = $contract->data ?? [];
 
+        // المدفوع والمتبقي على ورقة المسابح يُقرآن من دفتر السندات،
+        // فالشاشة تعرضهما كما تُطبعان.
+        $data = [...$data, ...$contract->paidBoxes($data)];
+
         // A field the contract carries, plus the site measurements when it is
         // printed on the form that asks for them. The number is not offered:
         // it identifies the contract.
+        //
+        // Nor are the paid and remaining boxes on a pools form: they are what
+        // its posted receipts add up to, and a typed figure there would be
+        // written into the snapshot and then ignored by every screen that
+        // prints it. The way to move them is to write a سند قبض.
         $keys = collect(ContractTemplate::PLACEHOLDERS)->keys()
             ->reject(fn (string $key) => $key === 'contract_number')
+            ->reject(fn (string $key) => $contract->isPoolsForm()
+                && in_array($key, ['deposit_amount', 'remaining_amount'], true))
             ->filter(fn (string $key) => (isset($data[$key]) && is_scalar($data[$key]))
                 || ($contract->isInstallationForm() && in_array($key, ContractService::DIMENSIONS, true)));
 
@@ -460,6 +623,10 @@ class ContractsController extends Controller
                 'is_installation_form' => $contract->isInstallationForm(),
                 'is_maintenance_form' => $contract->isMaintenanceForm(),
                 'is_hall_form' => $contract->isHallRentalForm(),
+                // ما تطبعه خانتا المدفوع والمتبقي حين لا تكونان من حقول التحرير —
+                // على ورقة المسابح هما حصيلة سندات القبض.
+                'deposit_amount' => ($data['deposit_amount'] ?? '—') === '—' ? null : $data['deposit_amount'],
+                'remaining_amount' => ($data['remaining_amount'] ?? '—') === '—' ? null : $data['remaining_amount'],
                 'client_birth_place' => ($data['client_birth_place'] ?? '—') === '—' ? null : $data['client_birth_place'],
                 'unit_name' => ($data['unit_name'] ?? '—') === '—' ? null : $data['unit_name'],
                 // What the sheet draws around the editable runs: the logo it is

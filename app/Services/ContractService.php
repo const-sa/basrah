@@ -177,7 +177,7 @@ class ContractService
             'client_id_number' => (string) ($client->national_id ?: $client->tax_number ?: '—'),
             'client_address' => (string) ($client->tax_address ?: $client->city ?: '—'),
             'subject' => $this->subjectFor($template, null),
-            'form' => $this->formFor($template),
+            'form' => self::formFor($template),
             ...$this->blankBookingFields(),
             'quotation_number' => '—',
             'quotation_date' => '—',
@@ -265,7 +265,7 @@ class ContractService
             'subject' => $this->subjectFor($template, $quotation->department?->name),
             // The layout the contract is printed on, frozen with the rest of
             // the snapshot — see PoolInstallationContractTemplate::FORM.
-            'form' => $this->formFor($template),
+            'form' => self::formFor($template),
             // A quotation has no booked date or period. Its validity date is the
             // deadline for accepting it, not a term of the contract, so it is
             // carried under its own key rather than dressed up as a booking date.
@@ -330,7 +330,7 @@ class ContractService
      */
     private function subjectFor(?ContractTemplate $template, ?string $fallback): string
     {
-        return match ($this->formFor($template)) {
+        return match (self::formFor($template)) {
             PoolInstallationContractTemplate::FORM => PoolInstallationContractTemplate::SUBJECT,
             PoolMaintenanceContractTemplate::FORM => PoolMaintenanceContractTemplate::SUBJECT,
             HallRentalContractTemplate::FORM => HallRentalContractTemplate::SUBJECT,
@@ -341,7 +341,7 @@ class ContractService
     /**
      * The layout a template is printed on, or null for the standard one.
      */
-    private function formFor(?ContractTemplate $template): ?string
+    public static function formFor(?ContractTemplate $template): ?string
     {
         return match ($template?->name) {
             PoolInstallationContractTemplate::NAME => PoolInstallationContractTemplate::FORM,
@@ -349,6 +349,21 @@ class ContractService
             HallRentalContractTemplate::NAME => HallRentalContractTemplate::FORM,
             default => null,
         };
+    }
+
+    /**
+     * Does a contract drawn on this template carry its own receipt book?
+     *
+     * Only the pools' two forms do. Everything else is either drawn from a
+     * booking, whose payment ledger already holds its عربون, or is a plain
+     * sheet whose figures are written on the paper.
+     */
+    public static function takesDeposit(?ContractTemplate $template): bool
+    {
+        return in_array(self::formFor($template), [
+            PoolInstallationContractTemplate::FORM,
+            PoolMaintenanceContractTemplate::FORM,
+        ], true);
     }
 
     /**
@@ -573,7 +588,7 @@ class ContractService
             // The form is part of the template's wording: moving a draft onto
             // the installation form must retitle it and print it on that form's
             // layout. The priced snapshot underneath is left untouched.
-            $data['form'] = $this->formFor($template);
+            $data['form'] = self::formFor($template);
             // Moving back off the form retitles it by the activity again, so a
             // draft does not keep a heading its template no longer prints.
             $data['subject'] = $this->subjectFor(
@@ -648,7 +663,7 @@ class ContractService
             // this and a quotation contract, where the subject is the activity.
             'subject' => (string) ($booking->unit?->name ?? '—'),
             // The layout it prints on, frozen with the rest of the snapshot.
-            'form' => $this->formFor($template),
+            'form' => self::formFor($template),
             'booking_reference' => $booking->reference,
             'unit_name' => (string) ($booking->unit?->name ?? '—'),
             'sections' => $booking->scope === 'whole'

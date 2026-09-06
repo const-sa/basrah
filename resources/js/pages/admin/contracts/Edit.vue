@@ -45,6 +45,15 @@ const props = defineProps<{
         is_maintenance_form: boolean;
         /** The halls' numbered rental pad — likewise its own. */
         is_hall_form: boolean;
+        /**
+         * المدفوع والمتبقي كما تُطبعان.
+         *
+         * On a pools form these are not editable runs: they are what the
+         * contract's posted receipts add up to, so they arrive as figures
+         * rather than as fields, and the sheet prints them read-only.
+         */
+        deposit_amount: string | null;
+        remaining_amount: string | null;
         client_birth_place: string | null;
         unit_type: string | null;
         unit_logo_url: string | null;
@@ -148,8 +157,10 @@ const sheet = computed(() => ({
     discount_amount: typed('discount_amount'),
     tax_amount: typed('tax_amount'),
     tax_rate: typed('tax_rate'),
-    deposit_amount: typed('deposit_amount'),
-    remaining_amount: typed('remaining_amount'),
+    // Editable on a sheet that has them as runs; on a pools form they are not
+    // offered as fields at all, and the receipt book's figures stand.
+    deposit_amount: typed('deposit_amount') ?? props.contract.deposit_amount,
+    remaining_amount: typed('remaining_amount') ?? props.contract.remaining_amount,
     first_installment: typed('first_installment'),
     second_installment: typed('second_installment'),
     pool_width: typed('pool_width'),

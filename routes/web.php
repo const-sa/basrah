@@ -236,6 +236,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::put('contracts/{contract}', [ContractsController::class, 'update'])->middleware('perm:contracts.edit')->name('contracts.update');
         Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->middleware('perm:contracts.edit')->name('contracts.refresh');
         Route::post('contracts/{contract}/send', [ContractsController::class, 'send'])->middleware('perm:contracts.send')->name('contracts.send');
+        // سند قبض على عقد مسابح — العربون وما تلاه من دفعات. القبض تحرير
+        // للعقد لا محاسبة مستقلة، فيمرّ من باب العقود نفسه.
+        Route::post('contracts/{contract}/receipt', [ContractsController::class, 'receipt'])->middleware('perm:contracts.edit')->name('contracts.receipt');
         Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->middleware('perm:contracts.edit')->name('contracts.status');
         Route::delete('contracts/{contract}', [ContractsController::class, 'destroy'])->middleware('perm:contracts.delete')->name('contracts.destroy');
 

@@ -10,6 +10,9 @@ interface MaintenanceContract {
     discount_amount: string | null;
     tax_amount: string | null;
     total_amount: string | null;
+    /** ما قُبض على العقد وما بقي — من سندات القبض لا من اللقطة. */
+    deposit_amount: string | null;
+    remaining_amount: string | null;
     items: Line[];
 }
 
@@ -187,6 +190,17 @@ const rows = computed(() => {
                     <input v-if="editable" v-model="fields.total_amount" class="fillin center" dir="ltr" />
                     <template v-else>{{ fill(contract.total_amount) }}</template>
                 </td>
+            </tr>
+            <!-- المدفوع والمتبقي: دفتر سندات القبض، لا خانتان تُكتبان باليد —
+                 read-only even while the sheet is filled in: a typed figure
+                 here would print an amount the till never saw. -->
+            <tr v-if="carries(contract.deposit_amount)">
+                <td class="lbl">المدفـــوع</td>
+                <td class="val" dir="ltr">{{ contract.deposit_amount }}</td>
+            </tr>
+            <tr v-if="carries(contract.deposit_amount) && contract.remaining_amount">
+                <td class="lbl">المتبقـــي</td>
+                <td class="val" dir="ltr">{{ contract.remaining_amount }}</td>
             </tr>
         </table>
 

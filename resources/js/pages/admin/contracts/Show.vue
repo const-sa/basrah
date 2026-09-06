@@ -7,9 +7,22 @@ import StayContractDocument from '@/components/contracts/StayContractDocument.vu
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowRight, FileDown, FileText, MessageCircle, Pencil, Printer, RefreshCw } from 'lucide-vue-next';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { ArrowRight, FileDown, FileText, MessageCircle, Pencil, Plus, Printer, ReceiptText, RefreshCw, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
+
+/** سند قبض مرحّل على العقد — العربون وما تلاه من دفعات. */
+interface Receipt {
+    id: number;
+    number: string;
+    date: string;
+    amount: number;
+    method: string;
+    treasury: string | null;
+    status: string;
+    status_label: string;
+    description: string | null;
+}
 
 const props = defineProps<{
     contract: {
@@ -50,7 +63,14 @@ const props = defineProps<{
         /** الضريبة كما جُمِّدت يوم الإصدار — عقدٌ قديم بلا ضريبة يبقى بلا سطرها. */
         is_taxable: boolean; tax_rate: string | null;
         sent_at: string | null; signed_at: string | null;
+        /** هل يحمل هذا العقد دفتر سنداته — نموذج التركيب أو الصيانة. */
+        takes_receipts: boolean;
+        /** وهل بقي عليه ما يُقبض. */
+        accepts_receipt: boolean;
+        receipts: Receipt[];
     };
+    payment_methods: { id: number; label: string; is_credit: boolean }[];
+    treasuries: { id: number; name: string }[];
     issuer: {
         business_name: string;
         logo_url: string | null;
@@ -122,6 +142,44 @@ const send = () => {
 };
 
 const print = () => window.print();
+
+/**
+ * سند قبض على العقد.
+ *
+ * The deposit is taken as the contract is drawn, so this is what writes the
+ * payments after it — and the deposit itself when the money arrived a day
+ * later than the signature.
+ */
+const money = (n: number) =>
+    new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
+
+const showReceipt = ref(false);
+
+const receiptForm = useForm({
+    amount: null as number | null,
+    payment_method_id: null as number | null,
+    treasury_id: null as number | null,
+    voucher_date: new Date().toISOString().slice(0, 10),
+    description: '',
+});
+
+const openReceipt = () => {
+    receiptForm.reset();
+    receiptForm.clearErrors();
+    receiptForm.voucher_date = new Date().toISOString().slice(0, 10);
+    // المتبقي هو المبلغ المرجّح — والموظف يقلّله إن قُبض بعضه.
+    const left = Number(String(props.contract.remaining_amount ?? '').replace(/,/g, ''));
+    receiptForm.amount = Number.isFinite(left) && left > 0 ? left : null;
+    receiptForm.payment_method_id = props.payment_methods.find((m) => !m.is_credit)?.id ?? null;
+    showReceipt.value = true;
+};
+
+const submitReceipt = () => {
+    receiptForm.post(`/admin/contracts/${props.contract.id}/receipt`, {
+        preserveScroll: true,
+        onSuccess: () => (showReceipt.value = false),
+    });
+};
 </script>
 
 <template>
@@ -203,6 +261,125 @@ const print = () => window.print();
             <div v-if="showFullBody" class="mx-auto max-w-4xl rounded-xl border border-slate-300 bg-white p-6 print:hidden">
                 <h3 class="mb-2 text-sm font-extrabold text-slate-800">النص المجمَّد وقت التوليد</h3>
                 <pre class="whitespace-pre-wrap font-sans text-xs leading-7 text-slate-700">{{ contract.body }}</pre>
+            </div>
+
+            <!--
+                دفتر سندات القبض — لا يُطبع مع العقد.
+                The sheet itself prints المدفوع والمتبقي; this is the working
+                view behind them — every receipt written on the contract, and
+                where the next one is written.
+            -->
+            <div v-if="contract.takes_receipts" class="mx-auto max-w-4xl rounded-xl border border-slate-300 bg-white print:hidden">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
+                    <h3 class="flex items-center gap-2 text-sm font-extrabold text-slate-800">
+                        <ReceiptText class="h-4 w-4 text-slate-500" /> سندات القبض
+                    </h3>
+                    <button
+                        v-if="can('contracts.edit') && contract.accepts_receipt && !showReceipt"
+                        type="button"
+                        @click="openReceipt"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                        <Plus class="h-3.5 w-3.5" /> قبض دفعة
+                    </button>
+                </div>
+
+                <!-- القيمة والمدفوع والمتبقي كما تُطبع على الورقة -->
+                <div class="grid grid-cols-3 divide-x divide-x-reverse divide-slate-200 border-b border-slate-200">
+                    <div class="px-5 py-3">
+                        <div class="text-[11px] font-bold text-slate-500">قيمة العقد</div>
+                        <div class="mt-0.5 text-lg font-extrabold text-slate-900" dir="ltr">{{ contract.total_amount ?? '—' }}</div>
+                    </div>
+                    <div class="px-5 py-3">
+                        <div class="text-[11px] font-bold text-slate-500">المدفوع</div>
+                        <div class="mt-0.5 text-lg font-extrabold text-emerald-700" dir="ltr">{{ contract.deposit_amount ?? '—' }}</div>
+                    </div>
+                    <div class="px-5 py-3">
+                        <div class="text-[11px] font-bold text-slate-500">المتبقي</div>
+                        <div class="mt-0.5 text-lg font-extrabold text-amber-700" dir="ltr">{{ contract.remaining_amount ?? '—' }}</div>
+                    </div>
+                </div>
+
+                <!-- سند جديد: الخزينة تُختار بطريقة الدفع إن تُركت -->
+                <form v-if="showReceipt" @submit.prevent="submitReceipt" class="grid gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:grid-cols-5">
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
+                        <input
+                            v-model.number="receiptForm.amount"
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            dir="ltr"
+                            class="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-bold focus:border-emerald-500 focus:outline-none"
+                        />
+                        <p v-if="receiptForm.errors.amount" class="mt-1 text-[11px] text-red-500">{{ receiptForm.errors.amount }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">طريقة الدفع</label>
+                        <select v-model.number="receiptForm.payment_method_id" class="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:outline-none">
+                            <option v-for="m in payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">الخزينة</label>
+                        <select v-model.number="receiptForm.treasury_id" class="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:outline-none">
+                            <option :value="null">حسب طريقة الدفع</option>
+                            <option v-for="t in treasuries" :key="t.id" :value="t.id">{{ t.name }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">التاريخ</label>
+                        <input v-model="receiptForm.voucher_date" type="date" dir="ltr" class="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-emerald-500 focus:outline-none" />
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button
+                            type="submit"
+                            :disabled="receiptForm.processing || !receiptForm.amount"
+                            class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                            تسجيل السند
+                        </button>
+                        <button
+                            type="button"
+                            @click="showReceipt = false"
+                            class="rounded-md border border-slate-300 bg-white p-1.5 text-slate-500 hover:bg-slate-50"
+                        >
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+                </form>
+
+                <table v-if="contract.receipts.length" class="w-full text-right text-sm">
+                    <thead class="bg-slate-50 text-[11px] font-bold text-slate-500">
+                        <tr>
+                            <th class="px-5 py-2">السند</th>
+                            <th class="px-3 py-2">التاريخ</th>
+                            <th class="px-3 py-2">المبلغ</th>
+                            <th class="px-3 py-2">الطريقة</th>
+                            <th class="px-3 py-2">الخزينة</th>
+                            <th class="px-5 py-2">الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr v-for="r in contract.receipts" :key="r.id" class="hover:bg-slate-50">
+                            <td class="px-5 py-2 font-bold text-slate-800" dir="ltr">{{ r.number }}</td>
+                            <td class="px-3 py-2 text-slate-600" dir="ltr">{{ r.date }}</td>
+                            <td class="px-3 py-2 font-extrabold text-slate-900" dir="ltr">{{ money(r.amount) }}</td>
+                            <td class="px-3 py-2 text-slate-600">{{ r.method }}</td>
+                            <td class="px-3 py-2 text-slate-600">{{ r.treasury ?? '—' }}</td>
+                            <td class="px-5 py-2">
+                                <span
+                                    class="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                                    :class="r.status === 'posted' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                                >{{ r.status_label }}</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p v-else class="px-5 py-6 text-center text-xs font-medium text-slate-500">
+                    لم يُقبض على هذا العقد شيء بعد — أول سند يُحرَّر عليه هو العربون.
+                </p>
             </div>
 
             <!-- A chalet is let on its own daily-rental form, the same document the PDF prints. -->

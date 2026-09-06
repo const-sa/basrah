@@ -13,6 +13,9 @@ interface InstallationContract {
     client_address: string | null;
     total_amount: string | null;
     total_amount_words: string | null;
+    /** ما قُبض على العقد وما بقي — من سندات القبض لا من اللقطة. */
+    deposit_amount: string | null;
+    remaining_amount: string | null;
     first_installment: string | null;
     second_installment: string | null;
     pool_width: string | null;
@@ -211,6 +214,16 @@ const grid = computed(() => {
                 <input v-if="editable" v-model="fields.total_amount_words" class="fillin" />
                 <template v-else>{{ contract.total_amount_words }}</template>
             </td>
+        </tr></table>
+
+        <!-- المدفوع والمتبقي: دفتر سندات القبض، لا خانتان تُكتبان باليد —
+             read-only even while the sheet is filled in, so no typed figure
+             prints an amount the till never saw -->
+        <table v-if="contract.deposit_amount || contract.remaining_amount" class="ln"><tr>
+            <td class="k" style="width: 14%">المدفوع<span class="en">Paid</span></td>
+            <td class="v" style="width: 30%"><b dir="ltr">{{ fill(contract.deposit_amount) }}</b> ريال</td>
+            <td class="k pr-3" style="width: 14%">المتبقي<span class="en">Remaining</span></td>
+            <td class="v" style="width: 42%"><b dir="ltr">{{ fill(contract.remaining_amount) }}</b> ريال</td>
         </tr></table>
 
         <!-- Measured on site: typed onto the contract, or left blank for the pen -->

@@ -133,6 +133,19 @@
                 <td class="lbl">الاجمالي المستحق</td>
                 <td class="val num">{{ $fill($data['total_amount'] ?? null) }}</td>
             </tr>
+            {{-- المدفوع والمتبقي: ما رحّلته سندات القبض على العقد --}}
+            @if ($carries($data['deposit_amount'] ?? null))
+                <tr>
+                    <td class="lbl">المدفـــوع</td>
+                    <td class="val num">{{ $data['deposit_amount'] }}</td>
+                </tr>
+                @if (!empty($data['remaining_amount']))
+                    <tr>
+                        <td class="lbl">المتبقـــي</td>
+                        <td class="val num">{{ $data['remaining_amount'] }}</td>
+                    </tr>
+                @endif
+            @endif
         </table>
     </div>
 </div>

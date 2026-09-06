@@ -145,6 +145,16 @@
     </tr></table>
 @endif
 
+{{-- المدفوع والمتبقي: ما رحّلته سندات القبض على العقد، لا خانتان تُكتبان باليد --}}
+@if (!empty($data['deposit_amount']) || !empty($data['remaining_amount']))
+    <table class="ln"><tr>
+        <td class="k" style="width: 14%;">المدفوع<span class="en">Paid</span></td>
+        <td class="v" style="width: 30%;"><b class="num">{{ $fill($data['deposit_amount'] ?? null) }}</b> ريال</td>
+        <td class="k" style="width: 14%; padding-right: 10pt;">المتبقي<span class="en">Remaining</span></td>
+        <td class="v" style="width: 42%;"><b class="num">{{ $fill($data['remaining_amount'] ?? null) }}</b> ريال</td>
+    </tr></table>
+@endif
+
 {{-- Pool dimensions are measured on site, so the form prints them blank --}}
 <table class="ln"><tr>
     <td class="k" style="width: 10%;">عرض المسبح<span class="en">Showing pool</span></td>

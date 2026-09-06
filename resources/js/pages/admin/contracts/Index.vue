@@ -5,7 +5,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, Eye, MessageCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-vue-next';
+import { CheckCircle2, Eye, MessageCircle, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -14,6 +14,8 @@ interface Contract {
     from_quotation: boolean; subject: string | null; quotation_number: string | null;
     booking_reference: string | null; unit_name: string | null;
     booking_date: string | null; total_amount: string | null;
+    /** ما قُبض وما بقي — لعقود المسابح وحدها، وإلا null. */
+    paid_amount: string | null; remaining_amount: string | null;
     sent_at: string | null; created_at: string;
 }
 
@@ -28,10 +30,14 @@ const props = defineProps<{
     scope: 'all' | 'quotation';
     filters: Record<string, string | null>;
     statuses: { key: string; label: string }[];
-    templates: { id: number; name: string; is_default: boolean }[];
+    // takes_deposit: the pools' own forms, the only sheets that carry a
+    // receipt book of their own.
+    templates: { id: number; name: string; is_default: boolean; takes_deposit: boolean }[];
     bookings: { id: number; label: string }[];
     quotations: QuotationOption[];
     clients: { id: number; label: string }[];
+    payment_methods: { id: number; label: string; is_credit: boolean }[];
+    treasuries: { id: number; name: string }[];
     stats: { total: number; draft: number; sent: number; signed: number };
 }>();
 
@@ -74,7 +80,18 @@ const form = useForm({
     client_id: null as number | null,
     total_amount: null as number | null,
     contract_template_id: null as number | null,
+    // العربون المدفوع لحظة التحرير — يُسجّل سند قبض بمجرد إصدار العقد.
+    deposit_amount: null as number | null,
+    deposit_paid_on: new Date().toISOString().slice(0, 10),
+    payment_method_id: null as number | null,
+    treasury_id: null as number | null,
 });
+
+// The pools' own forms take the عربون with the contract; a booking contract
+// takes its payments on the booking, and a plain sheet takes none.
+const takesDeposit = computed(
+    () => source.value !== 'booking' && !!props.templates.find((t) => t.id === form.contract_template_id)?.takes_deposit,
+);
 
 // The pools register never draws from a booking — that contract would not
 // appear in the very screen that created it.
@@ -86,6 +103,9 @@ const openCreate = () => {
     form.reset();
     form.clearErrors();
     form.contract_template_id = props.templates.find((t) => t.is_default)?.id ?? props.templates[0]?.id ?? null;
+    form.deposit_paid_on = new Date().toISOString().slice(0, 10);
+    // «على الحساب» collects nothing, so it is never the default for a deposit.
+    form.payment_method_id = props.payment_methods.find((m) => !m.is_credit)?.id ?? null;
     // Open on whichever source actually has something to draw from, so the
     // employee does not land on an empty list and think the screen is broken.
     if (poolsOnly.value) {
@@ -115,6 +135,7 @@ const endpoints: Record<Source, string> = {
 
 const submit = () => {
     const picked = source.value;
+    const withDeposit = takesDeposit.value && !!form.deposit_amount;
 
     form
         .transform((data) => ({
@@ -124,6 +145,16 @@ const submit = () => {
             // A blank value is left to be written on the paper, so it is sent
             // as nothing rather than as a zero the contract would print.
             ...(picked === 'client' ? { client_id: data.client_id, total_amount: data.total_amount || null } : {}),
+            // Nothing paid means no receipt at all — an empty box must not
+            // write a voucher for zero into the till.
+            ...(withDeposit
+                ? {
+                      deposit_amount: data.deposit_amount,
+                      deposit_paid_on: data.deposit_paid_on,
+                      payment_method_id: data.payment_method_id,
+                      treasury_id: data.treasury_id,
+                  }
+                : {}),
         }))
         .post(endpoints[picked], {
             preserveScroll: true,
@@ -237,6 +268,17 @@ const statusClass = (s: string) =>
                                 <td class="px-4 py-3 text-center">
                                     <span class="font-extrabold text-slate-800" dir="ltr">{{ c.total_amount ?? '—' }}</span>
                                     <span v-if="c.total_amount" class="text-[11px] font-medium text-slate-500"> ريال</span>
+                                    <!-- ما قُبض على العقد وما بقي — سطر تحت القيمة، فيُقرأ
+                                         حال العقد ماليًا من السجل بلا فتحه. -->
+                                    <div v-if="c.paid_amount" class="mt-0.5 text-[11px] font-bold">
+                                        <span class="text-emerald-700" dir="ltr">{{ c.paid_amount }}</span>
+                                        <span class="text-slate-400"> مدفوع</span>
+                                        <template v-if="c.remaining_amount">
+                                            <span class="text-slate-300"> · </span>
+                                            <span class="text-amber-700" dir="ltr">{{ c.remaining_amount }}</span>
+                                            <span class="text-slate-400"> متبقٍ</span>
+                                        </template>
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-center">
                                     <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="statusClass(c.status)">{{ c.status_label }}</span>
@@ -386,6 +428,48 @@ const statusClass = (s: string) =>
                             <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}{{ t.is_default ? ' (افتراضي)' : '' }}</option>
                         </select>
                         <p v-if="!templates.length" class="mt-1 text-xs font-medium text-amber-600">لا قوالب عقود فعّالة — أضف قالبًا أولًا.</p>
+                    </div>
+
+                    <!-- العربون المدفوع وقت تحرير العقد: المال ينتقل مع التوقيع،
+                         فيُكتب سنده في الخطوة نفسها لا في مستند ثانٍ لا يعود إليه أحد. -->
+                    <div v-if="takesDeposit" class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                        <div class="flex items-center gap-1.5 text-sm font-extrabold text-emerald-800">
+                            <ReceiptText class="h-4 w-4" /> العربون المدفوع
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-xs font-bold text-slate-600">المبلغ (اختياري)</label>
+                                <input
+                                    v-model.number="form.deposit_amount"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="اتركه فارغًا إن لم يُدفع شيء"
+                                    class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                                />
+                                <p v-if="form.errors.deposit_amount" class="mt-1 text-xs text-red-500">{{ form.errors.deposit_amount }}</p>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-bold text-slate-600">تاريخ القبض</label>
+                                <input v-model="form.deposit_paid_on" type="date" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-bold text-slate-600">طريقة الدفع</label>
+                                <select v-model="form.payment_method_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                    <option v-for="m in payment_methods" :key="m.id" :value="m.id">{{ m.label }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-bold text-slate-600">الخزينة</label>
+                                <select v-model="form.treasury_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                    <option :value="null">حسب طريقة الدفع</option>
+                                    <option v-for="t in treasuries" :key="t.id" :value="t.id">{{ t.name }}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="text-xs font-medium text-emerald-800/80">
+                            يُحرّر سند قبض مرحّل بالمبلغ فور إصدار العقد، ويظهر المدفوع والمتبقي على الورقة.
+                        </p>
                     </div>
 
                     <div class="flex justify-end gap-2 border-t border-slate-100 pt-4">

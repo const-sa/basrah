@@ -7,6 +7,7 @@ use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Contract extends Model
@@ -22,13 +23,17 @@ class Contract extends Model
 
     protected $fillable = [
         'number', 'booking_id', 'quotation_id', 'client_id', 'contract_template_id', 'created_by',
-        'body', 'terms', 'data', 'status', 'sent_at', 'signed_at', 'pdf_path',
+        'body', 'terms', 'data', 'paid_amount', 'status', 'sent_at', 'signed_at', 'pdf_path',
     ];
+
+    /** ما دون هذا لا يُعدّ متبقيًا — كسور الهللة لا تُبقي عقدًا مفتوحًا. */
+    private const EPSILON = 0.009;
 
     protected function casts(): array
     {
         return [
             'data' => 'array',
+            'paid_amount' => 'decimal:2',
             'sent_at' => 'datetime',
             'signed_at' => 'datetime',
         ];
@@ -57,6 +62,12 @@ class Contract extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** سندات القبض المحرَّرة على العقد — العربون وما تلاه من دفعات. */
+    public function vouchers(): HasMany
+    {
+        return $this->hasMany(Voucher::class);
     }
 
     public function statusLabel(): string
@@ -125,6 +136,115 @@ class Contract extends Model
     public function isHallRentalForm(): bool
     {
         return ($this->data['form'] ?? null) === HallRentalContractTemplate::FORM;
+    }
+
+    /**
+     * Is this one of the pools' own forms — installation or maintenance?
+     *
+     * These two are contracted for and paid off outside the bookings system,
+     * so they are the sheets that carry their own receipt ledger. Everything
+     * else either hangs off a booking, which already has one, or is a plain
+     * sheet whose amounts are written on the paper.
+     */
+    public function isPoolsForm(): bool
+    {
+        return $this->isInstallationForm() || $this->isMaintenanceForm();
+    }
+
+    /**
+     * The contract's value, read back from the frozen snapshot as a number.
+     *
+     * Null where the sheet was drawn with no value — the pools price the job
+     * at the client's house and write the figure on the paper, and a contract
+     * like that has nothing to be paid off against.
+     */
+    public function totalAmount(): ?float
+    {
+        $clean = str_replace(',', '', (string) ($this->data['total_amount'] ?? ''));
+
+        return is_numeric($clean) ? round((float) $clean, 2) : null;
+    }
+
+    /** ما قُبض على العقد فعلًا — مجموع سنداته المرحَّلة. */
+    public function paidAmount(): float
+    {
+        return round((float) $this->paid_amount, 2);
+    }
+
+    /**
+     * المتبقي على العقد. عقدٌ بلا قيمة مكتوبة لا متبقي له يُحسب.
+     */
+    public function remainingAmount(): ?float
+    {
+        $total = $this->totalAmount();
+
+        return $total === null ? null : round(max(0, $total - $this->paidAmount()), 2);
+    }
+
+    /** هل ما زال على العقد ما يُقبض؟ */
+    public function acceptsSettlement(): bool
+    {
+        $remaining = $this->remainingAmount();
+
+        // A contract priced on the paper takes its receipts all the same: the
+        // money was collected either way, and refusing it because no figure
+        // was typed would push the employee to record it nowhere.
+        return $remaining === null || $remaining > self::EPSILON;
+    }
+
+    /**
+     * A posted receipt raises what the contract has been paid.
+     *
+     * Capped at the value where there is one, so a double-entered voucher
+     * cannot report a contract as more than settled — the extra still stands
+     * in the books as its own voucher, which is where an overpayment belongs.
+     */
+    public function addSettlement(float $amount): void
+    {
+        $paid = $this->paidAmount() + $amount;
+        $total = $this->totalAmount();
+
+        $this->update(['paid_amount' => round($total === null ? $paid : min($total, $paid), 2)]);
+    }
+
+    /** إلغاء سند مرحَّل يعيد ما أضافه. */
+    public function reverseSettlement(float $amount): void
+    {
+        $this->update(['paid_amount' => round(max(0, $this->paidAmount() - $amount), 2)]);
+    }
+
+    /**
+     * «المدفوع» و«المتبقي» كما تُطبعان على الورقة.
+     *
+     * A pools form reads them off its posted receipts; every other contract
+     * keeps the snapshot it was frozen with. The sheet is drawn before a riyal
+     * is paid, so a frozen «0.00» would still be printed the day the job is
+     * settled in full — while a booking contract froze its booking's real
+     * figures, and a plain sheet's are written on the paper.
+     *
+     * A pools sheet drawn with no value has no remaining to compute, so that
+     * box falls back to the snapshot too.
+     *
+     * @param  array<string, mixed>  $data  the snapshot as the page reads it
+     * @return array{deposit_amount: string|null, remaining_amount: string|null}
+     */
+    public function paidBoxes(array $data): array
+    {
+        if (! $this->isPoolsForm()) {
+            return [
+                'deposit_amount' => $data['deposit_amount'] ?? null,
+                'remaining_amount' => $data['remaining_amount'] ?? null,
+            ];
+        }
+
+        $remaining = $this->remainingAmount();
+
+        return [
+            'deposit_amount' => number_format($this->paidAmount(), 2),
+            'remaining_amount' => $remaining === null
+                ? ($data['remaining_amount'] ?? null)
+                : number_format($remaining, 2),
+        ];
     }
 
     /**
