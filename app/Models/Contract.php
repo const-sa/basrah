@@ -184,6 +184,12 @@ class Contract extends Model
     /** هل ما زال على العقد ما يُقبض؟ */
     public function acceptsSettlement(): bool
     {
+        // العقد الملغي لا يُقبض عليه شيء بعد إلغائه. وما قُبض قبله يبقى:
+        // المال وصل الخزينة فعلًا، ورده سند صرف لا محو سند القبض.
+        if ($this->status === 'cancelled') {
+            return false;
+        }
+
         $remaining = $this->remainingAmount();
 
         // A contract priced on the paper takes its receipts all the same: the

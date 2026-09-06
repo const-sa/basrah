@@ -299,6 +299,27 @@ class ContractDepositReceiptTest extends TestCase
         $this->assertCount(0, $contract->vouchers()->get());
     }
 
+    public function test_a_cancelled_contract_takes_no_further_receipt(): void
+    {
+        $contract = $this->drawWithDeposit(12000, 4000);
+
+        $this->actingAs($this->owner)->patch("/admin/contracts/{$contract->id}/status", ['status' => 'cancelled'])
+            ->assertRedirect();
+
+        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/receipt", ['amount' => 1000])
+            ->assertSessionHas('warning');
+
+        // ...and what was already collected stays: the money reached the till,
+        // and giving it back is a سند صرف, not the receipt being erased.
+        $this->assertSame(4000.0, $contract->fresh()->paidAmount());
+        $this->assertCount(1, $contract->vouchers()->get());
+
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('contract.accepts_receipt', false)
+                ->where('contract.deposit_amount', '4,000.00'));
+    }
+
     private function drawWithDeposit(float $total, float $deposit): Contract
     {
         $this->actingAs($this->owner)->post('/admin/contracts/direct', [
