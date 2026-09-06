@@ -232,6 +232,9 @@ class ContractsController extends Controller
                 'is_installation_form' => $contract->isInstallationForm(),
                 // Drawn on the pools' monthly-maintenance sheet — likewise.
                 'is_maintenance_form' => $contract->isMaintenanceForm(),
+                // Drawn on the halls' numbered rental pad — likewise.
+                'is_hall_form' => $contract->isHallRentalForm(),
+                'client_birth_place' => $data['client_birth_place'] ?? null,
                 'first_installment' => $data['first_installment'] ?? null,
                 'second_installment' => $data['second_installment'] ?? null,
                 // Measured at the site and typed onto the contract; whatever is
@@ -456,6 +459,9 @@ class ContractsController extends Controller
                 'booking_reference' => $contract->booking?->reference,
                 'is_installation_form' => $contract->isInstallationForm(),
                 'is_maintenance_form' => $contract->isMaintenanceForm(),
+                'is_hall_form' => $contract->isHallRentalForm(),
+                'client_birth_place' => ($data['client_birth_place'] ?? '—') === '—' ? null : $data['client_birth_place'],
+                'unit_name' => ($data['unit_name'] ?? '—') === '—' ? null : $data['unit_name'],
                 // What the sheet draws around the editable runs: the logo it is
                 // headed with, and the few facts it states rather than asks for.
                 'from_quotation' => $contract->fromQuotation(),

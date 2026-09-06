@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\ContractTemplate;
 use App\Support\ChaletContractTemplate;
 use App\Support\HallContractTemplate;
+use App\Support\HallRentalContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Seeder;
@@ -32,6 +33,13 @@ class ContractTemplateSeeder extends Seeder
         ContractTemplate::firstOrCreate(
             ['name' => ChaletContractTemplate::NAME],
             ChaletContractTemplate::attributes(),
+        );
+
+        // The halls' numbered rental pad. Picked automatically for every hall
+        // booking, so it never has to be promoted to the default template.
+        ContractTemplate::firstOrCreate(
+            ['name' => HallRentalContractTemplate::NAME],
+            HallRentalContractTemplate::attributes(),
         );
 
         // The pools' piping-and-installation form. It is drawn on a quotation,

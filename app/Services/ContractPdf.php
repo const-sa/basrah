@@ -46,6 +46,7 @@ class ContractPdf
             $data['isChaletForm'] => 'pdf.contract-stay',
             $data['isInstallationForm'] => 'pdf.contract-installation',
             $data['isMaintenanceForm'] => 'pdf.contract-maintenance',
+            $data['isHallForm'] => 'pdf.contract-hall',
             default => 'pdf.contract',
         };
 
@@ -151,6 +152,9 @@ class ContractPdf
             // The monthly-maintenance sheet — the priced lines, the discount
             // under them and the visit schedule in its notes.
             'isMaintenanceForm' => $contract->isMaintenanceForm(),
+            // The halls' numbered rental pad — its own sheet, with the tenant's
+            // card copied at the top and the fourteen conditions below.
+            'isHallForm' => $contract->isHallRentalForm(),
             // A pools contract prints its priced lines where a rental contract
             // prints unit, period and guest count — different documents behind
             // the same letterhead, numbering and signatures.

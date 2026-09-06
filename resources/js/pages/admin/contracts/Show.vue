@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HallRentalContractDocument from '@/components/contracts/HallRentalContractDocument.vue';
 import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
 import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StandardContractDocument from '@/components/contracts/StandardContractDocument.vue';
@@ -36,6 +37,9 @@ const props = defineProps<{
         is_installation_form: boolean;
         /** The pools' monthly-maintenance sheet — likewise its own. */
         is_maintenance_form: boolean;
+        /** The halls' numbered rental pad — likewise its own. */
+        is_hall_form: boolean;
+        client_birth_place: string | null;
         first_installment: string | null; second_installment: string | null;
         pool_width: string | null; pool_length: string | null;
         pool_min_depth: string | null; pool_max_depth: string | null;
@@ -209,6 +213,9 @@ const print = () => window.print();
 
             <!-- Monthly pool maintenance is offered on its own sheet. -->
             <MaintenanceContractDocument v-else-if="isMaintenanceForm" :contract="contract" :issuer="issuer" />
+
+            <!-- A hall is let on its numbered rental pad. -->
+            <HallRentalContractDocument v-else-if="contract.is_hall_form" :contract="contract" :issuer="issuer" />
 
             <!-- العقد نفسه — ما يُطبع ويُوقَّع -->
             <StandardContractDocument v-else :contract="contract" :issuer="issuer" />

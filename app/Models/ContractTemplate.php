@@ -27,6 +27,8 @@ class ContractTemplate extends Model
         'client_mobile' => 'جوال العميل',
         'client_id_number' => 'رقم هوية العميل',
         'client_address' => 'عنوان العميل',
+        // The halls' pad copies the tenant's card, birthplace included.
+        'client_birth_place' => 'مكان الميلاد',
         // موضوع العقد يملؤه الموظف في العقد اليدوي (المسابح)، وفي عقد الحجز
         // يُملأ باسم الوحدة فيبقى القالب الواحد صالحًا للاثنين.
         'subject' => 'موضوع العقد',

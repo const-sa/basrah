@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HallRentalContractDocument from '@/components/contracts/HallRentalContractDocument.vue';
 import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
 import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StandardContractDocument from '@/components/contracts/StandardContractDocument.vue';
@@ -42,6 +43,9 @@ const props = defineProps<{
         booking_reference: string | null;
         is_installation_form: boolean;
         is_maintenance_form: boolean;
+        /** The halls' numbered rental pad — likewise its own. */
+        is_hall_form: boolean;
+        client_birth_place: string | null;
         unit_type: string | null;
         unit_logo_url: string | null;
         event_name: string | null;
@@ -123,6 +127,10 @@ const sheet = computed(() => ({
     client_mobile: typed('client_mobile'),
     client_id_number: typed('client_id_number'),
     client_address: typed('client_address'),
+    client_birth_place: typed('client_birth_place'),
+    booking_date_hijri: typed('booking_date_hijri'),
+    check_in_day: typed('check_in_day'),
+    check_in_time: typed('check_in_time'),
     subject: typed('subject'),
     unit_name: typed('unit_name'),
     sections: typed('sections'),
@@ -235,6 +243,14 @@ const submit = () =>
                         :issuer="issuer"
                         v-model:fields="form.fields"
                         v-model:items="form.items"
+                        v-model:terms="form.terms"
+                    />
+                    <HallRentalContractDocument
+                        v-else-if="contract.is_hall_form"
+                        editable
+                        :contract="sheet"
+                        :issuer="issuer"
+                        v-model:fields="form.fields"
                         v-model:terms="form.terms"
                     />
                     <StandardContractDocument

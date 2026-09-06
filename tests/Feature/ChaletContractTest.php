@@ -13,6 +13,7 @@ use App\Services\BookingService;
 use App\Services\ChaletBookingService;
 use App\Services\ContractPdf;
 use App\Support\ChaletContractTemplate;
+use App\Support\HallRentalContractTemplate;
 use Database\Seeders\AccountsSeeder;
 use Database\Seeders\BookingSetupSeeder;
 use Database\Seeders\ContractTemplateSeeder;
@@ -86,8 +87,8 @@ class ChaletContractTest extends TestCase
         $this->assertStringContainsString('عقد إيجار يومي', $contract->body);
     }
 
-    /** A hall stays on the default template, as it was before the chalet form. */
-    public function test_a_hall_booking_still_follows_the_default_template(): void
+    /** A hall is drawn on its own rental pad, not on the chalet's daily form. */
+    public function test_a_hall_booking_is_not_drawn_on_the_chalet_form(): void
     {
         $client = Client::create(['name' => 'عبدالله السالم', 'mobile' => '0551234567']);
 
@@ -100,8 +101,8 @@ class ChaletContractTest extends TestCase
         ], $this->owner->id);
 
         $this->assertSame(
-            ContractTemplate::defaultTemplate()?->id,
-            $this->contractOf($booking)->contract_template_id,
+            HallRentalContractTemplate::NAME,
+            ContractTemplate::find($this->contractOf($booking)->contract_template_id)?->name,
         );
     }
 

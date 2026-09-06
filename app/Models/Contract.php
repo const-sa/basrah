@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\HallRentalContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Eloquent\Model;
@@ -114,6 +115,16 @@ class Contract extends Model
     public function isMaintenanceForm(): bool
     {
         return ($this->data['form'] ?? null) === PoolMaintenanceContractTemplate::FORM;
+    }
+
+    /**
+     * Is this contract printed on the halls' numbered rental pad?
+     *
+     * Read from the frozen snapshot for the same reason as the pads above.
+     */
+    public function isHallRentalForm(): bool
+    {
+        return ($this->data['form'] ?? null) === HallRentalContractTemplate::FORM;
     }
 
     /**

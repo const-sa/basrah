@@ -10,6 +10,7 @@ use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Setting;
 use App\Support\ChaletContractTemplate;
+use App\Support\HallRentalContractTemplate;
 use App\Support\Hijri;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
@@ -58,7 +59,7 @@ class ContractService
 
         return DB::transaction(function () use ($booking, $template, $userId) {
             $number = $this->nextNumber();
-            $data = $this->buildData($booking, $number);
+            $data = $this->buildData($booking, $number, $template);
 
             return Contract::create([
                 'number' => $number,
@@ -332,6 +333,7 @@ class ContractService
         return match ($this->formFor($template)) {
             PoolInstallationContractTemplate::FORM => PoolInstallationContractTemplate::SUBJECT,
             PoolMaintenanceContractTemplate::FORM => PoolMaintenanceContractTemplate::SUBJECT,
+            HallRentalContractTemplate::FORM => HallRentalContractTemplate::SUBJECT,
             default => (string) ($fallback ?: 'توريد وخدمات'),
         };
     }
@@ -344,6 +346,7 @@ class ContractService
         return match ($template?->name) {
             PoolInstallationContractTemplate::NAME => PoolInstallationContractTemplate::FORM,
             PoolMaintenanceContractTemplate::NAME => PoolMaintenanceContractTemplate::FORM,
+            HallRentalContractTemplate::NAME => HallRentalContractTemplate::FORM,
             default => null,
         };
     }
@@ -544,9 +547,9 @@ class ContractService
     {
         $contract->loadMissing(['booking.unit', 'quotation.department']);
 
-        // A chalet drawn before the daily-rental form existed is rebuilt on it;
-        // anything else keeps the template it was issued on.
-        $template ??= $contract->booking?->unit?->type === 'chalet'
+        // A booking drawn before its activity had a printed pad is rebuilt on
+        // that pad; anything else keeps the template it was issued on.
+        $template ??= in_array($contract->booking?->unit?->type, ['chalet', 'hall'], true)
             ? $this->templateFor($contract->booking)
             : ($contract->template ?? ContractTemplate::defaultTemplate());
 
@@ -596,7 +599,7 @@ class ContractService
 
         $booking->loadMissing(['unit', 'client', 'sections']);
 
-        $data = $this->buildData($booking, $contract->number);
+        $data = $this->buildData($booking, $contract->number, $template);
         $data['contract_date'] = $contract->created_at?->toDateString() ?? $data['contract_date'];
 
         $contract->update([
@@ -614,7 +617,7 @@ class ContractService
      *
      * @return array<string, string>
      */
-    public function buildData(Booking $booking, string $contractNumber): array
+    public function buildData(Booking $booking, string $contractNumber, ?ContractTemplate $template = null): array
     {
         $settings = Setting::current();
 
@@ -637,10 +640,15 @@ class ContractService
             // The rental form asks for a full address; the city is all a
             // walk-in client usually has on file.
             'client_address' => (string) ($booking->client?->tax_address ?: $booking->client?->city ?: '—'),
+            // The halls' pad copies it off the tenant's card at the counter;
+            // the system holds no such field, so it is written on the contract.
+            'client_birth_place' => '—',
             // What a booking contract is about is the unit being rented, so one
             // template can carry {{subject}} and still read correctly for both
             // this and a quotation contract, where the subject is the activity.
             'subject' => (string) ($booking->unit?->name ?? '—'),
+            // The layout it prints on, frozen with the rest of the snapshot.
+            'form' => $this->formFor($template),
             'booking_reference' => $booking->reference,
             'unit_name' => (string) ($booking->unit?->name ?? '—'),
             'sections' => $booking->scope === 'whole'
@@ -704,17 +712,20 @@ class ContractService
      */
     private function templateFor(Booking $booking): ?ContractTemplate
     {
-        if ($booking->unit?->type === 'chalet') {
-            $chalet = ContractTemplate::where('name', ChaletContractTemplate::NAME)
-                ->where('is_active', true)
-                ->first();
+        // Each activity is let on its own pad: the chalet's daily-rental form,
+        // the hall's numbered rental sheet. The default is what remains for a
+        // unit that has no printed paper of its own.
+        $form = match ($booking->unit?->type) {
+            'chalet' => ChaletContractTemplate::NAME,
+            'hall' => HallRentalContractTemplate::NAME,
+            default => null,
+        };
 
-            if ($chalet) {
-                return $chalet;
-            }
-        }
+        $template = $form
+            ? ContractTemplate::where('name', $form)->where('is_active', true)->first()
+            : null;
 
-        return ContractTemplate::defaultTemplate();
+        return $template ?? ContractTemplate::defaultTemplate();
     }
 
     /**
