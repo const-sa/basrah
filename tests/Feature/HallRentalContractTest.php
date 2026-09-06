@@ -109,6 +109,24 @@ class HallRentalContractTest extends TestCase
         $this->assertStringContainsString('الرياض', $contract->body);
     }
 
+    public function test_a_sheet_with_no_grid_does_not_erase_the_lines(): void
+    {
+        $contract = $this->contractFor($this->hall());
+        $contract->update(['data' => [...$contract->data, 'items' => [
+            ['name' => 'ضيافة', 'code' => null, 'quantity' => 1, 'unit_price' => '', 'total_price' => ''],
+        ]]]);
+
+        // The halls' pad posts no lines at all, and an absent grid is not an
+        // instruction to empty one.
+        $this->actingAs($this->owner)->put("/admin/contracts/{$contract->id}", [
+            'fields' => ['sections' => '1'],
+            'body' => $contract->body,
+            'terms' => $contract->terms,
+        ]);
+
+        $this->assertCount(1, $contract->fresh()->lines());
+    }
+
     private function hall(): Unit
     {
         return Unit::where('type', 'hall')->firstOrFail();

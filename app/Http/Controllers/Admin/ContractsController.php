@@ -664,14 +664,19 @@ class ContractsController extends Controller
         // text before the rules see it rather than being guessed at twice.
         $text = fn ($value) => is_scalar($value) ? (string) $value : null;
 
-        $request->merge(['items' => collect($request->input('items', []))
-            ->map(fn ($line) => is_array($line) ? [
-                ...$line,
-                'quantity' => $text($line['quantity'] ?? null),
-                'unit_price' => $text($line['unit_price'] ?? null),
-                'total_price' => $text($line['total_price'] ?? null),
-            ] : $line)
-            ->all()]);
+        // Only when the sheet posts its lines. A form with no grid — the halls'
+        // pad — posts none at all, and reading that as an empty list would
+        // erase the lines the contract already carries.
+        if ($request->has('items')) {
+            $request->merge(['items' => collect($request->input('items', []))
+                ->map(fn ($line) => is_array($line) ? [
+                    ...$line,
+                    'quantity' => $text($line['quantity'] ?? null),
+                    'unit_price' => $text($line['unit_price'] ?? null),
+                    'total_price' => $text($line['total_price'] ?? null),
+                ] : $line)
+                ->all()]);
+        }
 
         $data = $request->validate([
             'client_id' => ['nullable', 'exists:clients,id'],
