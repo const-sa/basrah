@@ -10,6 +10,7 @@ use App\Models\Item;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Role;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
@@ -252,6 +253,32 @@ class PoolInstallationContractTest extends TestCase
                     ->contains('pool_width')
                     && ! collect($groups)->flatMap(fn ($group) => collect($group['fields'])->pluck('key'))
                         ->contains('contract_number')));
+    }
+
+    /**
+     * The letterhead carries the establishment's name, set in the settings.
+     *
+     * It used to be read off a settings column that does not exist, so every
+     * sheet fell back to APP_NAME and printed the deployment's name where the
+     * shop's belongs — and no edit to the settings could put it right.
+     */
+    public function test_the_sheet_is_drawn_under_the_name_set_in_the_settings(): void
+    {
+        config(['app.name' => 'Admin13']);
+        Setting::current()->update(['business_name' => 'العجلان لبرك السباحة']);
+
+        $client = Client::create(['name' => 'ماجد العتيبي', 'mobile' => '0533333333', 'type' => 'pool']);
+        $direct = app(ContractService::class)->generateDirect($client, $this->form(), 1000);
+
+        // Both ways a pools sheet is drawn — off a quotation, and on a client.
+        $this->assertSame('العجلان لبرك السباحة', $this->draw()->data['org_name']);
+        $this->assertSame('العجلان لبرك السباحة', $direct->data['org_name']);
+
+        // And the screen the sheet is filled in on says the same.
+        $this->actingAs($this->owner)->get("/admin/contracts/{$direct->id}/edit")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('issuer.business_name', 'العجلان لبرك السباحة'));
     }
 
     public function test_every_printed_field_is_editable(): void

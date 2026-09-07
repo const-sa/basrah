@@ -171,7 +171,9 @@ class ContractService
             'contract_number' => $contractNumber,
             'contract_date' => $contractDate,
             'contract_date_hijri' => Hijri::short($contractDate) ?: '—',
-            'org_name' => (string) ($settings->site_name ?? config('app.name')),
+            // The name the sheet is signed under is the one the owner sets in
+            // the settings — APP_NAME names the deployment, not the shop.
+            'org_name' => (string) ($settings->business_name ?: config('app.name')),
             'client_name' => (string) $client->name,
             'client_mobile' => (string) ($client->mobile ?: '—'),
             'client_id_number' => (string) ($client->national_id ?: $client->tax_number ?: '—'),
@@ -253,7 +255,9 @@ class ContractService
             'contract_number' => $contractNumber,
             'contract_date' => now()->toDateString(),
             'contract_date_hijri' => Hijri::short(now()->toDateString()) ?: '—',
-            'org_name' => (string) ($settings->site_name ?? config('app.name')),
+            // The name the sheet is signed under is the one the owner sets in
+            // the settings — APP_NAME names the deployment, not the shop.
+            'org_name' => (string) ($settings->business_name ?: config('app.name')),
             'client_name' => (string) ($quotation->client?->name ?? '—'),
             'client_mobile' => (string) ($quotation->client?->mobile ?? '—'),
             'client_id_number' => (string) ($quotation->client?->national_id ?: $quotation->client?->tax_number ?: '—'),
@@ -647,7 +651,9 @@ class ContractService
             'contract_number' => $contractNumber,
             'contract_date' => $contractDate,
             'contract_date_hijri' => Hijri::short($contractDate) ?: '—',
-            'org_name' => (string) ($settings->site_name ?? config('app.name')),
+            // The name the sheet is signed under is the one the owner sets in
+            // the settings — APP_NAME names the deployment, not the shop.
+            'org_name' => (string) ($settings->business_name ?: config('app.name')),
             'client_name' => (string) ($booking->client?->name ?? '—'),
             'client_mobile' => (string) ($booking->client?->mobile ?? '—'),
             // رقم الهوية أولًا، فإن لم يُسجَّل يُستعمل الرقم الضريبي للعميل الضريبي.
