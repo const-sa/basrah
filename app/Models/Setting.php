@@ -17,6 +17,8 @@ class Setting extends Model
         // الهوية والتواصل
         'business_name', 'logo_path', 'favicon_path',
         'phone', 'whatsapp', 'email', 'address',
+        // هوية نشاط المسابح — يتاجر باسمه وشعاره وهاتفه
+        'pools_name', 'pools_logo_path', 'pools_phone',
         // أوقات الحجز — فترات اليوم وأوقات الشاليه
         'booking_periods', 'chalet_check_in_time', 'chalet_check_out_time', 'chalet_max_nights',
         // الضريبة والسجل
@@ -52,6 +54,21 @@ class Setting extends Model
             app()->forgetInstance(BookingTimes::class);
             Vat::forget();
         });
+    }
+
+    /**
+     * The pools activity's letterhead — its own name, logo and phone, falling
+     * back to the business's wherever the activity has not been given one.
+     *
+     * @return array{name: string, logo_path: string|null, phone: string|null}
+     */
+    public function poolsLetterhead(): array
+    {
+        return [
+            'name' => $this->pools_name ?: ($this->business_name ?: config('app.name')),
+            'logo_path' => $this->pools_logo_path ?: $this->logo_path,
+            'phone' => $this->pools_phone ?: $this->phone,
+        ];
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Setting;
+use App\Support\PoolsLetterhead;
 use Illuminate\Database\Seeder;
 
 /**
@@ -24,7 +25,15 @@ class SettingsSeeder extends Seeder
     {
         $settings = Setting::current();
 
+        // The pools activity trades under its own name and phone — pinned here
+        // so a new install carries them without anyone typing them in.
+        if (blank($settings->pools_name)) {
+            $settings->pools_name = PoolsLetterhead::NAME;
+            $settings->pools_phone = $settings->pools_phone ?: PoolsLetterhead::PHONE;
+        }
+
         if (! is_file(public_path(self::LOGO_PATH))) {
+            $settings->save();
             $this->command?->warn('لم يُعثر على ملف الشعار: public/'.self::LOGO_PATH.' — ضَعه ثم أعِد التشغيل.');
 
             return;

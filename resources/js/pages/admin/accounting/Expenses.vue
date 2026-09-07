@@ -46,19 +46,28 @@ const props = defineProps<{
     byCategory: { category: string; count: number; amount: number; share: number }[];
     categories: Category[];
     accounts: { id: number; code: string; name: string }[];
-    costCenters: { id: number; name: string }[];
+    costCenters: { id: number; name: string; segment: string }[];
     treasuries: { id: number; name: string; balance: number }[];
     methods: PaymentMethodOption[];
     suppliers: { id: number; name: string }[];
     statuses: { key: string; label: string }[];
+    activity: string | null;
+    activityLabel: string | null;
+    scoped: boolean;
 }>();
 
 const { can } = usePermissions();
 
-const breadcrumbs: BreadcrumbItem[] = [
+// Every visit stays on the register it was opened from, so a filter or an
+// export from an activity's page does not widen back to the whole book.
+const basePath = computed(() => (props.activity ? `/admin/${props.activity}/expenses` : '/admin/accounting/expenses'));
+
+const heading = computed(() => (props.activityLabel ? `مصروفات ${props.activityLabel}` : 'المصروفات والتكاليف'));
+
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
-    { title: 'المصروفات والتكاليف', href: '/admin/accounting/expenses' },
-];
+    { title: heading.value, href: basePath.value },
+]);
 
 const money = (n: number) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
@@ -79,7 +88,7 @@ watch(
     (value) => {
         clearTimeout(timer);
         timer = setTimeout(() => {
-            router.get('/admin/accounting/expenses', { ...value }, { preserveState: true, replace: true, preserveScroll: true });
+            router.get(basePath.value, { ...value }, { preserveState: true, replace: true, preserveScroll: true });
         }, 300);
     },
     { deep: true },
@@ -87,6 +96,8 @@ watch(
 
 const exportUrl = computed(() => {
     const params = new URLSearchParams(Object.entries(filters.value).filter(([, v]) => v !== '' && v !== null) as [string, string][]);
+    // The export has one route, so the pinned register travels as a parameter.
+    if (props.activity) params.set('activity', props.activity);
     return `/admin/accounting/expenses/export?${params.toString()}`;
 });
 
@@ -108,14 +119,21 @@ const form = useForm({
     post_now: true,
 });
 
+// A scoped user is offered no «عام», so the form opens on a unit of theirs.
+const defaultCenter = computed(() => (props.scoped ? (props.costCenters[0]?.id ?? null) : null));
+
 // النوع يحمل مركز تكلفته الافتراضي: إيجار قاعةٍ بعينها يقع عليها دائمًا.
 watch(
     () => form.expense_category_id,
     (id) => {
         if (editing.value) return;
 
+        // Types are shared, so the one chosen may name a centre outside this
+        // register or outside the user's units. Then its default is not taken.
         const category = props.categories.find((c) => c.id === id);
-        if (category?.cost_center_id) form.cost_center_id = category.cost_center_id;
+        if (category?.cost_center_id && props.costCenters.some((c) => c.id === category.cost_center_id)) {
+            form.cost_center_id = category.cost_center_id;
+        }
     },
 );
 
@@ -125,6 +143,7 @@ const openCreate = () => {
     form.clearErrors();
     form.treasury_id = props.treasuries[0]?.id ?? null;
     form.payment_method_id = props.methods[0]?.id ?? null;
+    form.cost_center_id = defaultCenter.value;
     showModal.value = true;
 };
 
@@ -222,14 +241,14 @@ const removeCategory = (category: Category) => {
 </script>
 
 <template>
-    <Head title="المصروفات والتكاليف" />
+    <Head :title="heading" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-full space-y-4 bg-slate-100 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="flex items-center gap-2 text-2xl font-extrabold text-slate-900">
-                        <Receipt class="h-6 w-6 text-slate-700" /> المصروفات والتكاليف
+                        <Receipt class="h-6 w-6 text-slate-700" /> {{ heading }}
                     </h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">
                         الكهرباء والمياه والصيانة والنظافة والمشتريات والإيجارات — كل مصروف مرحَّل يخصم خزينته ويُحمَّل على وحدته.
@@ -472,11 +491,15 @@ const removeCategory = (category: Category) => {
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-xs font-bold text-slate-600">الوحدة أو الفرع (اختياري)</label>
+                        <label class="mb-1 block text-xs font-bold text-slate-600">
+                            الوحدة أو الفرع{{ scoped ? '' : ' (اختياري)' }}
+                        </label>
                         <select v-model="form.cost_center_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                            <option :value="null">مصروف عام</option>
+                            <!-- A scoped user charges every expense to a unit of theirs, so «عام» is not offered. -->
+                            <option v-if="!scoped" :value="null">مصروف عام</option>
                             <option v-for="c in costCenters" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </select>
+                        <p v-if="form.errors.cost_center_id" class="mt-1 text-xs font-bold text-red-600">{{ form.errors.cost_center_id }}</p>
                     </div>
 
                     <div>
@@ -516,10 +539,14 @@ const removeCategory = (category: Category) => {
                         <textarea v-model="form.description" rows="2" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                     </div>
 
-                    <label v-if="!editing" class="flex items-center gap-2 text-sm font-bold text-slate-700 sm:col-span-2">
+                    <!-- Posting belongs to whoever approves; the rest leave a draft. -->
+                    <label v-if="!editing && can('expenses.approve')" class="flex items-center gap-2 text-sm font-bold text-slate-700 sm:col-span-2">
                         <input v-model="form.post_now" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
                         ترحيل فوري إلى الدفاتر
                     </label>
+                    <p v-else-if="!editing" class="text-xs font-medium text-slate-500 sm:col-span-2">
+                        يُحفظ المصروف مسوّدةً، ويرحّله المحاسب إلى الدفاتر.
+                    </p>
 
                     <div class="flex justify-end gap-2 sm:col-span-2">
                         <button

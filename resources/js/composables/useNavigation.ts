@@ -108,6 +108,9 @@ export function useNavigation() {
                 { title: t('nav.hall_calendar'), href: '/admin/calendar/halls', icon: CalendarRange, perm: 'hall_calendar.view' },
                 { title: t('nav.hall_month_calendar'), href: '/admin/calendar/halls/month', icon: CalendarDays, perm: 'hall_calendar.view' },
                 { title: t('nav.clients'), href: '/admin/halls/clients', icon: Contact, perm: 'clients.view' },
+                // Spend is recorded where it is incurred: the register opens on
+                // this activity's centres, and on the employee's own units.
+                { title: t('nav.expenses'), href: '/admin/halls/expenses', icon: Receipt, perm: 'expenses.view' },
                 { title: t('nav.all_halls'), href: '/admin/units/halls', icon: Building2, perm: 'halls.view' },
                 { title: t('nav.packages'), href: '/admin/packages', icon: PackageIcon, perm: 'packages.view' },
                 { title: t('nav.event_types'), href: '/admin/event-types', icon: PartyPopper, perm: 'event_types.view' },
@@ -131,7 +134,12 @@ export function useNavigation() {
                 { title: t('nav.chalet_bookings'), href: '/admin/bookings/chalets', icon: CalendarDays, perm: 'chalet_bookings.view' },
                 { title: t('nav.chalet_calendar'), href: '/admin/calendar/chalets', icon: CalendarRange, perm: 'chalet_calendar.view' },
                 { title: t('nav.clients'), href: '/admin/chalets/clients', icon: Contact, perm: 'clients.view' },
+                { title: t('nav.expenses'), href: '/admin/chalets/expenses', icon: Receipt, perm: 'expenses.view' },
                 { title: t('nav.all_chalets'), href: '/admin/units/chalets', icon: Home, perm: 'chalets.view' },
+                // The rental sheets let on the chalets, as the pools menu holds
+                // theirs: the employee here wants this activity's contracts,
+                // not every hall rental and pool job in the business.
+                { title: t('nav.contracts_list'), href: '/admin/chalets/contracts', icon: FileSignature, perm: 'contracts.view' },
                 { title: t('nav.chalet_contract_template'), href: '/admin/units/chalet-contract-template', icon: FileText, perm: 'chalet_contract.view' },
                 ...unitsOfType('chalet').map((u) => ({
                     title: u.name,
@@ -159,6 +167,7 @@ export function useNavigation() {
                 { title: t('nav.cashier'), href: '/admin/pos', icon: ShoppingCart, perm: 'pos.view' },
                 { title: t('nav.sales'), href: '/admin/sales', icon: Receipt, perm: 'sales.view' },
                 { title: t('nav.clients'), href: '/admin/pools/clients', icon: Contact, perm: 'clients.view' },
+                { title: t('nav.expenses'), href: '/admin/pools/expenses', icon: Receipt, perm: 'expenses.view' },
                 { title: t('nav.items'), href: '/admin/items', icon: Boxes, perm: 'items.view' },
                 { title: t('nav.item_groups'), href: '/admin/item-groups', icon: Layers, perm: 'item_groups.view' },
                 { title: t('nav.measure_units'), href: '/admin/inventory/units', icon: Ruler, perm: 'items.view' },

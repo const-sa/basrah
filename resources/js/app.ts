@@ -21,6 +21,17 @@ if (xsrfCookie) {
     axios.defaults.xsrfCookieName = xsrfCookie;
 }
 
+// Shared hosting refuses PUT/PATCH/DELETE before the request reaches the application — the scope
+// toggle arrived as a GET the route does not answer — so each goes out as POST naming its real verb.
+axios.interceptors.request.use((config) => {
+    const method = config.method?.toUpperCase();
+    if (method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+        config.method = 'post';
+        config.headers.set('X-HTTP-METHOD-OVERRIDE', method);
+    }
+    return config;
+});
+
 // Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
     interface ImportMetaEnv {

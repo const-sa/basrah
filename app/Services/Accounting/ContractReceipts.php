@@ -121,12 +121,8 @@ class ContractReceipts
     }
 
     /**
-     * مركز تكلفة العقد — قسم عرض السعر، وإلا قسم المسابح.
-     *
-     * A contract drawn straight onto a client names no department, but the
-     * form it is printed on does: an installation or a maintenance sheet is
-     * the pools' work wherever it came from, and posting it to the general
-     * centre would leave that activity's profitability short by the deposit.
+     * The contract's cost centre — its quotation's department, else the one
+     * the form it is printed on belongs to: the pools' or the venues'.
      */
     public function costCenterFor(Contract $contract): int
     {
@@ -136,8 +132,14 @@ class ContractReceipts
             return CostCenter::forDepartment($department)->id;
         }
 
-        if ($contract->isPoolsForm() && $pools = Department::where('code', 'POOLS')->first()) {
-            return CostCenter::forDepartment($pools)->id;
+        $code = match (true) {
+            $contract->isPoolsForm() => 'POOLS',
+            $contract->isChaletRentalForm() => 'VENUES',
+            default => null,
+        };
+
+        if ($code && $department = Department::where('code', $code)->first()) {
+            return CostCenter::forDepartment($department)->id;
         }
 
         return CostCenter::general()->id;

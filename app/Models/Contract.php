@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ChaletContractTemplate;
 use App\Support\HallRentalContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
@@ -138,17 +139,25 @@ class Contract extends Model
         return ($this->data['form'] ?? null) === HallRentalContractTemplate::FORM;
     }
 
-    /**
-     * Is this one of the pools' own forms — installation or maintenance?
-     *
-     * These two are contracted for and paid off outside the bookings system,
-     * so they are the sheets that carry their own receipt ledger. Everything
-     * else either hangs off a booking, which already has one, or is a plain
-     * sheet whose amounts are written on the paper.
-     */
+    /** Is this contract printed on the chalets' daily-rental form? */
+    public function isChaletRentalForm(): bool
+    {
+        return ($this->data['form'] ?? null) === ChaletContractTemplate::FORM;
+    }
+
+    /** Is this one of the pools' own forms — installation or maintenance? */
     public function isPoolsForm(): bool
     {
         return $this->isInstallationForm() || $this->isMaintenanceForm();
+    }
+
+    /**
+     * Does the contract carry its own receipt ledger? Only a sheet with no
+     * booking behind it — anything else takes its deposit on the booking.
+     */
+    public function takesReceipts(): bool
+    {
+        return $this->isPoolsForm() || ($this->isChaletRentalForm() && $this->booking_id === null);
     }
 
     /**
@@ -222,21 +231,15 @@ class Contract extends Model
     /**
      * «المدفوع» و«المتبقي» كما تُطبعان على الورقة.
      *
-     * A pools form reads them off its posted receipts; every other contract
-     * keeps the snapshot it was frozen with. The sheet is drawn before a riyal
-     * is paid, so a frozen «0.00» would still be printed the day the job is
-     * settled in full — while a booking contract froze its booking's real
-     * figures, and a plain sheet's are written on the paper.
-     *
-     * A pools sheet drawn with no value has no remaining to compute, so that
-     * box falls back to the snapshot too.
+     * A sheet with a receipt ledger reads them off its posted receipts; every
+     * other contract, and one drawn with no value, keeps its frozen snapshot.
      *
      * @param  array<string, mixed>  $data  the snapshot as the page reads it
      * @return array{deposit_amount: string|null, remaining_amount: string|null}
      */
     public function paidBoxes(array $data): array
     {
-        if (! $this->isPoolsForm()) {
+        if (! $this->takesReceipts()) {
             return [
                 'deposit_amount' => $data['deposit_amount'] ?? null,
                 'remaining_amount' => $data['remaining_amount'] ?? null,

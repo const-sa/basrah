@@ -4,13 +4,17 @@ import SettingsTabs from '@/components/SettingsTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Building2, Image, PenLine, Receipt, Save, Stamp, Upload } from 'lucide-vue-next';
+import { Building2, Image, PenLine, Receipt, Save, Stamp, Upload, Waves } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 interface SettingsData {
     business_name: string | null;
     logo_url: string | null;
     favicon_url: string | null;
+    /** The pools activity's own letterhead — blank follows the business's. */
+    pools_name: string | null;
+    pools_logo_url: string | null;
+    pools_phone: string | null;
     phone: string | null;
     whatsapp: string | null;
     email: string | null;
@@ -34,6 +38,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const logoPreview = ref<string | null>(props.settings.logo_url);
+const poolsLogoPreview = ref<string | null>(props.settings.pools_logo_url);
 const faviconPreview = ref<string | null>(props.settings.favicon_url);
 const managerSignaturePreview = ref<string | null>(props.settings.manager_signature_url);
 const financeSignaturePreview = ref<string | null>(props.settings.finance_manager_signature_url);
@@ -41,6 +46,8 @@ const stampPreview = ref<string | null>(props.settings.stamp_url);
 
 const form = useForm({
     business_name: props.settings.business_name ?? '',
+    pools_name: props.settings.pools_name ?? '',
+    pools_phone: props.settings.pools_phone ?? '',
     phone: props.settings.phone ?? '',
     whatsapp: props.settings.whatsapp ?? '',
     email: props.settings.email ?? '',
@@ -52,6 +59,7 @@ const form = useForm({
     manager_name: props.settings.manager_name ?? '',
     finance_manager_name: props.settings.finance_manager_name ?? '',
     logo: null as File | null,
+    pools_logo: null as File | null,
     favicon: null as File | null,
     manager_signature: null as File | null,
     finance_manager_signature: null as File | null,
@@ -62,6 +70,12 @@ const onLogoChange = (e: Event) => {
     const file = (e.target as HTMLInputElement).files?.[0] ?? null;
     form.logo = file;
     if (file) logoPreview.value = URL.createObjectURL(file);
+};
+
+const onPoolsLogoChange = (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+    form.pools_logo = file;
+    if (file) poolsLogoPreview.value = URL.createObjectURL(file);
 };
 
 const onFaviconChange = (e: Event) => {
@@ -94,6 +108,7 @@ const submit = () => {
         forceFormData: true,
         onSuccess: () => {
             form.logo = null;
+            form.pools_logo = null;
             form.favicon = null;
             form.manager_signature = null;
             form.finance_manager_signature = null;
@@ -193,6 +208,42 @@ const submit = () => {
                         <label class="mb-1 block text-sm font-bold text-slate-700">العنوان</label>
                         <input v-model="form.address" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
                         <p v-if="form.errors.address" class="mt-1 text-xs text-red-500">{{ form.errors.address }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- The pools activity trades under its own letterhead, printed on its contracts. -->
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="mb-4 flex items-center gap-2">
+                    <Waves class="h-5 w-5 text-emerald-600" />
+                    <h2 class="text-lg font-bold text-slate-800">هوية نشاط المسابح</h2>
+                </div>
+                <p class="mb-4 text-sm font-medium text-slate-500">
+                    تُطبع على عقود التمديد والتركيب والصيانة وسجل عقود المسابح. اتركها فارغة ليتبع النشاط هوية المنشأة.
+                </p>
+                <div class="grid gap-5 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">اسم النشاط</label>
+                        <input v-model="form.pools_name" type="text" :placeholder="form.business_name" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_name" class="mt-1 text-xs text-red-500">{{ form.errors.pools_name }}</p>
+
+                        <label class="mb-1 mt-3 block text-sm font-bold text-slate-700">الهاتف</label>
+                        <input v-model="form.pools_phone" type="text" dir="ltr" :placeholder="form.phone" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_phone" class="mt-1 text-xs text-red-500">{{ form.errors.pools_phone }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">شعار النشاط</label>
+                        <div class="flex items-center gap-4">
+                            <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-700 bg-slate-900 p-1">
+                                <img v-if="poolsLogoPreview" :src="poolsLogoPreview" alt="pools logo" class="h-full w-full object-contain" />
+                                <Image v-else class="h-6 w-6 text-slate-300" />
+                            </div>
+                            <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                                <Upload class="h-4 w-4" /> اختيار صورة
+                                <input type="file" accept="image/*" class="hidden" @change="onPoolsLogoChange" />
+                            </label>
+                        </div>
+                        <p v-if="form.errors.pools_logo" class="mt-1 text-xs text-red-500">{{ form.errors.pools_logo }}</p>
                     </div>
                 </div>
             </div>

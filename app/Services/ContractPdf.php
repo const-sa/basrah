@@ -143,6 +143,10 @@ class ContractPdf
         $isStay = $contract->booking?->unit?->type === 'chalet'
             || ($contract->booking?->period === StayPeriod::PERIOD);
 
+        // A pools sheet is printed under that activity's own letterhead.
+        $pools = $contract->isPoolsForm();
+        $letterhead = $settings->poolsLetterhead();
+
         return [
             'contract' => $contract,
             'data' => $data,
@@ -171,8 +175,10 @@ class ContractPdf
             'terms' => $contract->terms ?: $contract->body,
             'unitCode' => $contract->booking?->unit?->code,
             'issuer' => [
-                'business_name' => $data['org_name'] ?? ($settings->business_name ?: config('app.name')),
-                'phone' => $settings->phone,
+                'business_name' => $data['org_name'] ?? ($pools
+                    ? $letterhead['name']
+                    : ($settings->business_name ?: config('app.name'))),
+                'phone' => $pools ? $letterhead['phone'] : $settings->phone,
                 // The rental form's header carries two numbers — shown only
                 // when the second is genuinely a different one.
                 'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
@@ -187,7 +193,7 @@ class ContractPdf
             // مباشرةً، وتحميله عبر HTTP من الخادم نفسه يعلّق التوليد إذا كان
             // العامل الوحيد مشغولًا بالطلب الذي يولّده.
             'logoPath' => $this->localPath($contract->booking?->unit?->logo_path)
-                ?? $this->localPath($settings->logo_path),
+                ?? $this->localPath($pools ? $letterhead['logo_path'] : $settings->logo_path),
             'signaturePath' => $this->localPath($settings->manager_signature_path),
             'stampPath' => $this->localPath($settings->stamp_path),
         ];

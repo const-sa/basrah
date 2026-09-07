@@ -139,6 +139,49 @@ class User extends Authenticatable
     }
 
     /**
+     * The cost centres this user may spend on — null when unrestricted.
+     * The pools have no unit, so the employee file's department names theirs.
+     *
+     * @return list<int>|null
+     */
+    public function accessibleCostCenterIds(): ?array
+    {
+        $unitIds = $this->accessibleUnitIds();
+
+        if ($unitIds === null) {
+            return null;
+        }
+
+        $departmentId = $this->employee?->department_id;
+
+        return CostCenter::query()
+            ->where(fn ($q) => $q
+                ->whereIn('unit_id', $unitIds)
+                ->orWhereHas('section', fn ($s) => $s->whereIn('unit_id', $unitIds))
+                ->when($departmentId, fn ($sub, $id) => $sub->orWhere('department_id', $id)))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * May this user spend on that centre? A scoped one may not spend on none:
+     * an expense carrying no centre belongs to no activity and no one's scope.
+     */
+    public function canSpendOn(?int $costCenterId): bool
+    {
+        $allowed = $this->accessibleCostCenterIds();
+
+        if ($allowed === null) {
+            return true;
+        }
+
+        return $costCenterId !== null && in_array($costCenterId, $allowed, true);
+    }
+
+    /**
      * هل يملك المستخدم حق العمل على هذه الوحدة تحديدًا؟
      */
     public function canAccessUnit(Unit|int $unit): bool

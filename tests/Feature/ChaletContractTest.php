@@ -87,23 +87,58 @@ class ChaletContractTest extends TestCase
         $this->assertStringContainsString('عقد إيجار يومي', $contract->body);
     }
 
-    /** A hall is drawn on its own rental pad, not on the chalet's daily form. */
-    public function test_a_hall_booking_is_not_drawn_on_the_chalet_form(): void
+    private function hallEvening(): Booking
     {
         $client = Client::create(['name' => 'عبدالله السالم', 'mobile' => '0551234567']);
 
-        $booking = app(BookingService::class)->create([
+        return app(BookingService::class)->create([
             'unit_id' => Unit::where('code', 'HALL-01')->firstOrFail()->id,
             'client_id' => $client->id,
             'scope' => 'whole',
             'period' => 'evening',
             'booking_date' => '2026-09-10',
         ], $this->owner->id);
+    }
 
+    /** A hall is drawn on its own rental pad, not on the chalet's daily form. */
+    public function test_a_hall_booking_is_not_drawn_on_the_chalet_form(): void
+    {
         $this->assertSame(
             HallRentalContractTemplate::NAME,
-            ContractTemplate::find($this->contractOf($booking)->contract_template_id)?->name,
+            ContractTemplate::find($this->contractOf($this->hallEvening())->contract_template_id)?->name,
         );
+    }
+
+    public function test_the_chalets_register_shows_their_own_contracts_alone(): void
+    {
+        // Each booking draws its contract as it is created — no second call.
+        $this->stay();
+        $this->hallEvening();
+
+        // A sheet written on the chalet form with no booking is theirs too:
+        // there is no booking behind it to place it anywhere else.
+        $this->actingAs($this->owner)->post('/admin/contracts/direct', [
+            'client_id' => Client::create(['name' => 'ضيف بلا حجز', 'mobile' => '0553334444', 'type' => 'chalet'])->id,
+            'contract_template_id' => ContractTemplate::where('name', ChaletContractTemplate::NAME)->value('id'),
+            'total_amount' => 1500,
+        ])->assertRedirect();
+
+        $this->actingAs($this->owner)->get('/admin/chalets/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('admin/contracts/Index')
+                ->where('scope', 'chalet')
+                ->has('contracts.data', 2)
+                // Their own pad alone, and no quotation to draw from: a sheet
+                // drawn either way would fall outside this register.
+                ->has('templates', 1)
+                ->where('templates.0.name', ChaletContractTemplate::NAME)
+                ->has('quotations', 0));
+
+        // The overseeing register still sees the hall's contract with them.
+        $this->actingAs($this->owner)->get('/admin/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('scope', 'all')->has('contracts.data', 3));
     }
 
     public function test_the_snapshot_carries_the_fields_the_form_prints(): void
@@ -163,6 +198,21 @@ class ChaletContractTest extends TestCase
                 ->has('contract.booking_date_hijri')
                 ->has('contract.total_amount_words')
                 ->etc());
+    }
+
+    /** A chalet let through a booking takes its money there, not on the contract. */
+    public function test_a_booked_chalet_contract_carries_no_receipt_book(): void
+    {
+        $contract = $this->contractOf($this->stay());
+
+        $this->assertTrue($contract->isChaletRentalForm());
+        $this->assertFalse($contract->takesReceipts());
+
+        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/receipt", ['amount' => 500])
+            ->assertNotFound();
+
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
+            ->assertInertia(fn ($page) => $page->where('contract.takes_receipts', false)->etc());
     }
 
     public function test_the_form_screen_renders_and_is_restorable(): void

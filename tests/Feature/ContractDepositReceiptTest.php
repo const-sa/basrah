@@ -17,6 +17,7 @@ use App\Models\Voucher;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Services\ContractService;
+use App\Support\ChaletContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Database\Seeders\AccountsSeeder;
@@ -210,6 +211,68 @@ class ContractDepositReceiptTest extends TestCase
         $this->assertSame(600.0, $contract->remainingAmount());
     }
 
+    public function test_the_chalet_sheet_written_without_a_booking_takes_a_deposit_too(): void
+    {
+        $this->actingAs($this->owner)->post('/admin/contracts/direct', [
+            'client_id' => $this->client->id,
+            'contract_template_id' => $this->chaletForm()->id,
+            'total_amount' => 3000,
+            'deposit_amount' => 1000,
+        ])->assertRedirect();
+
+        $contract = Contract::latest('id')->firstOrFail();
+
+        $this->assertTrue($contract->isChaletRentalForm());
+        $this->assertTrue($contract->takesReceipts());
+        $this->assertSame(1000.0, $contract->paidAmount());
+        $this->assertSame(2000.0, $contract->remainingAmount());
+        $this->assertSame("عربون عقد {$contract->number}", Voucher::where('contract_id', $contract->id)->value('description'));
+
+        // ...and the sheet prints the receipt book's figures, not the frozen «—».
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('contract.deposit_amount', '1,000.00')
+                ->where('contract.remaining_amount', '2,000.00')
+                ->where('contract.takes_receipts', true));
+    }
+
+    /**
+     * ...and the register it belongs to shows what it collected. That is the
+     * chalets' own, not the pools': a bookingless sheet is not the pools' by
+     * default once another activity can write one.
+     */
+    public function test_the_chalets_register_shows_the_sheet_paid_and_remaining(): void
+    {
+        $this->actingAs($this->owner)->post('/admin/contracts/direct', [
+            'client_id' => $this->client->id,
+            'contract_template_id' => $this->chaletForm()->id,
+            'total_amount' => 3000,
+            'deposit_amount' => 1000,
+        ])->assertRedirect();
+
+        $this->actingAs($this->owner)->get('/admin/chalets/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('contracts.data.0.paid_amount', '1,000.00')
+                ->where('contracts.data.0.remaining_amount', '2,000.00'));
+
+        $this->actingAs($this->owner)->get('/admin/pools/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('contracts.data', 0));
+    }
+
+    /** The عربون box is offered for the chalet form as it is for the pools'. */
+    public function test_the_screen_offers_the_deposit_box_on_the_chalet_template(): void
+    {
+        $this->actingAs($this->owner)->get('/admin/pools/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where(
+                'templates',
+                fn ($templates) => collect($templates)
+                    ->firstWhere('name', ChaletContractTemplate::NAME)['takes_deposit'] === true,
+            ));
+    }
+
     public function test_a_standard_sheet_keeps_its_frozen_boxes_and_takes_no_receipt(): void
     {
         $contract = app(ContractService::class)->generateDirect(
@@ -340,5 +403,10 @@ class ContractDepositReceiptTest extends TestCase
     private function maintenanceForm(): ContractTemplate
     {
         return ContractTemplate::where('name', PoolMaintenanceContractTemplate::NAME)->firstOrFail();
+    }
+
+    private function chaletForm(): ContractTemplate
+    {
+        return ContractTemplate::where('name', ChaletContractTemplate::NAME)->firstOrFail();
     }
 }

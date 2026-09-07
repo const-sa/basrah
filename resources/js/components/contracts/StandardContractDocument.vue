@@ -78,6 +78,10 @@ const logo = computed(() => props.contract.unit_logo_url ?? props.issuer.logo_ur
 const logoFailed = ref(false);
 watch(logo, () => (logoFailed.value = false));
 
+// A run is written into only where the edit screen offered it as a field: what
+// a receipt ledger answers for is printed, never typed over.
+const offered = (key: string) => props.editable && key in fields.value;
+
 const isQuotation = computed(() => props.contract.from_quotation);
 const isStay = computed(() => props.contract.unit_type === 'chalet');
 
@@ -345,7 +349,7 @@ const removeLine = (i: number) => items.value.splice(i, 1);
                 <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">
                     <div class="text-xs font-bold text-slate-600">{{ isQuotation ? 'المدفوع' : 'العربون المدفوع' }}</div>
                     <div class="font-extrabold text-emerald-700">
-                        <input v-if="editable" v-model="fields.deposit_amount" class="fillin w-24" dir="ltr" />
+                        <input v-if="offered('deposit_amount')" v-model="fields.deposit_amount" class="fillin w-24" dir="ltr" />
                         <template v-else>{{ contract.deposit_amount ?? '—' }}</template>
                         ريال
                     </div>
@@ -353,7 +357,7 @@ const removeLine = (i: number) => items.value.splice(i, 1);
                 <div class="rounded-lg border border-slate-300 px-3 py-2 print:py-1.5">
                     <div class="text-xs font-bold text-slate-600">المبلغ المتبقي</div>
                     <div class="font-extrabold text-red-700">
-                        <input v-if="editable" v-model="fields.remaining_amount" class="fillin w-24" dir="ltr" />
+                        <input v-if="offered('remaining_amount')" v-model="fields.remaining_amount" class="fillin w-24" dir="ltr" />
                         <template v-else>{{ contract.remaining_amount ?? '—' }}</template>
                         ريال
                     </div>

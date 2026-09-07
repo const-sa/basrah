@@ -67,6 +67,9 @@ class RolesSeeder extends Seeder
                     'contract_templates.view',
                     'whatsapp.view', 'whatsapp.send',
                     'clients.view', 'clients.create', 'clients.edit',
+                    // Spend is recorded where it is incurred, on his own units.
+                    // Posting it to the ledger stays the accountant's.
+                    'expenses.view', 'expenses.create', 'expenses.edit',
                     'tickets.view', 'tickets.create',
                     'reports.view',
                 ],

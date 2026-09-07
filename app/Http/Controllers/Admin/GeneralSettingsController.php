@@ -21,6 +21,10 @@ class GeneralSettingsController extends Controller
                 'business_name' => $settings->business_name,
                 'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
                 'favicon_url' => $settings->favicon_path ? asset($settings->favicon_path) : null,
+                // هوية المسابح — تُترك فارغةً فتتبع هوية المنشأة
+                'pools_name' => $settings->pools_name,
+                'pools_logo_url' => $settings->pools_logo_path ? asset($settings->pools_logo_path) : null,
+                'pools_phone' => $settings->pools_phone,
                 'phone' => $settings->phone,
                 'whatsapp' => $settings->whatsapp,
                 'email' => $settings->email,
@@ -42,6 +46,8 @@ class GeneralSettingsController extends Controller
     {
         $data = $request->validate([
             'business_name' => ['nullable', 'string', 'max:255'],
+            'pools_name' => ['nullable', 'string', 'max:255'],
+            'pools_phone' => ['nullable', 'string', 'max:50'],
             'phone' => ['nullable', 'string', 'max:50'],
             'whatsapp' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -54,6 +60,7 @@ class GeneralSettingsController extends Controller
             'finance_manager_name' => ['nullable', 'string', 'max:255'],
             // قصر الرفع على الصور النقطية فقط ومنع SVG (يمكن أن يحمل سكربت → XSS مخزّن).
             'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'pools_logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'favicon' => ['nullable', 'mimes:png,ico,jpg,jpeg,webp', 'max:1024'],
             'manager_signature' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'finance_manager_signature' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
@@ -64,6 +71,8 @@ class GeneralSettingsController extends Controller
 
         $settings->fill([
             'business_name' => $data['business_name'] ?? null,
+            'pools_name' => $data['pools_name'] ?? null,
+            'pools_phone' => $data['pools_phone'] ?? null,
             'phone' => $data['phone'] ?? null,
             'whatsapp' => $data['whatsapp'] ?? null,
             'email' => $data['email'] ?? null,
@@ -78,6 +87,10 @@ class GeneralSettingsController extends Controller
 
         if ($request->hasFile('logo')) {
             $settings->logo_path = $this->storeUpload($request->file('logo'), 'logo');
+        }
+
+        if ($request->hasFile('pools_logo')) {
+            $settings->pools_logo_path = $this->storeUpload($request->file('pools_logo'), 'pools-logo');
         }
 
         if ($request->hasFile('favicon')) {

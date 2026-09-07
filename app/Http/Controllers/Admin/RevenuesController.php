@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Support\ActivitySegment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -38,17 +39,7 @@ class RevenuesController extends Controller
         'other' => 'إيرادات أخرى',
     ];
 
-    /**
-     * ترميز قسم المسابح في جدول الأقسام — عليه يقع إيراد البيع والصيانة.
-     */
-    private const POOLS_DEPARTMENT = 'POOLS';
-
-    /**
-     * خريطة «مركز التكلفة ← نطاقه»، تُحسب مرة واحدة في الطلب.
-     *
-     * @var array<int, string>|null
-     */
-    private ?array $centerSegments = null;
+    public function __construct(private readonly ActivitySegment $segments) {}
 
     public function index(Request $request): Response
     {
@@ -226,7 +217,7 @@ class RevenuesController extends Controller
             'account_code' => $line->account_code,
             'account' => $line->account_name,
             'cost_center_id' => $line->cost_center_id !== null ? (int) $line->cost_center_id : null,
-            'center' => $this->centerName($line->unit_name, $line->section_unit_name, $line->section_name, $line->department_name, $line->center_name),
+            'center' => ActivitySegment::nameFrom($line->unit_name, $line->section_unit_name, $line->section_name, $line->department_name, $line->center_name),
             'segment' => $segment,
             'segment_label' => self::SEGMENTS[$segment],
             'description' => $line->line_description ?: $line->entry_description,
@@ -326,7 +317,7 @@ class RevenuesController extends Controller
 
                 return [
                     'cost_center_id' => $r->cost_center_id !== null ? (int) $r->cost_center_id : null,
-                    'name' => $this->centerName($r->unit_name, $r->section_unit_name, $r->section_name, $r->department_name, $r->center_name) ?? 'بلا مركز تكلفة',
+                    'name' => ActivitySegment::nameFrom($r->unit_name, $r->section_unit_name, $r->section_name, $r->department_name, $r->center_name) ?? 'بلا مركز تكلفة',
                     'segment' => $segment,
                     'segment_label' => self::SEGMENTS[$segment],
                     'count' => (int) $r->movements,
@@ -392,9 +383,9 @@ class RevenuesController extends Controller
      */
     private function scopeSegment(Builder $query, string $segment): Builder
     {
-        $ids = array_keys(array_filter($this->segmentMap(), fn (string $s) => $s === $segment));
+        $ids = $this->segments->centerIds($segment);
 
-        if ($segment === 'other') {
+        if ($segment === ActivitySegment::OTHER) {
             return $query->where(fn ($q) => $q
                 ->whereNull('journal_lines.cost_center_id')
                 ->orWhereIn('journal_lines.cost_center_id', $ids));
@@ -415,74 +406,16 @@ class RevenuesController extends Controller
             ->get()
             ->map(fn (CostCenter $c) => [
                 'id' => $c->id,
-                'name' => $this->centerName(
-                    $c->unit?->name,
-                    $c->section?->unit?->name,
-                    $c->section?->name,
-                    $c->department?->name,
-                    $c->name,
-                ),
-                'segment' => $this->segmentOfCenter($c->id),
+                'name' => $this->segments->nameOf($c),
+                'segment' => $this->segments->of($c->id),
             ])
             ->sortBy('name')
             ->values()
             ->all();
     }
 
-    /**
-     * @return array<int, string>
-     */
-    private function segmentMap(): array
-    {
-        if ($this->centerSegments !== null) {
-            return $this->centerSegments;
-        }
-
-        return $this->centerSegments = CostCenter::with(['unit:id,type', 'section:id,unit_id', 'section.unit:id,type', 'department:id,code'])
-            ->get()
-            ->mapWithKeys(function (CostCenter $c) {
-                // A room belongs to the activity its unit belongs to. Reading
-                // the unit through the section keeps a room out of «إيرادات
-                // أخرى», where it would drop off the chalets total.
-                $type = $c->unit?->type ?? $c->section?->unit?->type;
-
-                return [$c->id => match (true) {
-                    $type === 'hall' => 'halls',
-                    $type === 'chalet' => 'chalets',
-                    $c->department?->code === self::POOLS_DEPARTMENT => 'pools',
-                    default => 'other',
-                }];
-            })
-            ->all();
-    }
-
     private function segmentOfCenter(?int $costCenterId): string
     {
-        return $this->segmentMap()[$costCenterId] ?? 'other';
-    }
-
-    /**
-     * ما يُسمّى به مركز التكلفة على الشاشة.
-     *
-     * الوحدة أولًا، ثم القسم مسبوقًا بوحدته، ثم قسم النشاط. واسم المركز
-     * المحفوظ آخرها: يبقى كما كُتب يوم أُنشئ، فإعادة تسمية الشاليه يجب أن
-     * تظهر في التقرير لا أن يظل يحمل اسمه القديم.
-     */
-    private function centerName(
-        ?string $unit,
-        ?string $sectionUnit,
-        ?string $section,
-        ?string $department,
-        ?string $center,
-    ): ?string {
-        if ($unit !== null) {
-            return $unit;
-        }
-
-        if ($section !== null) {
-            return $sectionUnit !== null ? $sectionUnit.' — '.$section : $section;
-        }
-
-        return $department ?? $center;
+        return $this->segments->of($costCenterId);
     }
 }

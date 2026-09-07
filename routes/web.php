@@ -219,6 +219,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         // to what was drawn from that activity's quotations. Its own path, not
         // a query string, so the menu keeps highlighting it while filtering.
         Route::get('pools/contracts', [ContractsController::class, 'poolsIndex'])->middleware('perm:contracts.view')->name('contracts.pools');
+        // And the chalets', narrowed the same way to the stays let on them.
+        Route::get('chalets/contracts', [ContractsController::class, 'chaletsIndex'])->middleware('perm:contracts.view')->name('contracts.chalets');
         // «pdf» قبل {contract} لا يلزم هنا لأنه مقطع ثانٍ، لكن ترتيبه قبل
         // show يبقي المسارات النوعية مجتمعة كما في بقية الملف.
         Route::get('contracts/{contract}/pdf', [ContractsController::class, 'pdf'])->middleware('perm:contracts.export')->name('contracts.pdf');
@@ -349,6 +351,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
         // المصروفات والتكاليف (§9) — سندات صرف بوجهٍ تشغيلي
         Route::get('accounting/expenses', [ExpensesController::class, 'index'])->middleware('perm:expenses.view')->name('expenses.index');
+        // One activity's spend, opened from that activity's menu. Kept in this
+        // group with the rest: the screen is the accounting system's either way.
+        Route::get('halls/expenses', [ExpensesController::class, 'hallExpenses'])->middleware('perm:expenses.view')->name('expenses.halls');
+        Route::get('chalets/expenses', [ExpensesController::class, 'chaletExpenses'])->middleware('perm:expenses.view')->name('expenses.chalets');
+        Route::get('pools/expenses', [ExpensesController::class, 'poolExpenses'])->middleware('perm:expenses.view')->name('expenses.pools');
         Route::get('accounting/expenses/export', [ExpensesController::class, 'export'])->middleware('perm:expenses.view')->name('expenses.export');
         Route::post('accounting/expenses', [ExpensesController::class, 'store'])->middleware('perm:expenses.create')->name('expenses.store');
         Route::put('accounting/expenses/{expense}', [ExpensesController::class, 'update'])->middleware('perm:expenses.edit')->name('expenses.update');

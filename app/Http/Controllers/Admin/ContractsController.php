@@ -16,10 +16,12 @@ use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
+use App\Support\ChaletContractTemplate;
 use App\Support\ClientType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -90,20 +92,43 @@ class ContractsController extends Controller
     }
 
     /**
-     * @param  'all'|'quotation'  $scope
+     * The same screen reached from the chalets menu, showing that activity's
+     * own contracts: the sheets let on a chalet, and the ones written on the
+     * chalet form with no booking behind them.
+     */
+    public function chaletsIndex(Request $request): Response
+    {
+        return $this->register($request, 'chalet');
+    }
+
+    /**
+     * @param  'all'|'quotation'|'chalet'  $scope
      */
     private function register(Request $request, string $scope): Response
     {
         $user = $request->user();
         $poolsOnly = $scope === 'quotation';
+        $chaletsOnly = $scope === 'chalet';
 
         $query = Contract::query()
             // Anything not drawn from a booking is the pools' — a quotation
             // contract or one written straight onto a client. Neither has a
             // unit behind it, so unit visibility cannot scope them and
-            // `contracts.view` is the whole gate there.
-            ->when($poolsOnly, fn ($q) => $q->whereNull('booking_id'))
-            ->unless($poolsOnly, fn ($q) => $q->where(fn ($w) => $w
+            // `contracts.view` is the whole gate there. The chalets' own sheet
+            // is the exception: it too may be written with no booking, and it
+            // belongs in that activity's register, not in this one.
+            ->when($poolsOnly, fn ($q) => $q->whereNull('booking_id')
+                ->where(fn ($w) => $w->whereNull('data->form')
+                    ->orWhere('data->form', '!=', ChaletContractTemplate::FORM)))
+            // The chalets': a stay on a chalet the user may see, or a sheet
+            // drawn on their form with no booking — that one has no unit
+            // either, and is gated the same way as the pools' above.
+            ->when($chaletsOnly, fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('booking', fn ($b) => $b->visibleTo($user)
+                    ->whereHas('unit', fn ($u) => $u->where('type', 'chalet')))
+                ->orWhere(fn ($direct) => $direct->whereNull('booking_id')
+                    ->where('data->form', ChaletContractTemplate::FORM))))
+            ->when($scope === 'all', fn ($q) => $q->where(fn ($w) => $w
                 ->whereNull('booking_id')
                 ->orWhereHas('booking', fn ($b) => $b->visibleTo($user))))
             ->with([
@@ -133,14 +158,18 @@ class ContractsController extends Controller
                     'booking_date' => $c->booking?->booking_date?->toDateString(),
                     'total_amount' => $c->data['total_amount'] ?? null,
                     // ما قُبض على العقد وما بقي — من دفتر السندات لا من اللقطة.
-                    'paid_amount' => $c->isPoolsForm() ? number_format($c->paidAmount(), 2) : null,
-                    'remaining_amount' => $c->isPoolsForm() && $c->remainingAmount() !== null
+                    'paid_amount' => $c->takesReceipts() ? number_format($c->paidAmount(), 2) : null,
+                    'remaining_amount' => $c->takesReceipts() && $c->remainingAmount() !== null
                         ? number_format($c->remainingAmount(), 2)
                         : null,
                     'sent_at' => $c->sent_at?->format('Y-m-d H:i'),
                     'created_at' => $c->created_at->toDateString(),
                 ]),
             'scope' => $scope,
+            // The register is headed by whoever its contracts are drawn under —
+            // the pools activity on its own screen, the business on the full one.
+            'letterhead' => collect($this->issuer(null, $poolsOnly))
+                ->only(['business_name', 'logo_url', 'phone'])->all(),
             // The عربون taken as the pools' sheet is drawn needs a till and a
             // way of paying to be written against.
             'payment_methods' => PaymentMethod::options(),
@@ -149,7 +178,7 @@ class ContractsController extends Controller
             'statuses' => collect(Contract::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
             // وأيُّ منها يحمل دفتر سنداته — فتظهر خانة العربون على نموذج
             // التركيب والصيانة وحدهما.
-            'templates' => ContractTemplate::where('is_active', true)->get(['id', 'name', 'is_default'])
+            'templates' => $this->templates($chaletsOnly)
                 ->map(fn (ContractTemplate $t) => [
                     'id' => $t->id,
                     'name' => $t->name,
@@ -161,6 +190,9 @@ class ContractsController extends Controller
             // drawn there would land outside the register that drew it.
             'bookings' => $poolsOnly ? [] : Booking::visibleTo($user)->blocking()
                 ->whereDoesntHave('contracts')
+                // For the same reason the chalets' screen draws from their
+                // own stays: a hall let there would leave the register.
+                ->when($chaletsOnly, fn ($q) => $q->whereHas('unit', fn ($u) => $u->where('type', 'chalet')))
                 ->with('unit:id,name', 'client:id,name')
                 ->latest('id')->limit(200)->get()
                 ->map(fn (Booking $b) => [
@@ -170,7 +202,10 @@ class ContractsController extends Controller
             // Quotations still open and not yet contracted. A rejected quotation
             // is excluded outright: the client turned that price down, and a
             // contract is exactly the thing that must not be drawn from it.
-            'quotations' => Quotation::where('status', '!=', 'rejected')
+            //
+            // A quotation is the pools' source; a chalet is let on a booking or
+            // written on the client, so that screen is offered neither.
+            'quotations' => $chaletsOnly ? [] : Quotation::where('status', '!=', 'rejected')
                 ->whereDoesntHave('contracts')
                 ->with('client:id,name', 'department:id,name')
                 ->latest('id')->limit(200)->get()
@@ -182,10 +217,11 @@ class ContractsController extends Controller
                     'status' => $q->status,
                     'accepted' => $q->status === 'accepted',
                 ]),
-            // Whom a contract with no source document is written for. The pools
-            // screen offers its own clients, as its counter does.
+            // Whom a contract with no source document is written for. Each
+            // activity's screen offers its own clients, as its counter does.
             'clients' => Client::query()
                 ->when($poolsOnly, fn ($q) => $q->ofType([ClientType::POOL]))
+                ->when($chaletsOnly, fn ($q) => $q->ofType([ClientType::CHALET]))
                 ->where('is_active', true)
                 ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
                 ->map(fn (Client $c) => [
@@ -199,6 +235,24 @@ class ContractsController extends Controller
                 'signed' => (clone $query)->where('status', 'signed')->count(),
             ],
         ]);
+    }
+
+    /**
+     * The pads a contract may be drawn on from this register.
+     *
+     * The chalets' screen offers their own form alone: a sheet drawn there on
+     * another pad would fall outside the register that drew it. If that form is
+     * not seeded, the whole list stands rather than nothing at all.
+     *
+     * @return Collection<int, ContractTemplate>
+     */
+    private function templates(bool $chaletsOnly): Collection
+    {
+        $templates = ContractTemplate::where('is_active', true)->get(['id', 'name', 'is_default']);
+
+        $chaletPad = $chaletsOnly ? $templates->firstWhere('name', ChaletContractTemplate::NAME) : null;
+
+        return $chaletPad ? collect([$chaletPad]) : $templates;
     }
 
     public function show(Contract $contract): Response
@@ -258,12 +312,8 @@ class ContractsController extends Controller
                 'guests_count' => $data['guests_count'] ?? null,
                 'total_amount' => $data['total_amount'] ?? null,
                 'total_amount_words' => $data['total_amount_words'] ?? null,
-                // On a pools form these two are the receipt book's answer, not
-                // the snapshot's: the sheet is drawn before a riyal is paid, so
-                // a frozen «0.00» would still be printed the day the job is
-                // settled in full. Everywhere else the snapshot stands — a
-                // booking contract froze its booking's real figures, and a
-                // plain sheet's are written on the paper.
+                // On a sheet with a receipt ledger these two are its answer;
+                // everywhere else the snapshot it was frozen with stands.
                 ...$contract->paidBoxes($data),
                 'security_deposit' => $data['security_deposit'] ?? null,
                 // Quotation contracts: the priced lines are the scope of work,
@@ -298,10 +348,10 @@ class ContractsController extends Controller
                 'tax_rate' => $data['tax_rate'] ?? null,
                 'sent_at' => $contract->sent_at?->format('Y-m-d H:i'),
                 'signed_at' => $contract->signed_at?->format('Y-m-d H:i'),
-                // The pools' own forms carry their receipt book on the page:
-                // the عربون taken at signing and every payment after it.
-                'takes_receipts' => $contract->isPoolsForm(),
-                'accepts_receipt' => $contract->isPoolsForm() && $contract->acceptsSettlement(),
+                // A sheet with its own receipt book carries it on the page: the
+                // deposit taken at signing and every payment after it.
+                'takes_receipts' => $contract->takesReceipts(),
+                'accepts_receipt' => $contract->takesReceipts() && $contract->acceptsSettlement(),
                 'receipts' => $contract->vouchers->map(fn (Voucher $v) => [
                     'id' => $v->id,
                     'number' => $v->number,
@@ -314,11 +364,11 @@ class ContractsController extends Controller
                     'description' => $v->description,
                 ])->values(),
             ],
-            'payment_methods' => $contract->isPoolsForm() ? PaymentMethod::options() : [],
-            'treasuries' => $contract->isPoolsForm()
+            'payment_methods' => $contract->takesReceipts() ? PaymentMethod::options() : [],
+            'treasuries' => $contract->takesReceipts()
                 ? Treasury::where('is_active', true)->orderBy('name')->get(['id', 'name'])
                 : [],
-            'issuer' => $this->issuer($data['org_name'] ?? null),
+            'issuer' => $this->issuer($data['org_name'] ?? null, $contract->isPoolsForm()),
         ]);
     }
 
@@ -447,7 +497,7 @@ class ContractsController extends Controller
      */
     public function receipt(Request $request, Contract $contract): RedirectResponse
     {
-        abort_unless($contract->isPoolsForm(), 404);
+        abort_unless($contract->takesReceipts(), 404);
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
@@ -478,9 +528,8 @@ class ContractsController extends Controller
      * ends up recorded nowhere. So the receipt is drawn in the same action
      * that draws the contract.
      *
-     * Only the pools' own forms take one — a hall or chalet contract is drawn
-     * from a booking, and that booking's payment ledger is where its عربون
-     * belongs.
+     * Only a sheet with its own receipt ledger takes one — a contract drawn
+     * from a booking leaves its deposit on that booking's payment ledger.
      *
      * Returns the posted voucher, null when nothing was paid, and the failure
      * itself when the receipt could not be written: the contract is already
@@ -493,7 +542,7 @@ class ContractsController extends Controller
     {
         $amount = round((float) ($data['deposit_amount'] ?? 0), 2);
 
-        if ($amount <= 0 || ! $contract->isPoolsForm()) {
+        if ($amount <= 0 || ! $contract->takesReceipts()) {
             return null;
         }
 
@@ -523,14 +572,22 @@ class ContractsController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function issuer(?string $orgName = null): array
+    private function issuer(?string $orgName = null, bool $pools = false): array
     {
         $settings = Setting::current();
 
+        // A pools sheet is headed by that activity's own letterhead, which
+        // falls back to the business's wherever it has not been given one.
+        $letterhead = $settings->poolsLetterhead();
+
         return [
-            'business_name' => $orgName ?: ($settings->business_name ?: config('app.name')),
-            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
-            'phone' => $settings->phone,
+            'business_name' => $orgName ?: ($pools
+                ? $letterhead['name']
+                : ($settings->business_name ?: config('app.name'))),
+            'logo_url' => ($logo = $pools ? $letterhead['logo_path'] : $settings->logo_path)
+                ? asset($logo)
+                : null,
+            'phone' => $pools ? $letterhead['phone'] : $settings->phone,
             'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
             'address' => $settings->address,
             'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
@@ -582,13 +639,11 @@ class ContractsController extends Controller
         // printed on the form that asks for them. The number is not offered:
         // it identifies the contract.
         //
-        // Nor are the paid and remaining boxes on a pools form: they are what
-        // its posted receipts add up to, and a typed figure there would be
-        // written into the snapshot and then ignored by every screen that
-        // prints it. The way to move them is to write a سند قبض.
+        // Nor the paid and remaining boxes on a sheet with a receipt ledger:
+        // they are its posted receipts' answer, moved only by a new receipt.
         $keys = collect(ContractTemplate::PLACEHOLDERS)->keys()
             ->reject(fn (string $key) => $key === 'contract_number')
-            ->reject(fn (string $key) => $contract->isPoolsForm()
+            ->reject(fn (string $key) => $contract->takesReceipts()
                 && in_array($key, ['deposit_amount', 'remaining_amount'], true))
             ->filter(fn (string $key) => (isset($data[$key]) && is_scalar($data[$key]))
                 || ($contract->isInstallationForm() && in_array($key, ContractService::DIMENSIONS, true)));
@@ -638,7 +693,7 @@ class ContractsController extends Controller
                 'quotation_date' => ($data['quotation_date'] ?? '—') === '—' ? null : $data['quotation_date'],
                 'is_taxable' => (bool) ($data['is_taxable'] ?? false),
             ],
-            'issuer' => $this->issuer($data['org_name'] ?? null),
+            'issuer' => $this->issuer($data['org_name'] ?? null, $contract->isPoolsForm()),
             'clients' => Client::where('is_active', true)
                 ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
                 ->map(fn (Client $c) => [

@@ -107,4 +107,17 @@ class Expense extends Model
             ->when($from, fn (Builder $q) => $q->whereDate('expense_date', '>=', $from))
             ->when($to, fn (Builder $q) => $q->whereDate('expense_date', '<=', $to));
     }
+
+    /**
+     * What the user may see — only what was charged to their units' centres.
+     * One carrying no centre is hidden, or a blank field would dodge the scope.
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): Builder
+    {
+        if ($user?->seesAllUnits()) {
+            return $query;
+        }
+
+        return $query->whereIn('cost_center_id', $user?->accessibleCostCenterIds() ?? []);
+    }
 }

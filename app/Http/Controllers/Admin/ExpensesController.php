@@ -10,7 +10,9 @@ use App\Models\ExpenseCategory;
 use App\Models\PaymentMethod;
 use App\Models\Supplier;
 use App\Models\Treasury;
+use App\Models\User;
 use App\Services\Accounting\ExpenseService;
+use App\Support\ActivitySegment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,12 +31,35 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ExpensesController extends Controller
 {
-    public function __construct(private readonly ExpenseService $expenses) {}
+    public function __construct(
+        private readonly ExpenseService $expenses,
+        private readonly ActivitySegment $segments,
+    ) {}
 
-    public function index(Request $request): Response
+    public function hallExpenses(Request $request): Response
     {
-        $filters = $this->filters($request);
-        $query = $this->filtered($filters);
+        return $this->index($request, ActivitySegment::HALLS);
+    }
+
+    public function chaletExpenses(Request $request): Response
+    {
+        return $this->index($request, ActivitySegment::CHALETS);
+    }
+
+    public function poolExpenses(Request $request): Response
+    {
+        return $this->index($request, ActivitySegment::POOLS);
+    }
+
+    /**
+     * The whole book for the accountant, or one activity's when opened from
+     * that activity's menu. Either way, only the user's own units.
+     */
+    public function index(Request $request, ?string $activity = null): Response
+    {
+        $user = $request->user();
+        $filters = $this->filters($request, $activity);
+        $query = $this->filtered($filters, $user);
 
         return Inertia::render('admin/accounting/Expenses', [
             'expenses' => (clone $query)
@@ -45,24 +70,26 @@ class ExpensesController extends Controller
                 ->withQueryString()
                 ->through(fn (Expense $e) => $this->row($e)),
             'filters' => $filters,
-            'stats' => $this->stats($filters),
-            'byCategory' => $this->byCategory($filters),
+            'stats' => $this->stats($filters, $user),
+            'byCategory' => $this->byCategory($filters, $user),
             'categories' => $this->categories(),
             'accounts' => Account::postable()
                 ->where('type', 'expense')
                 ->where('is_active', true)
                 ->orderBy('code')
                 ->get(['id', 'code', 'name']),
-            'costCenters' => CostCenter::with('unit:id,name')
-                ->where('is_active', true)
-                ->get()
-                ->map(fn (CostCenter $c) => ['id' => $c->id, 'name' => $c->unit?->name ?? $c->name]),
+            'costCenters' => $this->costCenters($user, $filters['activity']),
             'treasuries' => Treasury::where('is_active', true)->get()->map(fn (Treasury $t) => [
                 'id' => $t->id, 'name' => $t->name, 'balance' => $t->balance(),
             ]),
             'methods' => PaymentMethod::options(),
             'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'statuses' => collect(Expense::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
+            // The pinned activity — the screen titles by it, and no filter widens it.
+            'activity' => $filters['activity'],
+            'activityLabel' => $filters['activity'] ? ActivitySegment::label($filters['activity']) : null,
+            // A scoped user must name a centre, so the form may not offer «none».
+            'scoped' => $user?->accessibleCostCenterIds() !== null,
         ]);
     }
 
@@ -77,7 +104,9 @@ class ExpensesController extends Controller
 
         // التسجيل والترحيل في خطوة واحدة هو الحالة الغالبة: مصروف اليوم
         // يُدفع نقدًا ويُقيَّد فورًا. والمسوّدة تبقى لمن يحتاج مراجعةً قبله.
-        if ($request->boolean('post_now')) {
+        // Posting is the approver's: whoever may only record leaves a draft,
+        // or the box would hand him the ledger his permission withholds.
+        if ($request->boolean('post_now') && $request->user()?->hasPermission('expenses.approve')) {
             try {
                 $this->expenses->post($expense, $request->user()?->id);
             } catch (RuntimeException $e) {
@@ -94,6 +123,8 @@ class ExpensesController extends Controller
      */
     public function update(Request $request, Expense $expense): RedirectResponse
     {
+        $this->authorizeScope($request, $expense);
+
         if (! $expense->isDraft()) {
             return back()->with('warning', 'المصروف المرحَّل لا يُعدَّل — ألغِه وسجّله من جديد.');
         }
@@ -105,6 +136,8 @@ class ExpensesController extends Controller
 
     public function post(Request $request, Expense $expense): RedirectResponse
     {
+        $this->authorizeScope($request, $expense);
+
         try {
             $this->expenses->post($expense, $request->user()?->id);
         } catch (RuntimeException $e) {
@@ -116,6 +149,8 @@ class ExpensesController extends Controller
 
     public function cancel(Request $request, Expense $expense): RedirectResponse
     {
+        $this->authorizeScope($request, $expense);
+
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
 
         $this->expenses->cancel($expense, $data['reason'] ?? null, $request->user()?->id);
@@ -123,8 +158,10 @@ class ExpensesController extends Controller
         return back()->with('success', 'تم إلغاء المصروف وعكس قيده');
     }
 
-    public function destroy(Expense $expense): RedirectResponse
+    public function destroy(Request $request, Expense $expense): RedirectResponse
     {
+        $this->authorizeScope($request, $expense);
+
         if ($expense->isPosted()) {
             return back()->with('warning', 'المصروف المرحَّل لا يُحذف — ألغِه ليُعكس قيده.');
         }
@@ -183,9 +220,10 @@ class ExpensesController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $filters = $this->filters($request);
+        $user = $request->user();
         $filename = 'expenses-'.now()->format('Y-m-d-His').'.csv';
 
-        return response()->streamDownload(function () use ($filters) {
+        return response()->streamDownload(function () use ($filters, $user) {
             $out = fopen('php://output', 'w');
 
             // BOM حتى يفتح إكسل العربية بترميزها الصحيح بدل رموز مبهمة.
@@ -193,7 +231,7 @@ class ExpensesController extends Controller
 
             fputcsv($out, ['رقم المصروف', 'التاريخ', 'النوع', 'الوحدة', 'المورّد', 'الوصف', 'طريقة الدفع', 'الخزينة', 'المبلغ', 'الحالة']);
 
-            $this->filtered($filters)
+            $this->filtered($filters, $user)
                 ->with(['category:id,name', 'costCenter:id,name', 'treasury:id,name', 'supplier:id,name', 'paymentMethod:id,name'])
                 ->orderByDesc('expense_date')
                 ->chunk(500, function ($chunk) use ($out) {
@@ -218,10 +256,13 @@ class ExpensesController extends Controller
     }
 
     /**
+     * @param  string|null  $activity  an activity the screen is pinned to, which no filter widens
      * @return array<string, mixed>
      */
-    private function filters(Request $request): array
+    private function filters(Request $request, ?string $activity = null): array
     {
+        $requested = $request->string('activity')->toString();
+
         return [
             'from' => $request->date('from')?->toDateString() ?? now()->startOfMonth()->toDateString(),
             'to' => $request->date('to')?->toDateString() ?? now()->toDateString(),
@@ -229,6 +270,8 @@ class ExpensesController extends Controller
             'cost_center_id' => $request->integer('cost_center_id') ?: null,
             'status' => $request->string('status')->toString() ?: null,
             'search' => $request->string('search')->toString() ?: null,
+            // Read from the query too, so the export carries the pinned register.
+            'activity' => $activity ?? (ActivitySegment::isActivity($requested) ? $requested : null),
         ];
     }
 
@@ -236,9 +279,14 @@ class ExpensesController extends Controller
      * @param  array<string, mixed>  $filters
      * @return Builder<Expense>
      */
-    private function filtered(array $filters): Builder
+    private function filtered(array $filters, ?User $user): Builder
     {
         return Expense::query()
+            ->visibleTo($user)
+            ->when(
+                $filters['activity'] ?? null,
+                fn ($q, string $activity) => $q->whereIn('cost_center_id', $this->segments->centerIds($activity)),
+            )
             ->between($filters['from'] ?? null, $filters['to'] ?? null)
             ->when($filters['expense_category_id'] ?? null, fn ($q, $id) => $q->where('expense_category_id', $id))
             ->when($filters['cost_center_id'] ?? null, fn ($q, $id) => $q->where('cost_center_id', $id))
@@ -281,16 +329,21 @@ class ExpensesController extends Controller
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
-    private function stats(array $filters): array
+    private function stats(array $filters, ?User $user): array
     {
-        $posted = (clone $this->filtered($filters))->posted();
+        $posted = (clone $this->filtered($filters, $user))->posted();
 
         return [
             // المرحَّل وحده مصروفٌ فعلي: المسوّدة نيّة، والملغى رُدَّ.
             'total' => round((float) (clone $posted)->sum('amount'), 2),
             'count' => (clone $posted)->count(),
-            'drafts' => (clone $this->filtered($filters))->where('status', 'draft')->count(),
-            'month' => round((float) Expense::query()
+            'drafts' => (clone $this->filtered($filters, $user))->where('status', 'draft')->count(),
+            // The month ignores the dates but not the scope, or the tile would
+            // report the whole business to an employee of one activity.
+            'month' => round((float) $this->filtered(
+                ['activity' => $filters['activity'] ?? null],
+                $user,
+            )
                 ->posted()
                 ->whereDate('expense_date', '>=', now()->startOfMonth()->toDateString())
                 ->sum('amount'), 2),
@@ -303,9 +356,9 @@ class ExpensesController extends Controller
      * @param  array<string, mixed>  $filters
      * @return list<array<string, mixed>>
      */
-    private function byCategory(array $filters): array
+    private function byCategory(array $filters, ?User $user): array
     {
-        $rows = (clone $this->filtered($filters))
+        $rows = (clone $this->filtered($filters, $user))
             ->posted()
             ->with('category:id,name')
             ->get(['expense_category_id', 'amount'])
@@ -321,6 +374,31 @@ class ExpensesController extends Controller
                 'share' => $total > 0 ? round((float) $group->sum('amount') / $total * 100, 1) : 0.0,
             ])
             ->sortByDesc('amount')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The centres the form may offer: the user's own, narrowed further to the
+     * pinned activity. A centre absent here cannot be spent on either.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function costCenters(?User $user, ?string $activity): array
+    {
+        $allowed = $user?->accessibleCostCenterIds();
+
+        return CostCenter::with(['unit:id,name', 'section:id,name,unit_id', 'section.unit:id,name', 'department:id,name'])
+            ->where('is_active', true)
+            ->when($allowed !== null, fn ($q) => $q->whereIn('id', $allowed ?? []))
+            ->when($activity, fn ($q, string $a) => $q->whereIn('id', $this->segments->centerIds($a)))
+            ->get()
+            ->map(fn (CostCenter $c) => [
+                'id' => $c->id,
+                'name' => $this->segments->nameOf($c) ?? $c->name,
+                'segment' => $this->segments->of($c->id),
+            ])
+            ->sortBy('name')
             ->values()
             ->all();
     }
@@ -358,7 +436,7 @@ class ExpensesController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01'],
             'expense_category_id' => ['required', Rule::exists('expense_categories', 'id')->whereNull('deleted_at')],
             'treasury_id' => ['required', 'exists:treasuries,id'],
-            'cost_center_id' => ['nullable', 'exists:cost_centers,id'],
+            'cost_center_id' => $this->costCenterRules($request),
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
             'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')->where('is_active', true)],
             'reference' => ['nullable', 'string', 'max:100'],
@@ -367,7 +445,50 @@ class ExpensesController extends Controller
         ], [
             'expense_category_id.required' => 'اختر نوع المصروف.',
             'expense_category_id.exists' => 'نوع المصروف غير موجود.',
+            'cost_center_id.required' => 'اختر الوحدة التي حُمِّل عليها المصروف.',
+            'cost_center_id.in' => 'هذه الوحدة خارج نطاق عملك.',
         ]);
+    }
+
+    /**
+     * A scoped user charges the expense to one of their own centres and may
+     * not leave it blank — an unattributed one escapes every register.
+     *
+     * @return list<mixed>
+     */
+    private function costCenterRules(Request $request): array
+    {
+        $allowed = $request->user()?->accessibleCostCenterIds();
+
+        return $allowed === null
+            ? ['nullable', 'exists:cost_centers,id']
+            : ['required', Rule::in($allowed)];
+    }
+
+    /**
+     * A type may carry no default centre, but a scoped user may not point one
+     * at an activity they do not work in.
+     *
+     * @return list<mixed>
+     */
+    private function categoryCenterRules(Request $request): array
+    {
+        $allowed = $request->user()?->accessibleCostCenterIds();
+
+        return $allowed === null
+            ? ['nullable', 'exists:cost_centers,id']
+            : ['nullable', Rule::in($allowed)];
+    }
+
+    /**
+     * The list hides what is outside the user's units, and an id in the URL
+     * must not be the way round that.
+     */
+    private function authorizeScope(Request $request, Expense $expense): void
+    {
+        if (! $request->user()?->canSpendOn($expense->cost_center_id)) {
+            abort(403, 'هذا المصروف خارج نطاق وحداتك.');
+        }
     }
 
     /**
@@ -381,11 +502,13 @@ class ExpensesController extends Controller
             'description' => ['nullable', 'string', 'max:255'],
             // الحساب لا بدّ منه: نوعٌ بلا حساب مصروفٌ لا يصل إلى الدفاتر.
             'account_id' => ['required', Rule::exists('accounts', 'id')->where('type', 'expense')],
-            'cost_center_id' => ['nullable', 'exists:cost_centers,id'],
+            // The type's default centre is a centre to be spent on like any other.
+            'cost_center_id' => $this->categoryCenterRules($request),
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['boolean'],
         ], [
             'account_id.exists' => 'الحساب المحاسبي يجب أن يكون من حسابات المصروفات.',
+            'cost_center_id.in' => 'هذه الوحدة خارج نطاق عملك.',
         ]);
     }
 }

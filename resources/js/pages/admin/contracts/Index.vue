@@ -25,9 +25,12 @@ interface QuotationOption {
 
 const props = defineProps<{
     contracts: { data: Contract[]; links: { url: string | null; label: string; active: boolean }[] };
-    // 'all' is the contracts section's own register; 'quotation' is the same
-    // screen opened from the pools menu, narrowed to that activity's contracts.
-    scope: 'all' | 'quotation';
+    // 'all' is the contracts section's own register; 'quotation' and 'chalet'
+    // are the same screen opened from the pools and chalets menus, each
+    // narrowed to that activity's contracts.
+    scope: 'all' | 'quotation' | 'chalet';
+    /** Whoever the register's contracts are drawn under — the pools' own here. */
+    letterhead: { business_name: string; logo_url: string | null; phone: string | null };
     filters: Record<string, string | null>;
     statuses: { key: string; label: string }[];
     // takes_deposit: the pools' own forms, the only sheets that carry a
@@ -44,15 +47,32 @@ const props = defineProps<{
 const { can } = usePermissions();
 
 const poolsOnly = computed(() => props.scope === 'quotation');
+const chaletsOnly = computed(() => props.scope === 'chalet');
 
 // Filtering and paging must stay inside the register the employee opened —
-// posting them to /admin/contracts would quietly widen a pools screen into
-// every hall and chalet rental in the business.
-const basePath = computed(() => (poolsOnly.value ? '/admin/pools/contracts' : '/admin/contracts'));
+// posting them to /admin/contracts would quietly widen an activity's screen
+// into every hall and chalet rental and pool job in the business.
+const basePath = computed(() => (poolsOnly.value ? '/admin/pools/contracts' : chaletsOnly.value ? '/admin/chalets/contracts' : '/admin/contracts'));
+
+// The register's own name and blurb — the section it was opened from.
+const heading = computed(() => (poolsOnly.value ? 'عقود المسابح — بيع وصيانة' : chaletsOnly.value ? 'عقود الشاليهات' : 'العقود'));
+
+const blurb = computed(() =>
+    poolsOnly.value
+        ? 'تحرير العقد من عرض السعر المعتمد وإرساله على واتساب العميل'
+        : chaletsOnly.value
+          ? 'توليد عقد الإيجار من حجز الشاليه أو تحريره على العميل مباشرة وإرساله على واتسابه'
+          : 'توليد العقد من الحجز أو من عرض السعر وإرساله على واتساب العميل',
+);
+
+const emptyText = computed(() =>
+    poolsOnly.value ? 'لا عقود على عروض أسعار المسابح بعد' : chaletsOnly.value ? 'لا عقود على الشاليهات بعد' : 'لا عقود',
+);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
     ...(poolsOnly.value ? [{ title: 'المسابح — بيع وصيانة', href: '/admin/pos' }] : []),
+    ...(chaletsOnly.value ? [{ title: 'الشاليهات', href: '/admin/bookings/chalets' }] : []),
     { title: 'العقود', href: basePath.value },
 ]);
 
@@ -68,11 +88,13 @@ const showModal = ref(false);
 type Source = 'booking' | 'quotation' | 'client';
 const source = ref<Source>('booking');
 
-const sourceLabels: Record<Source, string> = {
+// The sheet written on the client alone is named by what it lacks, and that
+// differs by register: a chalet is let on a booking, a pool job on a quotation.
+const sourceLabels = computed<Record<Source, string>>(() => ({
     booking: 'من حجز',
     quotation: 'من عرض سعر',
-    client: 'بلا عرض سعر',
-};
+    client: chaletsOnly.value ? 'بلا حجز' : 'بلا عرض سعر',
+}));
 
 const form = useForm({
     booking_id: null as number | null,
@@ -94,9 +116,10 @@ const takesDeposit = computed(
 );
 
 // The pools register never draws from a booking — that contract would not
-// appear in the very screen that created it.
+// appear in the very screen that created it. Nor does the chalets' draw from a
+// quotation, for the same reason.
 const sources = computed<Source[]>(() =>
-    poolsOnly.value ? ['quotation', 'client'] : ['booking', 'quotation', 'client'],
+    poolsOnly.value ? ['quotation', 'client'] : chaletsOnly.value ? ['booking', 'client'] : ['booking', 'quotation', 'client'],
 );
 
 const openCreate = () => {
@@ -110,6 +133,8 @@ const openCreate = () => {
     // employee does not land on an empty list and think the screen is broken.
     if (poolsOnly.value) {
         source.value = props.quotations.length ? 'quotation' : 'client';
+    } else if (chaletsOnly.value) {
+        source.value = props.bookings.length ? 'booking' : 'client';
     } else {
         source.value = !props.bookings.length && props.quotations.length ? 'quotation' : 'booking';
     }
@@ -184,20 +209,24 @@ const statusClass = (s: string) =>
 </script>
 
 <template>
-    <Head :title="poolsOnly ? 'عقود المسابح' : 'العقود'" />
+    <Head :title="poolsOnly ? 'عقود المسابح' : chaletsOnly ? 'عقود الشاليهات' : 'العقود'" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-full space-y-4 bg-slate-100 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900">{{ poolsOnly ? 'عقود المسابح — بيع وصيانة' : 'العقود' }}</h1>
-                    <p class="mt-1 text-sm font-medium text-slate-600">
-                        {{
-                            poolsOnly
-                                ? 'تحرير العقد من عرض السعر المعتمد وإرساله على واتساب العميل'
-                                : 'توليد العقد من الحجز أو من عرض السعر وإرساله على واتساب العميل'
-                        }}
-                    </p>
+                <!-- The register is headed by the business its contracts are drawn and printed under. -->
+                <div class="flex items-center gap-3">
+                    <span v-if="letterhead.logo_url" class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-900 p-1.5 ring-1 ring-inset ring-slate-800">
+                        <img :src="letterhead.logo_url" :alt="letterhead.business_name" class="h-full w-full object-contain" />
+                    </span>
+                    <div>
+                        <p class="text-xs font-extrabold text-slate-500">
+                            {{ letterhead.business_name }}
+                            <span v-if="letterhead.phone" dir="ltr" class="text-slate-400">— {{ letterhead.phone }}</span>
+                        </p>
+                        <h1 class="text-2xl font-extrabold text-slate-900">{{ heading }}</h1>
+                        <p class="mt-1 text-sm font-medium text-slate-600">{{ blurb }}</p>
+                    </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- اختصارات شاشات العقود — تُشتق من القائمة فلا تحتاج صيانة -->
@@ -316,9 +345,7 @@ const statusClass = (s: string) =>
                                 </td>
                             </tr>
                             <tr v-if="!contracts.data.length">
-                                <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">
-                                    {{ poolsOnly ? 'لا عقود على عروض أسعار المسابح بعد' : 'لا عقود' }}
-                                </td>
+                                <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">{{ emptyText }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -337,7 +364,7 @@ const statusClass = (s: string) =>
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                     <h2 class="text-lg font-extrabold text-slate-900">
                         <template v-if="source === 'quotation'">تحرير عقد من عرض سعر</template>
-                        <template v-else-if="source === 'client'">تحرير عقد بلا عرض سعر</template>
+                        <template v-else-if="source === 'client'">تحرير عقد {{ sourceLabels.client }}</template>
                         <template v-else>توليد عقد من حجز</template>
                     </h2>
                     <button type="button" @click="showModal = false" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
@@ -398,7 +425,11 @@ const statusClass = (s: string) =>
                             />
                             <p v-if="form.errors.total_amount" class="mt-1 text-xs text-red-500">{{ form.errors.total_amount }}</p>
                             <p class="mt-1 text-xs font-medium text-slate-500">
-                                لا بنود لهذا العقد — جدول المعدات يُملأ بخط اليد، والدفعتان تُحسبان من القيمة إن كُتبت.
+                                {{
+                                    chaletsOnly
+                                        ? 'بيانات الشاليه والمدة تُكتب على الورقة أو من شاشة تعديل العقد، ويُقبض العربون مع تحريره.'
+                                        : 'لا بنود لهذا العقد — جدول المعدات يُملأ بخط اليد، والدفعتان تُحسبان من القيمة إن كُتبت.'
+                                }}
                             </p>
                         </div>
                     </template>

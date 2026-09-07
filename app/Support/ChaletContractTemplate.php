@@ -13,6 +13,12 @@ class ChaletContractTemplate
     /** Template name — the matching key in the database, never changed. */
     public const NAME = 'نموذج عقد الشاليهات';
 
+    /**
+     * The layout this sheet is printed on, frozen onto the contract when it is
+     * drawn — see PoolInstallationContractTemplate::FORM.
+     */
+    public const FORM = 'chalet_rental';
+
     public const DESCRIPTION = 'نموذج عقد إيجار الشاليه اليومي — البيانات والشروط والأحكام';
 
     public const BODY = <<<'TXT'

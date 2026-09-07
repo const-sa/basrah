@@ -93,6 +93,18 @@ class StaffAccessControlTest extends TestCase
         $this->assertSame(0, $user->fresh()->units()->count());
     }
 
+    public function test_the_scope_toggle_is_reached_when_the_host_mangles_patch(): void
+    {
+        $user = User::factory()->create(['is_active' => true, 'has_all_units' => false]);
+
+        // Shared hosting swallows PATCH, so the browser posts and names the verb in a header.
+        $this->actingAs($this->owner)
+            ->post("/admin/employees/{$user->id}/scope", [], ['X-HTTP-METHOD-OVERRIDE' => 'PATCH'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue($user->fresh()->has_all_units);
+    }
+
     public function test_a_user_can_be_linked_to_one_employee_file_only(): void
     {
         $employee = Employee::create(['name' => 'سالم', 'basic_salary' => 3000, 'is_active' => true]);

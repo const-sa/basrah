@@ -173,7 +173,7 @@ class ContractService
             'contract_date_hijri' => Hijri::short($contractDate) ?: '—',
             // The name the sheet is signed under is the one the owner sets in
             // the settings — APP_NAME names the deployment, not the shop.
-            'org_name' => (string) ($settings->business_name ?: config('app.name')),
+            'org_name' => $this->orgNameFor($settings, $template),
             'client_name' => (string) $client->name,
             'client_mobile' => (string) ($client->mobile ?: '—'),
             'client_id_number' => (string) ($client->national_id ?: $client->tax_number ?: '—'),
@@ -257,7 +257,7 @@ class ContractService
             'contract_date_hijri' => Hijri::short(now()->toDateString()) ?: '—',
             // The name the sheet is signed under is the one the owner sets in
             // the settings — APP_NAME names the deployment, not the shop.
-            'org_name' => (string) ($settings->business_name ?: config('app.name')),
+            'org_name' => $this->orgNameFor($settings, $template),
             'client_name' => (string) ($quotation->client?->name ?? '—'),
             'client_mobile' => (string) ($quotation->client?->mobile ?? '—'),
             'client_id_number' => (string) ($quotation->client?->national_id ?: $quotation->client?->tax_number ?: '—'),
@@ -351,22 +351,41 @@ class ContractService
             PoolInstallationContractTemplate::NAME => PoolInstallationContractTemplate::FORM,
             PoolMaintenanceContractTemplate::NAME => PoolMaintenanceContractTemplate::FORM,
             HallRentalContractTemplate::NAME => HallRentalContractTemplate::FORM,
+            ChaletContractTemplate::NAME => ChaletContractTemplate::FORM,
             default => null,
         };
     }
 
+    /** Is this template one of the pools' own two forms? */
+    public static function printsOnPoolsForm(?ContractTemplate $template): bool
+    {
+        return in_array(self::formFor($template), [
+            PoolInstallationContractTemplate::FORM,
+            PoolMaintenanceContractTemplate::FORM,
+        ], true);
+    }
+
     /**
-     * Does a contract drawn on this template carry its own receipt book?
-     *
-     * Only the pools' two forms do. Everything else is either drawn from a
-     * booking, whose payment ledger already holds its عربون, or is a plain
-     * sheet whose figures are written on the paper.
+     * The name a sheet is signed under — the pools activity's own where it is
+     * printed on their form, and the business's everywhere else.
+     */
+    private function orgNameFor(Setting $settings, ?ContractTemplate $template): string
+    {
+        return self::printsOnPoolsForm($template)
+            ? $settings->poolsLetterhead()['name']
+            : (string) ($settings->business_name ?: config('app.name'));
+    }
+
+    /**
+     * The forms whose contracts carry their own receipt book — the pools' two
+     * and the chalet sheet, and only without a booking. See Contract::takesReceipts().
      */
     public static function takesDeposit(?ContractTemplate $template): bool
     {
         return in_array(self::formFor($template), [
             PoolInstallationContractTemplate::FORM,
             PoolMaintenanceContractTemplate::FORM,
+            ChaletContractTemplate::FORM,
         ], true);
     }
 
@@ -593,6 +612,9 @@ class ContractService
             // the installation form must retitle it and print it on that form's
             // layout. The priced snapshot underneath is left untouched.
             $data['form'] = self::formFor($template);
+            // The letterhead is re-read too: a draft drawn before its activity
+            // was named should adopt that name, and only a draft gets here.
+            $data['org_name'] = $this->orgNameFor(Setting::current(), $template);
             // Moving back off the form retitles it by the activity again, so a
             // draft does not keep a heading its template no longer prints.
             $data['subject'] = $this->subjectFor(
