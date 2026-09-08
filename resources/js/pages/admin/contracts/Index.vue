@@ -25,10 +25,9 @@ interface QuotationOption {
 
 const props = defineProps<{
     contracts: { data: Contract[]; links: { url: string | null; label: string; active: boolean }[] };
-    // 'all' is the contracts section's own register; 'quotation' and 'chalet'
-    // are the same screen opened from the pools and chalets menus, each
-    // narrowed to that activity's contracts.
-    scope: 'all' | 'quotation' | 'chalet';
+    // 'all' is the contracts section's own register; the rest are the same
+    // screen opened from an activity's menu, narrowed to its own contracts.
+    scope: 'all' | 'quotation' | 'chalet' | 'hall';
     /** Whoever the register's contracts are drawn under — the pools' own here. */
     letterhead: { business_name: string; logo_url: string | null; phone: string | null };
     filters: Record<string, string | null>;
@@ -48,31 +47,51 @@ const { can } = usePermissions();
 
 const poolsOnly = computed(() => props.scope === 'quotation');
 const chaletsOnly = computed(() => props.scope === 'chalet');
+const hallsOnly = computed(() => props.scope === 'hall');
 
 // Filtering and paging must stay inside the register the employee opened —
 // posting them to /admin/contracts would quietly widen an activity's screen
 // into every hall and chalet rental and pool job in the business.
-const basePath = computed(() => (poolsOnly.value ? '/admin/pools/contracts' : chaletsOnly.value ? '/admin/chalets/contracts' : '/admin/contracts'));
+const basePath = computed(() =>
+    poolsOnly.value
+        ? '/admin/pools/contracts'
+        : chaletsOnly.value
+          ? '/admin/chalets/contracts'
+          : hallsOnly.value
+            ? '/admin/halls/contracts'
+            : '/admin/contracts',
+);
 
 // The register's own name and blurb — the section it was opened from.
-const heading = computed(() => (poolsOnly.value ? 'عقود المسابح — بيع وصيانة' : chaletsOnly.value ? 'عقود الشاليهات' : 'العقود'));
+const heading = computed(() =>
+    poolsOnly.value ? 'عقود المسابح — بيع وصيانة' : chaletsOnly.value ? 'عقود الشاليهات' : hallsOnly.value ? 'عقود القاعات' : 'العقود',
+);
 
 const blurb = computed(() =>
     poolsOnly.value
         ? 'تحرير العقد من عرض السعر المعتمد وإرساله على واتساب العميل'
         : chaletsOnly.value
           ? 'توليد عقد الإيجار من حجز الشاليه أو تحريره على العميل مباشرة وإرساله على واتسابه'
-          : 'توليد العقد من الحجز أو من عرض السعر وإرساله على واتساب العميل',
+          : hallsOnly.value
+            ? 'عقد إيجار القاعة وقائمة خدمات المناسبة — يُولَّدان من الحجز ويُرسلان على واتساب العميل'
+            : 'توليد العقد من الحجز أو من عرض السعر وإرساله على واتساب العميل',
 );
 
 const emptyText = computed(() =>
-    poolsOnly.value ? 'لا عقود على عروض أسعار المسابح بعد' : chaletsOnly.value ? 'لا عقود على الشاليهات بعد' : 'لا عقود',
+    poolsOnly.value
+        ? 'لا عقود على عروض أسعار المسابح بعد'
+        : chaletsOnly.value
+          ? 'لا عقود على الشاليهات بعد'
+          : hallsOnly.value
+            ? 'لا عقود على القاعات بعد'
+            : 'لا عقود',
 );
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'لوحة التحكم', href: '/admin' },
     ...(poolsOnly.value ? [{ title: 'المسابح — بيع وصيانة', href: '/admin/pos' }] : []),
     ...(chaletsOnly.value ? [{ title: 'الشاليهات', href: '/admin/bookings/chalets' }] : []),
+    ...(hallsOnly.value ? [{ title: 'القاعات', href: '/admin/bookings/halls' }] : []),
     { title: 'العقود', href: basePath.value },
 ]);
 
@@ -93,7 +112,7 @@ const source = ref<Source>('booking');
 const sourceLabels = computed<Record<Source, string>>(() => ({
     booking: 'من حجز',
     quotation: 'من عرض سعر',
-    client: chaletsOnly.value ? 'بلا حجز' : 'بلا عرض سعر',
+    client: chaletsOnly.value || hallsOnly.value ? 'بلا حجز' : 'بلا عرض سعر',
 }));
 
 const form = useForm({
@@ -119,7 +138,7 @@ const takesDeposit = computed(
 // appear in the very screen that created it. Nor does the chalets' draw from a
 // quotation, for the same reason.
 const sources = computed<Source[]>(() =>
-    poolsOnly.value ? ['quotation', 'client'] : chaletsOnly.value ? ['booking', 'client'] : ['booking', 'quotation', 'client'],
+    poolsOnly.value ? ['quotation', 'client'] : chaletsOnly.value || hallsOnly.value ? ['booking', 'client'] : ['booking', 'quotation', 'client'],
 );
 
 const openCreate = () => {
@@ -133,7 +152,7 @@ const openCreate = () => {
     // employee does not land on an empty list and think the screen is broken.
     if (poolsOnly.value) {
         source.value = props.quotations.length ? 'quotation' : 'client';
-    } else if (chaletsOnly.value) {
+    } else if (chaletsOnly.value || hallsOnly.value) {
         source.value = props.bookings.length ? 'booking' : 'client';
     } else {
         source.value = !props.bookings.length && props.quotations.length ? 'quotation' : 'booking';
@@ -209,7 +228,7 @@ const statusClass = (s: string) =>
 </script>
 
 <template>
-    <Head :title="poolsOnly ? 'عقود المسابح' : chaletsOnly ? 'عقود الشاليهات' : 'العقود'" />
+    <Head :title="heading" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-full space-y-4 bg-slate-100 p-5">
@@ -426,8 +445,8 @@ const statusClass = (s: string) =>
                             <p v-if="form.errors.total_amount" class="mt-1 text-xs text-red-500">{{ form.errors.total_amount }}</p>
                             <p class="mt-1 text-xs font-medium text-slate-500">
                                 {{
-                                    chaletsOnly
-                                        ? 'بيانات الشاليه والمدة تُكتب على الورقة أو من شاشة تعديل العقد، ويُقبض العربون مع تحريره.'
+                                    chaletsOnly || hallsOnly
+                                        ? 'بيانات الحجز والمدة تُكتب على الورقة أو من شاشة تعديل العقد، ويُقبض العربون مع تحريره.'
                                         : 'لا بنود لهذا العقد — جدول المعدات يُملأ بخط اليد، والدفعتان تُحسبان من القيمة إن كُتبت.'
                                 }}
                             </p>

@@ -393,6 +393,7 @@ class ContractService
             PoolInstallationContractTemplate::FORM,
             PoolMaintenanceContractTemplate::FORM,
             ChaletContractTemplate::FORM,
+            HallServicesContractTemplate::FORM,
         ], true);
     }
 
@@ -461,6 +462,13 @@ class ContractService
 
         if (array_key_exists('items', $changes)) {
             $data['items'] = $this->editedLines((array) $changes['items']);
+        }
+
+        // The services sheet does its own arithmetic: a line is its price by
+        // its count, the sheet's value is what the lines add up to, and what
+        // is left is that less the receipts written on it.
+        if ($contract->isHallServicesForm()) {
+            $data = [...$data, ...$this->servicesArithmetic($contract, $data)];
         }
 
         $template = $contract->template;
@@ -772,6 +780,39 @@ class ContractService
         return [
             'items' => HallServicesContractTemplate::lines(),
             ...$this->valueFields(null),
+        ];
+    }
+
+    /**
+     * The services sheet's own sums: each line priced by its count, the total
+     * they come to, and the paid and remaining boxes its receipts answer for.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function servicesArithmetic(Contract $contract, array $data): array
+    {
+        $lines = collect($data['items'] ?? [])->map(function (array $line) {
+            $price = $this->amountOf($line['unit_price'] ?? null);
+            $count = $this->amountOf(is_scalar($line['quantity'] ?? null) ? (string) $line['quantity'] : null);
+
+            // A line priced in words — «حسب الاتفاق» — is left as it was written.
+            return $price !== null && $count !== null
+                ? [...$line, 'total_price' => number_format($price * $count, 2)]
+                : $line;
+        })->all();
+
+        $priced = collect($lines)->map(fn (array $line) => $this->amountOf($line['total_price'] ?? null))->filter(fn (?float $v) => $v !== null);
+        $total = $priced->isEmpty() ? $this->amountOf($data['total_amount'] ?? null) : round((float) $priced->sum(), 2);
+        $paid = $contract->paidAmount();
+
+        return [
+            'items' => $lines,
+            'total_amount' => $total === null ? '—' : number_format($total, 2),
+            'total_amount_words' => $total === null ? '—' : Tafqeet::money($total),
+            'subtotal' => $total === null ? '—' : number_format($total, 2),
+            'deposit_amount' => number_format($paid, 2),
+            'remaining_amount' => $total === null ? '—' : number_format(max(0, $total - $paid), 2),
         ];
     }
 

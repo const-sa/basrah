@@ -42,10 +42,10 @@
     .boxes td { vertical-align: middle; font-size: 10pt; font-weight: bold; }
     .tick { border: 0.8pt solid #16215b; padding: 2pt 8pt; text-align: center; }
 
-    .grid { margin-top: 6pt; border: 0.8pt solid #16215b; }
-    .grid th { border: 0.5pt solid #16215b; background: #eef2fb; padding: 3pt; font-size: 9pt; font-weight: bold; text-align: center; }
-    .grid td { border: 0.5pt solid #16215b; padding: 2.5pt 4pt; font-size: 9pt; }
-    .grid td.c { text-align: center; }
+    .svcgrid { margin-top: 6pt; border: 0.8pt solid #16215b; }
+    .svcgrid th { border: 0.5pt solid #16215b; background: #eef2fb; padding: 3pt; font-size: 9pt; font-weight: bold; text-align: center; }
+    .svcgrid td { border: 0.5pt solid #16215b; padding: 2.5pt 4pt; font-size: 9pt; }
+    .svcgrid td.c { text-align: center; }
 
     .totals { border: 0.8pt solid #16215b; border-top: 0; }
     .totals td { border: 0.5pt solid #16215b; padding: 3pt 5pt; font-size: 9.5pt; text-align: center; }
@@ -122,7 +122,7 @@
     </tr>
 </table>
 
-<table class="grid">
+<table class="svcgrid">
     <thead>
         <tr>
             <th style="width: 6%;">م</th>

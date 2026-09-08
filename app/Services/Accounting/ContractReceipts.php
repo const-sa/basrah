@@ -121,20 +121,27 @@ class ContractReceipts
     }
 
     /**
-     * The contract's cost centre — its quotation's department, else the one
-     * the form it is printed on belongs to: the pools' or the venues'.
+     * The contract's cost centre — its quotation's department, the unit its
+     * booking earns on, else the activity whose form it is printed on.
      */
     public function costCenterFor(Contract $contract): int
     {
-        $contract->loadMissing('quotation.department');
+        $contract->loadMissing(['quotation.department', 'booking.unit']);
 
         if ($department = $contract->quotation?->department) {
             return CostCenter::forDepartment($department)->id;
         }
 
+        // A services list earns where its hall does, as the rental payments do.
+        if ($unit = $contract->booking?->unit) {
+            return CostCenter::forUnit($unit)->id;
+        }
+
         $code = match (true) {
             $contract->isPoolsForm() => 'POOLS',
-            $contract->isChaletRentalForm() => 'VENUES',
+            $contract->isChaletRentalForm(),
+            $contract->isHallRentalForm(),
+            $contract->isHallServicesForm() => 'VENUES',
             default => null,
         };
 

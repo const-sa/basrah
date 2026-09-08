@@ -168,12 +168,15 @@ class Contract extends Model
     }
 
     /**
-     * Does the contract carry its own receipt ledger? Only a sheet with no
-     * booking behind it — anything else takes its deposit on the booking.
+     * Does the contract carry its own receipt ledger? A sheet with no booking
+     * behind it does — anything else takes its deposit on the booking. The
+     * services list does too: what is paid for them is not the rental.
      */
     public function takesReceipts(): bool
     {
-        return $this->isPoolsForm() || ($this->isChaletRentalForm() && $this->booking_id === null);
+        return $this->isPoolsForm()
+            || $this->isHallServicesForm()
+            || ($this->isChaletRentalForm() && $this->booking_id === null);
     }
 
     /**

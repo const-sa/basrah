@@ -85,6 +85,52 @@ const lines = computed(() => (props.editable ? items.value : props.contract.item
 const rows = computed(() =>
     Array.from({ length: Math.max(lines.value.length, MIN_ROWS) }, (_, i) => lines.value[i] ?? null),
 );
+
+// A printed figure read back as a number — «1,200.00» is not one as it stands.
+const amount = (value: number | string | null | undefined) => {
+    const clean = String(value ?? '').replace(/,/g, '').trim();
+
+    return clean !== '' && Number.isFinite(Number(clean)) ? Number(clean) : null;
+};
+
+const money = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// The sheet does its own arithmetic: a line is its price by its count, and the
+// total is what the lines add up to. A price written in words is left alone.
+const lineTotal = (line: Line | null) => {
+    const price = amount(line?.unit_price);
+    const count = amount(line?.quantity);
+
+    return price !== null && count !== null ? money(price * count) : line?.total_price || '';
+};
+
+watch(
+    items,
+    (rows) => rows.forEach((line) => (line.total_price = lineTotal(line))),
+    { deep: true },
+);
+
+const total = computed(() => {
+    const sum = lines.value.reduce((carried, line) => carried + (amount(lineTotal(line)) ?? 0), 0);
+
+    return sum > 0 ? money(sum) : null;
+});
+
+// What the sheet prints: the sum while it is being filled in, and what it was
+// saved at afterwards.
+const totalShown = computed(() => (props.editable ? total.value : props.contract.total_amount));
+
+// Paid and remaining are the receipt book's answer, not runs to write in, and
+// the remaining follows the total as it is priced.
+const paid = computed(() => amount(props.contract.deposit_amount) ?? 0);
+
+const remaining = computed(() => {
+    if (!props.editable) return props.contract.remaining_amount;
+
+    const value = amount(total.value);
+
+    return value === null ? null : money(Math.max(0, value - paid.value));
+});
 </script>
 
 <template>
@@ -179,38 +225,49 @@ const rows = computed(() =>
         </table>
 
         <!-- The services as the pad rules them: the printed list first, then the
-             empty runs for whatever else was agreed. -->
-        <table class="grid print-keep">
+             empty runs for whatever else was agreed. Not «grid» as a class name:
+             that is a Tailwind utility, and display:grid drops a table's columns. -->
+        <table class="svcgrid print-keep">
+            <colgroup>
+                <col style="width: 6%" />
+                <col style="width: 34%" />
+                <col style="width: 14%" />
+                <col style="width: 9%" />
+                <col style="width: 15%" />
+                <col style="width: 22%" />
+            </colgroup>
             <thead>
                 <tr>
-                    <th style="width: 6%">م</th>
-                    <th style="width: 33%">الطلـب</th>
-                    <th style="width: 14%">السعر الفردي</th>
-                    <th style="width: 9%">العدد</th>
-                    <th style="width: 15%">السعر الإجمالي</th>
-                    <th style="width: 23%">ملاحظات</th>
+                    <th>م</th>
+                    <th>الطلـب</th>
+                    <th>السعر الفردي</th>
+                    <th>العدد</th>
+                    <th>السعر الإجمالي</th>
+                    <th>ملاحظات</th>
                 </tr>
             </thead>
             <tbody>
                 <tr v-for="(row, i) in rows" :key="i">
-                    <td class="c">{{ i + 1 }}</td>
+                    <td class="c seq">{{ i + 1 }}</td>
                     <!-- While editing, every cell is typed into directly, the empty
                          rows included — that is how the pad is filled. -->
                     <td>
-                        <input v-if="editable" v-model="items[i].name" class="fillin" />
+                        <!-- A printed service is longer than its cell, so the whole
+                             of it is readable without scrolling the input. -->
+                        <input v-if="editable" v-model="items[i].name" :title="items[i].name" class="fillin" />
                         <template v-else>{{ fill(row?.name) }}</template>
                     </td>
-                    <td class="c" dir="ltr">
-                        <input v-if="editable" v-model="items[i].unit_price" class="fillin center" dir="ltr" />
+                    <td class="c num" dir="ltr">
+                        <input v-if="editable" v-model="items[i].unit_price" class="fillin center" dir="ltr" inputmode="decimal" />
                         <template v-else>{{ fill(row?.unit_price) }}</template>
                     </td>
-                    <td class="c" dir="ltr">
-                        <input v-if="editable" v-model="items[i].quantity" class="fillin center" dir="ltr" />
+                    <td class="c num" dir="ltr">
+                        <input v-if="editable" v-model="items[i].quantity" class="fillin center" dir="ltr" inputmode="decimal" />
                         <template v-else>{{ qty(row?.quantity) }}</template>
                     </td>
-                    <td class="c" dir="ltr">
-                        <input v-if="editable" v-model="items[i].total_price" class="fillin center bold" dir="ltr" />
-                        <b v-else dir="ltr">{{ fill(row?.total_price) }}</b>
+                    <!-- Priced by the sheet, not by hand: price by count. -->
+                    <td class="c num sum" dir="ltr">
+                        <b dir="ltr">{{ fill(editable ? lineTotal(row) : row?.total_price) }}</b>
                     </td>
                     <td>
                         <input v-if="editable" v-model="items[i].notes" class="fillin" />
@@ -220,28 +277,35 @@ const rows = computed(() =>
             </tbody>
         </table>
 
-        <!-- The money boxes as the paper prints them, the receipt written by hand. -->
+        <!-- The money boxes: the total the lines come to, what the receipts on
+             the contract add up to, and what is left of it. -->
         <table class="totals print-keep">
+            <colgroup>
+                <col style="width: 11%" />
+                <col style="width: 14%" />
+                <col style="width: 11%" />
+                <col style="width: 14%" />
+                <col style="width: 11%" />
+                <col style="width: 14%" />
+                <col style="width: 11%" />
+                <col style="width: 14%" />
+            </colgroup>
             <tr>
                 <td class="k">الإجمالي</td>
-                <td class="v">
-                    <input v-if="editable" v-model="fields.total_amount" class="fillin bold" dir="ltr" />
-                    <b v-else dir="ltr">{{ fill(contract.total_amount) }}</b>
-                </td>
+                <td class="v num"><b dir="ltr">{{ fill(totalShown) }}</b></td>
                 <td class="k">المدفوع</td>
-                <td class="v">
-                    <input v-if="editable" v-model="fields.deposit_amount" class="fillin bold" dir="ltr" />
-                    <b v-else dir="ltr">{{ fill(contract.deposit_amount) }}</b>
-                </td>
+                <td class="v num"><b dir="ltr">{{ fill(contract.deposit_amount) }}</b></td>
                 <td class="k">الباقي</td>
-                <td class="v">
-                    <input v-if="editable" v-model="fields.remaining_amount" class="fillin bold" dir="ltr" />
-                    <b v-else dir="ltr">{{ fill(contract.remaining_amount) }}</b>
-                </td>
+                <td class="v num"><b dir="ltr">{{ fill(remaining) }}</b></td>
                 <td class="k">سند قبض</td>
                 <td class="v">{{ fill(null) }}</td>
             </tr>
         </table>
+
+        <p v-if="editable" class="hint print:hidden">
+            السعر الإجمالي لكل بند يُحسب تلقائيًا (السعر الفردي × العدد)، والإجمالي مجموعها — والمدفوع والباقي من سندات القبض
+            المحرَّرة على العقد.
+        </p>
 
         <div v-if="editable || termsText" class="notes">
             <span class="lbl">ملحوظة</span>
@@ -373,48 +437,72 @@ const rows = computed(() =>
     padding: 3px 10px;
     text-align: center;
 }
-/* Not «grid» as a utility: display:grid on a table drops its columns. */
-.grid {
+.svcgrid {
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    border: 1px solid #16215b;
-    margin-top: 8px;
+    border: 1.2px solid #16215b;
+    margin-top: 10px;
 }
-.grid th {
+.svcgrid th {
     border: 1px solid #16215b;
-    background: #eef2fb;
-    padding: 4px;
+    background: #e8eefb;
+    padding: 6px 4px;
     font-size: 12px;
     font-weight: 700;
     text-align: center;
+    white-space: nowrap;
 }
-.grid td {
-    border: 1px solid #16215b;
-    padding: 3px 5px;
+.svcgrid td {
+    border: 1px solid #c3cde6;
+    border-left-color: #16215b;
+    border-right-color: #16215b;
+    padding: 0 6px;
+    height: 26px;
     font-size: 12px;
-    height: 21px;
 }
-.grid td.c {
+.svcgrid td.c {
     text-align: center;
+}
+/* Figures line up column-wise however many digits they carry. */
+.svcgrid td.num,
+.totals td.num {
+    font-variant-numeric: tabular-nums;
+}
+.svcgrid td.seq {
+    background: #f4f7fd;
+    font-weight: 700;
+    color: #4a5a8a;
+}
+.svcgrid td.sum {
+    background: #f7faff;
+}
+.svcgrid tbody tr:hover td {
+    background: #eff5ff;
 }
 .totals {
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    border: 1px solid #16215b;
+    border: 1.2px solid #16215b;
     border-top: 0;
 }
 .totals td {
     border: 1px solid #16215b;
-    padding: 4px 6px;
+    padding: 5px 6px;
     font-size: 12.5px;
     text-align: center;
 }
 .totals td.k {
-    background: #eef2fb;
+    background: #e8eefb;
     font-weight: 700;
-    width: 11%;
+    white-space: nowrap;
+}
+.hint {
+    margin-top: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #4a5a8a;
 }
 .notes .lbl {
     font-size: 13px;
@@ -440,10 +528,19 @@ const rows = computed(() =>
     width: 100%;
     padding: 0 2px;
     border: 0;
+    border-radius: 0;
     background: #f6f9ff;
     font: inherit;
     color: inherit;
     outline: none;
+}
+/* In the grid it fills its cell, so the ruled box is the input. */
+.svcgrid .fillin {
+    height: 24px;
+    background: transparent;
+}
+.svcgrid .fillin:hover {
+    background: #f6f9ff;
 }
 .fillin:focus {
     background: #e6efff;
@@ -487,10 +584,11 @@ const rows = computed(() =>
     .boxes td {
         font-size: 10pt;
     }
-    .grid th,
-    .grid td,
+    .svcgrid th,
+    .svcgrid td,
     .totals td {
         font-size: 9pt;
+        height: auto;
     }
     .notes-body {
         font-size: 9pt;
@@ -502,7 +600,8 @@ const rows = computed(() =>
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
-    .grid th,
+    .svcgrid th,
+    .svcgrid td.seq,
     .totals td.k {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;

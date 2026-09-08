@@ -221,6 +221,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('pools/contracts', [ContractsController::class, 'poolsIndex'])->middleware('perm:contracts.view')->name('contracts.pools');
         // And the chalets', narrowed the same way to the stays let on them.
         Route::get('chalets/contracts', [ContractsController::class, 'chaletsIndex'])->middleware('perm:contracts.view')->name('contracts.chalets');
+        // And the halls', narrowed to the two papers of an event.
+        Route::get('halls/contracts', [ContractsController::class, 'hallsIndex'])->middleware('perm:contracts.view')->name('contracts.halls');
         // «pdf» قبل {contract} لا يلزم هنا لأنه مقطع ثانٍ، لكن ترتيبه قبل
         // show يبقي المسارات النوعية مجتمعة كما في بقية الملف.
         Route::get('contracts/{contract}/pdf', [ContractsController::class, 'pdf'])->middleware('perm:contracts.export')->name('contracts.pdf');

@@ -18,6 +18,7 @@ use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
 use App\Support\ChaletContractTemplate;
 use App\Support\ClientType;
+use App\Support\HallRentalContractTemplate;
 use App\Support\HallServicesContractTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -103,13 +104,23 @@ class ContractsController extends Controller
     }
 
     /**
-     * @param  'all'|'quotation'|'chalet'  $scope
+     * The same screen reached from the halls menu: the papers of that activity
+     * — the rental pads let on a hall, and the services lists beside them.
+     */
+    public function hallsIndex(Request $request): Response
+    {
+        return $this->register($request, 'hall');
+    }
+
+    /**
+     * @param  'all'|'quotation'|'chalet'|'hall'  $scope
      */
     private function register(Request $request, string $scope): Response
     {
         $user = $request->user();
         $poolsOnly = $scope === 'quotation';
         $chaletsOnly = $scope === 'chalet';
+        $hallsOnly = $scope === 'hall';
 
         $query = Contract::query()
             // Anything not drawn from a booking is the pools' — a quotation
@@ -129,6 +140,13 @@ class ContractsController extends Controller
                     ->whereHas('unit', fn ($u) => $u->where('type', 'chalet')))
                 ->orWhere(fn ($direct) => $direct->whereNull('booking_id')
                     ->where('data->form', ChaletContractTemplate::FORM))))
+            // The halls': both papers of an event — the rental pad and the
+            // services list — and either one written with no booking behind it.
+            ->when($hallsOnly, fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('booking', fn ($b) => $b->visibleTo($user)
+                    ->whereHas('unit', fn ($u) => $u->where('type', 'hall')))
+                ->orWhere(fn ($direct) => $direct->whereNull('booking_id')
+                    ->whereIn('data->form', [HallRentalContractTemplate::FORM, HallServicesContractTemplate::FORM]))))
             ->when($scope === 'all', fn ($q) => $q->where(fn ($w) => $w
                 ->whereNull('booking_id')
                 ->orWhereHas('booking', fn ($b) => $b->visibleTo($user))))
@@ -179,7 +197,7 @@ class ContractsController extends Controller
             'statuses' => collect(Contract::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
             // وأيُّ منها يحمل دفتر سنداته — فتظهر خانة العربون على نموذج
             // التركيب والصيانة وحدهما.
-            'templates' => $this->templates($chaletsOnly)
+            'templates' => $this->templates($scope)
                 ->map(fn (ContractTemplate $t) => [
                     'id' => $t->id,
                     'name' => $t->name,
@@ -198,9 +216,10 @@ class ContractsController extends Controller
                         ->whereDoesntHave('contracts', fn ($c) => $c
                             ->where('data->form', HallServicesContractTemplate::FORM))))
                 ->withCount('contracts')
-                // For the same reason the chalets' screen draws from their
-                // own stays: a hall let there would leave the register.
+                // For the same reason each activity's screen draws from its own
+                // stays: a hall let on the chalets' screen would leave it.
                 ->when($chaletsOnly, fn ($q) => $q->whereHas('unit', fn ($u) => $u->where('type', 'chalet')))
+                ->when($hallsOnly, fn ($q) => $q->whereHas('unit', fn ($u) => $u->where('type', 'hall')))
                 ->with('unit:id,name', 'client:id,name')
                 ->latest('id')->limit(200)->get()
                 ->map(fn (Booking $b) => [
@@ -216,7 +235,7 @@ class ContractsController extends Controller
             //
             // A quotation is the pools' source; a chalet is let on a booking or
             // written on the client, so that screen is offered neither.
-            'quotations' => $chaletsOnly ? [] : Quotation::where('status', '!=', 'rejected')
+            'quotations' => $chaletsOnly || $hallsOnly ? [] : Quotation::where('status', '!=', 'rejected')
                 ->whereDoesntHave('contracts')
                 ->with('client:id,name', 'department:id,name')
                 ->latest('id')->limit(200)->get()
@@ -233,6 +252,7 @@ class ContractsController extends Controller
             'clients' => Client::query()
                 ->when($poolsOnly, fn ($q) => $q->ofType([ClientType::POOL]))
                 ->when($chaletsOnly, fn ($q) => $q->ofType([ClientType::CHALET]))
+                ->when($hallsOnly, fn ($q) => $q->ofType([ClientType::HALL]))
                 ->where('is_active', true)
                 ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
                 ->map(fn (Client $c) => [
@@ -249,21 +269,23 @@ class ContractsController extends Controller
     }
 
     /**
-     * The pads a contract may be drawn on from this register.
-     *
-     * The chalets' screen offers their own form alone: a sheet drawn there on
-     * another pad would fall outside the register that drew it. If that form is
-     * not seeded, the whole list stands rather than nothing at all.
+     * The pads a contract may be drawn on from this register — an activity's
+     * screen offers its own, so a sheet drawn there stays in it. Where none of
+     * them is seeded the whole list stands rather than nothing at all.
      *
      * @return Collection<int, ContractTemplate>
      */
-    private function templates(bool $chaletsOnly): Collection
+    private function templates(string $scope): Collection
     {
         $templates = ContractTemplate::where('is_active', true)->get(['id', 'name', 'is_default']);
 
-        $chaletPad = $chaletsOnly ? $templates->firstWhere('name', ChaletContractTemplate::NAME) : null;
+        $own = $templates->whereIn('name', match ($scope) {
+            'chalet' => [ChaletContractTemplate::NAME],
+            'hall' => [HallRentalContractTemplate::NAME, HallServicesContractTemplate::NAME],
+            default => [],
+        })->values();
 
-        return $chaletPad ? collect([$chaletPad]) : $templates;
+        return $own->isNotEmpty() ? $own : $templates;
     }
 
     public function show(Contract $contract): Response

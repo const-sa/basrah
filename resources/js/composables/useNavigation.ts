@@ -112,6 +112,9 @@ export function useNavigation() {
                 // this activity's centres, and on the employee's own units.
                 { title: t('nav.expenses'), href: '/admin/halls/expenses', icon: Receipt, perm: 'expenses.view' },
                 { title: t('nav.all_halls'), href: '/admin/units/halls', icon: Building2, perm: 'halls.view' },
+                // The two papers of an event — the rental pad and the services
+                // list — as the chalets and pools menus hold their own.
+                { title: t('nav.contracts_list'), href: '/admin/halls/contracts', icon: FileSignature, perm: 'contracts.view' },
                 { title: t('nav.packages'), href: '/admin/packages', icon: PackageIcon, perm: 'packages.view' },
                 { title: t('nav.event_types'), href: '/admin/event-types', icon: PartyPopper, perm: 'event_types.view' },
                 { title: t('nav.hall_contract_template'), href: '/admin/units/contract-template', icon: FileText, perm: 'hall_contract.view' },
