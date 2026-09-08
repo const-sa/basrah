@@ -139,7 +139,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
                 العودة للوحة التحكم
             </a>
-            <a href="/login" onclick="goBackFresh(event)" class="btn btn-ghost">
+            <a href="{{ route('login') }}" onclick="goBackFresh(event)" class="btn btn-ghost">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                 الرجوع للخلف
             </a>
@@ -173,7 +173,7 @@
             e.preventDefault();
             var prev = document.referrer;
             // نتجنّب العودة لنفس الصفحة (التي سبّبت الخطأ) لئلا يتكرّر 419
-            var target = (prev && prev !== window.location.href) ? prev : '/login';
+            var target = (prev && prev !== window.location.href) ? prev : '{{ route('login') }}';
             window.location.replace(target);
         }
     </script>

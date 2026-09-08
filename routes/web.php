@@ -73,7 +73,9 @@ Route::post('book/{unit}', [OnlineBookingController::class, 'store'])
 Route::get('booking/{reference}', [OnlineBookingController::class, 'show'])->name('site.booking.show');
 
 Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
-    Route::get('/', [DashboardController::class, 'index'])->middleware('perm:dashboard.view')->name('dashboard');
+    // The permission is checked inside: /admin is the front door, and a role
+    // without the dashboard is forwarded to its first screen, not refused.
+    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('api/search', [SearchController::class, 'index'])->name('api.search');
 

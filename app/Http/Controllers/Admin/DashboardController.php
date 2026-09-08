@@ -13,7 +13,9 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Sale;
 use App\Models\Unit;
+use App\Support\LandingPage;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -26,9 +28,19 @@ use Inertia\Response;
  */
 class DashboardController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
+
+        // Login and the sidebar logo both lead here: a role without the dashboard
+        // moves on to its first screen, and only a role with none is refused.
+        if (! $user->hasPermission('dashboard.view')) {
+            $landing = LandingPage::for($user);
+
+            abort_if($landing === null, 403, 'ليس لديك صلاحية للوصول إلى أي شاشة.');
+
+            return redirect($landing);
+        }
 
         $today = CarbonImmutable::now()->startOfDay();
         $monthStart = $today->startOfMonth();
