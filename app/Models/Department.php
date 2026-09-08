@@ -81,6 +81,12 @@ class Department extends Model
         return ClientType::forDepartmentCode($this->code);
     }
 
+    /** The pools activity — the one whose paper carries its own letterhead. */
+    public function isPools(): bool
+    {
+        return $this->clientTypes() === [ClientType::POOL];
+    }
+
     /**
      * الأقسام التي لها مبيعات — هي ما تظهر في شاشة الفواتير.
      */

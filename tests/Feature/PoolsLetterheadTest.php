@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\ContractTemplate;
+use App\Models\Department;
+use App\Models\Quotation;
 use App\Models\Role;
 use App\Models\Setting;
 use App\Models\User;
@@ -173,6 +175,68 @@ class PoolsLetterheadTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('issuer.business_name', PoolsLetterhead::NAME)->etc());
     }
 
+    /**
+     * A quotation contract on the standard sheet is the pools' too: the
+     * activity that quoted the job is the one that signs it.
+     */
+    public function test_a_pools_quotation_is_headed_by_the_pools_letterhead(): void
+    {
+        $this->setPoolsIdentity();
+
+        $contract = app(ContractService::class)->generateFromQuotation($this->poolsQuotation());
+
+        $this->assertSame(PoolsLetterhead::NAME, $contract->data['org_name']);
+
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('issuer.business_name', PoolsLetterhead::NAME)
+                ->where('issuer.logo_url', asset('uploads/pools-logo.png'))
+                ->where('issuer.phone', PoolsLetterhead::PHONE)
+                ->etc());
+    }
+
+    /** The old sheets are repaired where the letterhead never reached them. */
+    public function test_an_old_pools_contract_is_repaired_to_the_pools_letterhead(): void
+    {
+        $contract = app(ContractService::class)->generateFromQuotation($this->poolsQuotation());
+
+        // Drawn before the activity was named — the business's name is frozen
+        // onto the paper, and the letterhead alone does not reach it.
+        $this->assertSame('ديوان المسرة', $contract->data['org_name']);
+
+        $this->setPoolsIdentity();
+        $this->repairLetterheads();
+
+        $contract->refresh();
+
+        $this->assertSame(PoolsLetterhead::NAME, $contract->data['org_name']);
+        $this->assertStringContainsString(PoolsLetterhead::NAME, $contract->body);
+        $this->assertStringNotContainsString('ديوان المسرة', $contract->body);
+
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('issuer.business_name', PoolsLetterhead::NAME)
+                ->where('issuer.logo_url', asset('uploads/pools-logo.png'))
+                ->etc());
+    }
+
+    /** A hall's sheet is none of the activity's business. */
+    public function test_the_repair_leaves_a_booking_contract_alone(): void
+    {
+        $this->setPoolsIdentity();
+
+        $contract = app(ContractService::class)->generateDirect(
+            $this->client,
+            ContractTemplate::where('is_default', true)->firstOrFail(),
+            900,
+        );
+
+        $this->repairLetterheads();
+
+        $this->assertSame('ديوان المسرة', $contract->fresh()->data['org_name']);
+    }
+
     /** Left blank, the activity follows the business it belongs to. */
     public function test_an_unset_pools_identity_falls_back_to_the_business(): void
     {
@@ -201,5 +265,30 @@ class PoolsLetterheadTest extends TestCase
     private function maintenanceForm(): ContractTemplate
     {
         return ContractTemplate::where('name', PoolMaintenanceContractTemplate::NAME)->firstOrFail();
+    }
+
+    /** A quotation from the pools department — the activity that quoted it. */
+    private function poolsQuotation(): Quotation
+    {
+        $department = Department::firstOrCreate(
+            ['code' => 'POOLS'],
+            ['name' => 'المسابح', 'sells' => true, 'is_active' => true, 'sort_order' => 1],
+        );
+
+        return Quotation::create([
+            'number' => 'QT-000001',
+            'client_id' => $this->client->id,
+            'user_id' => $this->owner->id,
+            'department_id' => $department->id,
+            'status' => 'pending',
+            'subtotal' => 900,
+            'total_amount' => 900,
+        ]);
+    }
+
+    /** The data repair itself, as the deployed install runs it. */
+    private function repairLetterheads(): void
+    {
+        (require database_path('migrations/2026_10_01_100001_head_old_pools_contracts_with_their_own_letterhead.php'))->up();
     }
 }

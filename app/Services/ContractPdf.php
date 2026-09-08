@@ -127,7 +127,7 @@ class ContractPdf
      */
     private function viewData(Contract $contract): array
     {
-        $contract->loadMissing(['booking.unit', 'booking.eventType', 'quotation', 'client', 'template']);
+        $contract->loadMissing(['booking.unit', 'booking.eventType', 'quotation.department', 'client', 'template']);
 
         $settings = Setting::current();
 
@@ -145,7 +145,7 @@ class ContractPdf
             || ($contract->booking?->period === StayPeriod::PERIOD);
 
         // A pools sheet is printed under that activity's own letterhead.
-        $pools = $contract->isPoolsForm();
+        $pools = $contract->underPoolsLetterhead();
         $letterhead = $settings->poolsLetterhead();
 
         return [

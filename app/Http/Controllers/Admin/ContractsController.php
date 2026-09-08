@@ -269,7 +269,8 @@ class ContractsController extends Controller
     public function show(Contract $contract): Response
     {
         $contract->load([
-            'booking.unit', 'booking.eventType', 'quotation', 'client', 'template',
+            // The quotation's department is what heads a pools sheet.
+            'booking.unit', 'booking.eventType', 'quotation.department', 'client', 'template',
             'vouchers' => fn ($q) => $q->with(['treasury:id,name', 'paymentMethod:id,name'])->latest('id'),
         ]);
 
@@ -381,7 +382,7 @@ class ContractsController extends Controller
             'treasuries' => $contract->takesReceipts()
                 ? Treasury::where('is_active', true)->orderBy('name')->get(['id', 'name'])
                 : [],
-            'issuer' => $this->issuer($data['org_name'] ?? null, $contract->isPoolsForm()),
+            'issuer' => $this->issuer($data['org_name'] ?? null, $contract->underPoolsLetterhead()),
         ]);
     }
 
@@ -648,7 +649,7 @@ class ContractsController extends Controller
                 ->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
         }
 
-        $contract->load(['booking.unit', 'booking.eventType', 'quotation', 'client']);
+        $contract->load(['booking.unit', 'booking.eventType', 'quotation.department', 'client']);
 
         $data = $contract->data ?? [];
 
@@ -715,7 +716,7 @@ class ContractsController extends Controller
                 'quotation_date' => ($data['quotation_date'] ?? '—') === '—' ? null : $data['quotation_date'],
                 'is_taxable' => (bool) ($data['is_taxable'] ?? false),
             ],
-            'issuer' => $this->issuer($data['org_name'] ?? null, $contract->isPoolsForm()),
+            'issuer' => $this->issuer($data['org_name'] ?? null, $contract->underPoolsLetterhead()),
             'clients' => Client::where('is_active', true)
                 ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
                 ->map(fn (Client $c) => [

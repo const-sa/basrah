@@ -159,6 +159,15 @@ class Contract extends Model
     }
 
     /**
+     * Is the sheet headed by the pools' letterhead? Their own forms are, and so
+     * is anything drawn from their quotations — the activity that contracted it.
+     */
+    public function underPoolsLetterhead(): bool
+    {
+        return $this->isPoolsForm() || (bool) $this->quotation?->department?->isPools();
+    }
+
+    /**
      * Does the contract carry its own receipt ledger? Only a sheet with no
      * booking behind it — anything else takes its deposit on the booking.
      */

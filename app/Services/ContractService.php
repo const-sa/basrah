@@ -262,7 +262,7 @@ class ContractService
             'contract_date_hijri' => Hijri::short(now()->toDateString()) ?: '—',
             // The name the sheet is signed under is the one the owner sets in
             // the settings — APP_NAME names the deployment, not the shop.
-            'org_name' => $this->orgNameFor($settings, $template),
+            'org_name' => $this->orgNameFor($settings, $template, $quotation),
             'client_name' => (string) ($quotation->client?->name ?? '—'),
             'client_mobile' => (string) ($quotation->client?->mobile ?? '—'),
             'client_id_number' => (string) ($quotation->client?->national_id ?: $quotation->client?->tax_number ?: '—'),
@@ -373,12 +373,12 @@ class ContractService
     }
 
     /**
-     * The name a sheet is signed under — the pools activity's own where it is
-     * printed on their form, and the business's everywhere else.
+     * The name a sheet is signed under — the pools activity's own on their
+     * forms and on what their quotations draw, the business's everywhere else.
      */
-    private function orgNameFor(Setting $settings, ?ContractTemplate $template): string
+    private function orgNameFor(Setting $settings, ?ContractTemplate $template, ?Quotation $quotation = null): string
     {
-        return self::printsOnPoolsForm($template)
+        return self::printsOnPoolsForm($template) || (bool) $quotation?->department?->isPools()
             ? $settings->poolsLetterhead()['name']
             : (string) ($settings->business_name ?: config('app.name'));
     }
@@ -626,7 +626,7 @@ class ContractService
             $data['form'] = self::formFor($template);
             // The letterhead is re-read too: a draft drawn before its activity
             // was named should adopt that name, and only a draft gets here.
-            $data['org_name'] = $this->orgNameFor(Setting::current(), $template);
+            $data['org_name'] = $this->orgNameFor(Setting::current(), $template, $contract->quotation);
             // Moving back off the form retitles it by the activity again, so a
             // draft does not keep a heading its template no longer prints.
             $data['subject'] = $this->subjectFor(
