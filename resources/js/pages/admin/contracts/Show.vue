@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HallRentalContractDocument from '@/components/contracts/HallRentalContractDocument.vue';
+import HallServicesContractDocument from '@/components/contracts/HallServicesContractDocument.vue';
 import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
 import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StandardContractDocument from '@/components/contracts/StandardContractDocument.vue';
@@ -52,13 +53,16 @@ const props = defineProps<{
         is_maintenance_form: boolean;
         /** The halls' numbered rental pad — likewise its own. */
         is_hall_form: boolean;
+        /** And the halls' services list — the event's second paper. */
+        is_hall_services_form: boolean;
         client_birth_place: string | null;
         first_installment: string | null; second_installment: string | null;
         pool_width: string | null; pool_length: string | null;
         pool_min_depth: string | null; pool_max_depth: string | null;
         quotation_id: number | null; quotation_number: string | null;
         quotation_date: string | null; valid_until: string | null;
-        items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string }[];
+        // notes: the remark the services list rules beside every line.
+        items: { name: string; code: string | null; quantity: number; unit_price: string; total_price: string; notes?: string | null }[];
         subtotal: string | null; discount_amount: string | null; tax_amount: string | null;
         /** الضريبة كما جُمِّدت يوم الإصدار — عقدٌ قديم بلا ضريبة يبقى بلا سطرها. */
         is_taxable: boolean; tax_rate: string | null;
@@ -393,6 +397,9 @@ const submitReceipt = () => {
 
             <!-- A hall is let on its numbered rental pad. -->
             <HallRentalContractDocument v-else-if="contract.is_hall_form" :contract="contract" :issuer="issuer" />
+
+            <!-- And served on its list of services, priced line by line. -->
+            <HallServicesContractDocument v-else-if="contract.is_hall_services_form" :contract="contract" :issuer="issuer" />
 
             <!-- العقد نفسه — ما يُطبع ويُوقَّع -->
             <StandardContractDocument v-else :contract="contract" :issuer="issuer" />

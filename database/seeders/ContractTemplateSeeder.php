@@ -6,6 +6,7 @@ use App\Models\ContractTemplate;
 use App\Support\ChaletContractTemplate;
 use App\Support\HallContractTemplate;
 use App\Support\HallRentalContractTemplate;
+use App\Support\HallServicesContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Seeder;
@@ -40,6 +41,13 @@ class ContractTemplateSeeder extends Seeder
         ContractTemplate::firstOrCreate(
             ['name' => HallRentalContractTemplate::NAME],
             HallRentalContractTemplate::attributes(),
+        );
+
+        // The halls' services list — the second paper of an event, drawn on the
+        // same booking as the rental pad and priced on itself.
+        ContractTemplate::firstOrCreate(
+            ['name' => HallServicesContractTemplate::NAME],
+            HallServicesContractTemplate::attributes(),
         );
 
         // The pools' piping-and-installation form. It is drawn on a quotation,

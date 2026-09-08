@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HallRentalContractDocument from '@/components/contracts/HallRentalContractDocument.vue';
+import HallServicesContractDocument from '@/components/contracts/HallServicesContractDocument.vue';
 import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
 import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StandardContractDocument from '@/components/contracts/StandardContractDocument.vue';
@@ -17,6 +18,8 @@ type Line = {
     quantity: number | string | null;
     unit_price: string;
     total_price: string;
+    /** The remark the services list rules beside every line. */
+    notes?: string | null;
 };
 
 type EditForm = {
@@ -45,6 +48,8 @@ const props = defineProps<{
         is_maintenance_form: boolean;
         /** The halls' numbered rental pad — likewise its own. */
         is_hall_form: boolean;
+        /** And the halls' services list — the event's second paper. */
+        is_hall_services_form: boolean;
         /**
          * المدفوع والمتبقي كما تُطبعان.
          *
@@ -85,12 +90,15 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'تعديل', href: `/admin/contracts/${props.contract.id}/edit` },
 ];
 
-const blank = (): Line => ({ name: '', code: null, quantity: '', unit_price: '', total_price: '' });
+const blank = (): Line => ({ name: '', code: null, quantity: '', unit_price: '', total_price: '', notes: null });
 
 // Each pad prints empty rows to write into, so editing offers the same rows as
 // real ones — what stays empty is dropped when the contract is saved.
 const ROWS_PER_HALF = 9;
 const MAINTENANCE_ROWS = 8;
+// The services list is ruled with its printed services; the empty runs under
+// them are the pad's «خدمات أخرى».
+const SERVICES_EXTRA_ROWS = 8;
 
 const startingLines = () => {
     const lines = props.contract.items.map((i) => ({ ...i }));
@@ -107,6 +115,11 @@ const startingLines = () => {
 
     if (props.contract.is_maintenance_form) {
         return [...lines, ...Array.from({ length: Math.max(MAINTENANCE_ROWS - lines.length, 0) }, blank)];
+    }
+
+    // The printed services keep their order, and the empty rows follow them.
+    if (props.contract.is_hall_services_form) {
+        return [...lines, ...Array.from({ length: SERVICES_EXTRA_ROWS }, blank)];
     }
 
     return lines;
@@ -265,6 +278,15 @@ const submit = () =>
                         :contract="sheet"
                         :issuer="issuer"
                         v-model:fields="form.fields"
+                        v-model:terms="form.terms"
+                    />
+                    <HallServicesContractDocument
+                        v-else-if="contract.is_hall_services_form"
+                        editable
+                        :contract="sheet"
+                        :issuer="issuer"
+                        v-model:fields="form.fields"
+                        v-model:items="form.items"
                         v-model:terms="form.terms"
                     />
                     <StandardContractDocument

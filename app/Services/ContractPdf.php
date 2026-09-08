@@ -47,6 +47,7 @@ class ContractPdf
             $data['isInstallationForm'] => 'pdf.contract-installation',
             $data['isMaintenanceForm'] => 'pdf.contract-maintenance',
             $data['isHallForm'] => 'pdf.contract-hall',
+            $data['isHallServicesForm'] => 'pdf.contract-hall-services',
             default => 'pdf.contract',
         };
 
@@ -163,6 +164,8 @@ class ContractPdf
             // The halls' numbered rental pad — its own sheet, with the tenant's
             // card copied at the top and the fourteen conditions below.
             'isHallForm' => $contract->isHallRentalForm(),
+            // The event's second paper — the services, priced line by line.
+            'isHallServicesForm' => $contract->isHallServicesForm(),
             // A pools contract prints its priced lines where a rental contract
             // prints unit, period and guest count — different documents behind
             // the same letterhead, numbering and signatures.

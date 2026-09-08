@@ -11,6 +11,7 @@ use App\Models\QuotationItem;
 use App\Models\Setting;
 use App\Support\ChaletContractTemplate;
 use App\Support\HallRentalContractTemplate;
+use App\Support\HallServicesContractTemplate;
 use App\Support\Hijri;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
@@ -184,7 +185,11 @@ class ContractService
             'quotation_number' => '—',
             'quotation_date' => '—',
             'valid_until' => '—',
-            'items' => [],
+            // The services sheet is ruled with its printed list; every other
+            // form drawn on a client alone starts with no lines at all.
+            'items' => self::formFor($template) === HallServicesContractTemplate::FORM
+                ? HallServicesContractTemplate::lines()
+                : [],
             'discount_amount' => '—',
             'tax_amount' => '—',
             'is_taxable' => '',
@@ -338,6 +343,7 @@ class ContractService
             PoolInstallationContractTemplate::FORM => PoolInstallationContractTemplate::SUBJECT,
             PoolMaintenanceContractTemplate::FORM => PoolMaintenanceContractTemplate::SUBJECT,
             HallRentalContractTemplate::FORM => HallRentalContractTemplate::SUBJECT,
+            HallServicesContractTemplate::FORM => HallServicesContractTemplate::SUBJECT,
             default => (string) ($fallback ?: 'توريد وخدمات'),
         };
     }
@@ -351,6 +357,7 @@ class ContractService
             PoolInstallationContractTemplate::NAME => PoolInstallationContractTemplate::FORM,
             PoolMaintenanceContractTemplate::NAME => PoolMaintenanceContractTemplate::FORM,
             HallRentalContractTemplate::NAME => HallRentalContractTemplate::FORM,
+            HallServicesContractTemplate::NAME => HallServicesContractTemplate::FORM,
             ChaletContractTemplate::NAME => ChaletContractTemplate::FORM,
             default => null,
         };
@@ -546,6 +553,9 @@ class ContractService
                 'quantity' => $this->cellValue($line['quantity'] ?? null),
                 'unit_price' => $this->lineMoney($line['unit_price'] ?? null),
                 'total_price' => $this->lineMoney($line['total_price'] ?? null),
+                // The services list rules a remark beside each line, and it is
+                // part of what was agreed — so it is kept with the line.
+                'notes' => filled($line['notes'] ?? null) ? (string) $line['notes'] : null,
             ])
             ->values()->all();
     }
@@ -585,11 +595,13 @@ class ContractService
     {
         $contract->loadMissing(['booking.unit', 'quotation.department']);
 
-        // A booking drawn before its activity had a printed pad is rebuilt on
-        // that pad; anything else keeps the template it was issued on.
-        $template ??= in_array($contract->booking?->unit?->type, ['chalet', 'hall'], true)
-            ? $this->templateFor($contract->booking)
-            : ($contract->template ?? ContractTemplate::defaultTemplate());
+        // A sheet already on a printed pad keeps it — a services list is not to
+        // be rebuilt as a second rental contract; only a standard one is moved.
+        $template ??= self::formFor($contract->template)
+            ? $contract->template
+            : (in_array($contract->booking?->unit?->type, ['chalet', 'hall'], true)
+                ? $this->templateFor($contract->booking)
+                : ($contract->template ?? ContractTemplate::defaultTemplate()));
 
         if (! $template) {
             throw new RuntimeException('لا يوجد قالب عقد فعّال — أضف قالبًا أولًا.');
@@ -643,6 +655,12 @@ class ContractService
         $data = $this->buildData($booking, $contract->number, $template);
         $data['contract_date'] = $contract->created_at?->toDateString() ?? $data['contract_date'];
 
+        // Rebuilding the wording of a services list must not empty the grid or
+        // the totals under it — no booking holds either.
+        if (($data['form'] ?? null) === HallServicesContractTemplate::FORM) {
+            $data = [...$data, ...$this->pricedByHand($contract->data ?? [])];
+        }
+
         $contract->update([
             'contract_template_id' => $template->id,
             'body' => $this->render($template->body, $data),
@@ -669,7 +687,7 @@ class ContractService
         $net = $booking->netAmount();
         $tax = $booking->taxAmount();
 
-        return [
+        $data = [
             'contract_number' => $contractNumber,
             'contract_date' => $contractDate,
             'contract_date_hijri' => Hijri::short($contractDate) ?: '—',
@@ -737,6 +755,38 @@ class ContractService
             'remaining_amount' => number_format($booking->remainingAmount(), 2),
             'security_deposit' => number_format((float) ($booking->security_deposit_amount ?? 0), 2),
         ];
+
+        return self::formFor($template) === HallServicesContractTemplate::FORM
+            ? [...$data, ...$this->servicesSheet()]
+            : $data;
+    }
+
+    /**
+     * What the services list starts as: the printed services, priced by hand,
+     * and empty totals — the rental's value belongs to the rental pad.
+     *
+     * @return array<string, mixed>
+     */
+    private function servicesSheet(): array
+    {
+        return [
+            'items' => HallServicesContractTemplate::lines(),
+            ...$this->valueFields(null),
+        ];
+    }
+
+    /**
+     * The fields of a sheet priced on itself, as the old snapshot holds them.
+     *
+     * @param  array<string, mixed>  $previous
+     * @return array<string, mixed>
+     */
+    private function pricedByHand(array $previous): array
+    {
+        return collect(['items', 'total_amount', 'total_amount_words', 'subtotal', 'deposit_amount', 'remaining_amount'])
+            ->filter(fn (string $key) => filled($previous[$key] ?? null) && $previous[$key] !== '—')
+            ->mapWithKeys(fn (string $key) => [$key => $previous[$key]])
+            ->all();
     }
 
     /**
@@ -753,7 +803,7 @@ class ContractService
      * The template a booking is drawn on when the caller names none. A chalet
      * is let on its own daily-rental form; halls keep the default, as before.
      */
-    private function templateFor(Booking $booking): ?ContractTemplate
+    public function templateFor(Booking $booking): ?ContractTemplate
     {
         // Each activity is let on its own pad: the chalet's daily-rental form,
         // the hall's numbered rental sheet. The default is what remains for a

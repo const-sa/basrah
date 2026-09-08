@@ -18,6 +18,7 @@ use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
 use App\Support\ChaletContractTemplate;
 use App\Support\ClientType;
+use App\Support\HallServicesContractTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -186,10 +187,17 @@ class ContractsController extends Controller
                     'takes_deposit' => ContractService::takesDeposit($t),
                 ]),
             // الحجوزات التي لا عقد لها بعد — هي المرشّحة للتوليد.
+            // A hall writes two papers, so its booking stays on offer until the
+            // services list is drawn too; store() is what refuses a repeat.
             // The pools screen offers no booking source at all: a contract
             // drawn there would land outside the register that drew it.
             'bookings' => $poolsOnly ? [] : Booking::visibleTo($user)->blocking()
-                ->whereDoesntHave('contracts')
+                ->where(fn ($q) => $q->whereDoesntHave('contracts')
+                    ->orWhere(fn ($hall) => $hall
+                        ->whereHas('unit', fn ($u) => $u->where('type', 'hall'))
+                        ->whereDoesntHave('contracts', fn ($c) => $c
+                            ->where('data->form', HallServicesContractTemplate::FORM))))
+                ->withCount('contracts')
                 // For the same reason the chalets' screen draws from their
                 // own stays: a hall let there would leave the register.
                 ->when($chaletsOnly, fn ($q) => $q->whereHas('unit', fn ($u) => $u->where('type', 'chalet')))
@@ -197,7 +205,10 @@ class ContractsController extends Controller
                 ->latest('id')->limit(200)->get()
                 ->map(fn (Booking $b) => [
                     'id' => $b->id,
-                    'label' => $b->reference.' — '.($b->unit?->name ?? '').' — '.($b->client?->name ?? 'بلا عميل'),
+                    'label' => $b->reference.' — '.($b->unit?->name ?? '').' — '.($b->client?->name ?? 'بلا عميل')
+                        // A booking still listed with a paper drawn on it is
+                        // there for the other one.
+                        .($b->contracts_count ? ' — له عقد' : ''),
                 ]),
             // Quotations still open and not yet contracted. A rejected quotation
             // is excluded outright: the client turned that price down, and a
@@ -327,6 +338,8 @@ class ContractsController extends Controller
                 'is_maintenance_form' => $contract->isMaintenanceForm(),
                 // Drawn on the halls' numbered rental pad — likewise.
                 'is_hall_form' => $contract->isHallRentalForm(),
+                // And on the halls' services list — the event's second paper.
+                'is_hall_services_form' => $contract->isHallServicesForm(),
                 'client_birth_place' => $data['client_birth_place'] ?? null,
                 'first_installment' => $data['first_installment'] ?? null,
                 'second_installment' => $data['second_installment'] ?? null,
@@ -391,6 +404,14 @@ class ContractsController extends Controller
         $template = isset($data['contract_template_id'])
             ? ContractTemplate::find($data['contract_template_id'])
             : null;
+
+        // One paper of each kind per booking: a hall takes its rental pad and
+        // its services list, and a second copy of either is two agreements.
+        $form = ContractService::formFor($template ?? $this->contracts->templateFor($booking));
+
+        if ($booking->contracts()->get()->contains(fn (Contract $c) => ($c->data['form'] ?? null) === $form)) {
+            return back()->with('warning', 'لهذا الحجز عقد على هذا النموذج بالفعل.');
+        }
 
         // التوليد يُطلب الآن من سجل الحجوزات أيضًا، وهناك لا يختار الموظف
         // قالبًا — فغياب القالب الافتراضي رسالةٌ توجّهه لا صفحة خطأ.
@@ -678,6 +699,7 @@ class ContractsController extends Controller
                 'is_installation_form' => $contract->isInstallationForm(),
                 'is_maintenance_form' => $contract->isMaintenanceForm(),
                 'is_hall_form' => $contract->isHallRentalForm(),
+                'is_hall_services_form' => $contract->isHallServicesForm(),
                 // ما تطبعه خانتا المدفوع والمتبقي حين لا تكونان من حقول التحرير —
                 // على ورقة المسابح هما حصيلة سندات القبض.
                 'deposit_amount' => ($data['deposit_amount'] ?? '—') === '—' ? null : $data['deposit_amount'],
@@ -750,6 +772,8 @@ class ContractsController extends Controller
             // document itself put there.
             'items.*.unit_price' => ['nullable', 'string', 'max:30'],
             'items.*.total_price' => ['nullable', 'string', 'max:30'],
+            // The services list rules a remark beside every line.
+            'items.*.notes' => ['nullable', 'string', 'max:190'],
             'body' => ['required', 'string', 'max:40000'],
             'terms' => ['nullable', 'string', 'max:40000'],
         ]);

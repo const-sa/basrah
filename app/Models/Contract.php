@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\ChaletContractTemplate;
 use App\Support\HallRentalContractTemplate;
+use App\Support\HallServicesContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Database\Eloquent\Model;
@@ -137,6 +138,12 @@ class Contract extends Model
     public function isHallRentalForm(): bool
     {
         return ($this->data['form'] ?? null) === HallRentalContractTemplate::FORM;
+    }
+
+    /** Is this contract printed on the halls' services list? */
+    public function isHallServicesForm(): bool
+    {
+        return ($this->data['form'] ?? null) === HallServicesContractTemplate::FORM;
     }
 
     /** Is this contract printed on the chalets' daily-rental form? */
