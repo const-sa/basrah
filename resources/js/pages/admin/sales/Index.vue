@@ -5,7 +5,7 @@ import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Eye, Printer, Receipt, RotateCcw, Search, Wallet, X } from 'lucide-vue-next';
+import { Download, Eye, Printer, Receipt, RotateCcw, Search, Trash2, Wallet, X } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
 interface SaleRow {
@@ -141,6 +141,18 @@ const reset = () => {
 };
 
 const departmentTitle = computed(() => props.departments.find((d) => String(d.id) === String(filters.value.department_id))?.name ?? 'كل الأقسام');
+
+// Export carries the same filters as the list, so the file matches the screen.
+const exportHref = computed(() => {
+    const params = new URLSearchParams();
+    Object.entries(filters.value).forEach(([k, v]) => v && params.append(k, String(v)));
+    return `/admin/sales/export?${params.toString()}`;
+});
+
+const voidSale = (row: SaleRow) => {
+    if (!confirm(`إلغاء الفاتورة ${row.number}؟ يُعكس قيدها وتعود أصنافها إلى المخزون، وتُنقل إلى الأرشيف.`)) return;
+    router.delete(`/admin/sales/${row.id}`, { preserveScroll: true });
+};
 
 const statusClass = (s: string) =>
     ({
@@ -286,13 +298,22 @@ const submitRefund = () => {
                     <h1 class="text-2xl font-extrabold text-slate-900">سجل الفواتير — {{ departmentTitle }}</h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">فواتير القسم ومرتجعاتها وسندات قبضها — والمتبقي على كل فاتورة مسدّدة جزئيًا</p>
                 </div>
-                <Link
-                    v-if="can('pos.create')"
-                    href="/admin/pos"
-                    class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
-                >
-                    <Receipt class="h-4 w-4" /> فاتورة جديدة
-                </Link>
+                <div class="flex flex-wrap gap-2">
+                    <a
+                        v-if="can('sales.export')"
+                        :href="exportHref"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                        <Download class="h-4 w-4" /> تصدير CSV
+                    </a>
+                    <Link
+                        v-if="can('pos.create')"
+                        href="/admin/pos"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                    >
+                        <Receipt class="h-4 w-4" /> فاتورة جديدة
+                    </Link>
+                </div>
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
@@ -455,6 +476,16 @@ const submitRefund = () => {
                                             class="rounded-lg bg-amber-500 p-1.5 text-white hover:bg-amber-600"
                                         >
                                             <RotateCcw class="h-3.5 w-3.5" />
+                                        </button>
+                                        <!-- Only an untouched invoice: one with returns or receipts is settled through those. -->
+                                        <button
+                                            v-if="can('sales.delete') && s.type === 'sale' && s.returned === 0 && s.paid === 0"
+                                            type="button"
+                                            @click="voidSale(s)"
+                                            title="إلغاء الفاتورة"
+                                            class="rounded-lg bg-red-500 p-1.5 text-white hover:bg-red-600"
+                                        >
+                                            <Trash2 class="h-3.5 w-3.5" />
                                         </button>
                                     </div>
                                 </td>

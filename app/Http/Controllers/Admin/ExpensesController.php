@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesActivities;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\CostCenter;
@@ -12,6 +13,7 @@ use App\Models\Supplier;
 use App\Models\Treasury;
 use App\Models\User;
 use App\Services\Accounting\ExpenseService;
+use App\Support\ActivityPermission;
 use App\Support\ActivitySegment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -31,6 +33,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ExpensesController extends Controller
 {
+    use AuthorizesActivities;
+
+    /** The actions the expenses screen can offer. */
+    private const ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
+
     public function __construct(
         private readonly ExpenseService $expenses,
         private readonly ActivitySegment $segments,
@@ -90,12 +97,18 @@ class ExpensesController extends Controller
             'activityLabel' => $filters['activity'] ? ActivitySegment::label($filters['activity']) : null,
             // A scoped user must name a centre, so the form may not offer «none».
             'scoped' => $user?->accessibleCostCenterIds() !== null,
+            'can' => $this->activityAbilities($request, 'expenses', $filters['activity'], self::ACTIONS),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
+
+        // The activity is the centre's, so it is read from what was submitted.
+        $this->authorizeActivity($request, 'expenses', 'create', ActivityPermission::ofCostCenter(
+            $data['cost_center_id'] ?? null,
+        ));
 
         $expense = $this->expenses->create(
             collect($data)->except('post_now')->all(),
@@ -106,7 +119,8 @@ class ExpensesController extends Controller
         // يُدفع نقدًا ويُقيَّد فورًا. والمسوّدة تبقى لمن يحتاج مراجعةً قبله.
         // Posting is the approver's: whoever may only record leaves a draft,
         // or the box would hand him the ledger his permission withholds.
-        if ($request->boolean('post_now') && $request->user()?->hasPermission('expenses.approve')) {
+        if ($request->boolean('post_now')
+            && ActivityPermission::allows($request->user(), 'expenses', 'approve', ActivityPermission::ofExpense($expense))) {
             try {
                 $this->expenses->post($expense, $request->user()?->id);
             } catch (RuntimeException $e) {
@@ -123,7 +137,7 @@ class ExpensesController extends Controller
      */
     public function update(Request $request, Expense $expense): RedirectResponse
     {
-        $this->authorizeScope($request, $expense);
+        $this->authorizeScope($request, $expense, 'edit');
 
         if (! $expense->isDraft()) {
             return back()->with('warning', 'المصروف المرحَّل لا يُعدَّل — ألغِه وسجّله من جديد.');
@@ -136,7 +150,7 @@ class ExpensesController extends Controller
 
     public function post(Request $request, Expense $expense): RedirectResponse
     {
-        $this->authorizeScope($request, $expense);
+        $this->authorizeScope($request, $expense, 'approve');
 
         try {
             $this->expenses->post($expense, $request->user()?->id);
@@ -149,7 +163,7 @@ class ExpensesController extends Controller
 
     public function cancel(Request $request, Expense $expense): RedirectResponse
     {
-        $this->authorizeScope($request, $expense);
+        $this->authorizeScope($request, $expense, 'approve');
 
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
 
@@ -160,7 +174,7 @@ class ExpensesController extends Controller
 
     public function destroy(Request $request, Expense $expense): RedirectResponse
     {
-        $this->authorizeScope($request, $expense);
+        $this->authorizeScope($request, $expense, 'delete');
 
         if ($expense->isPosted()) {
             return back()->with('warning', 'المصروف المرحَّل لا يُحذف — ألغِه ليُعكس قيده.');
@@ -176,6 +190,9 @@ class ExpensesController extends Controller
      */
     public function storeCategory(Request $request): RedirectResponse
     {
+        // The list belongs to no activity, so spending anywhere may extend it.
+        $this->authorizeAnyActivity($request, 'expenses', 'create');
+
         $category = ExpenseCategory::create($this->validatedCategory($request));
 
         return back()->with('success', "تمت إضافة نوع المصروف «{$category->name}»");
@@ -183,6 +200,8 @@ class ExpensesController extends Controller
 
     public function updateCategory(Request $request, ExpenseCategory $category): RedirectResponse
     {
+        $this->authorizeAnyActivity($request, 'expenses', 'edit');
+
         $category->update($this->validatedCategory($request, $category));
 
         return back()->with('success', 'تم تحديث نوع المصروف');
@@ -192,8 +211,10 @@ class ExpensesController extends Controller
      * النوع المستعمل لا يُحذف: حذفه يُيتّم مصروفات سُجّلت عليه. يُعطَّل
      * فيختفي من نموذج التسجيل ويبقى في تقارير ما مضى.
      */
-    public function destroyCategory(ExpenseCategory $category): RedirectResponse
+    public function destroyCategory(Request $request, ExpenseCategory $category): RedirectResponse
     {
+        $this->authorizeAnyActivity($request, 'expenses', 'delete');
+
         if ($category->is_system) {
             return back()->with('warning', 'نوعٌ أساسي في النظام لا يُحذف — عطّله بدل حذفه.');
         }
@@ -207,8 +228,10 @@ class ExpensesController extends Controller
         return back()->with('success', 'تم حذف نوع المصروف');
     }
 
-    public function toggleCategory(ExpenseCategory $category): RedirectResponse
+    public function toggleCategory(Request $request, ExpenseCategory $category): RedirectResponse
     {
+        $this->authorizeAnyActivity($request, 'expenses', 'edit');
+
         $category->update(['is_active' => ! $category->is_active]);
 
         return back()->with('success', $category->is_active ? 'تم تفعيل النوع' : 'تم إيقاف النوع');
@@ -220,6 +243,11 @@ class ExpensesController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $filters = $this->filters($request);
+
+        // Exporting one activity's register needs that activity's key; exporting
+        // the whole book needs the global one.
+        $this->authorizeActivity($request, 'expenses', 'view', $filters['activity']);
+
         $user = $request->user();
         $filename = 'expenses-'.now()->format('Y-m-d-His').'.csv';
 
@@ -484,11 +512,15 @@ class ExpensesController extends Controller
      * The list hides what is outside the user's units, and an id in the URL
      * must not be the way round that.
      */
-    private function authorizeScope(Request $request, Expense $expense): void
+    private function authorizeScope(Request $request, Expense $expense, string $action): void
     {
         if (! $request->user()?->canSpendOn($expense->cost_center_id)) {
             abort(403, 'هذا المصروف خارج نطاق وحداتك.');
         }
+
+        // Two separate fences: the units the user may spend on, and the activity
+        // whose register this spend belongs to.
+        $this->authorizeActivity($request, 'expenses', $action, ActivityPermission::ofExpense($expense));
     }
 
     /**

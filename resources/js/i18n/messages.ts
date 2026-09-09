@@ -109,6 +109,9 @@ export const messages: Record<Locale, Dict> = {
         'roles.delete_confirm': 'حذف المجموعة',
         'roles.activity_sections': 'أقسام النشاط',
         'roles.admin_sections': 'الأقسام الإدارية',
+        'roles.shared': 'مشتركة',
+        'roles.shared_section': 'شاشات تفتحها هذه القائمة وتتبع أقسامًا أخرى — لا تُحسب ضمن صلاحيات هذا القسم',
+        'roles.shared_hint': 'شاشة واحدة تفتحها أكثر من قائمة — منحها هنا يمنحها في كل قسم يعرضها. مكانها الأصلي:',
     },
     en: {
         // Navigation
@@ -215,5 +218,8 @@ export const messages: Record<Locale, Dict> = {
         'roles.delete_confirm': 'Delete group',
         'roles.activity_sections': 'Activity Sections',
         'roles.admin_sections': 'Administrative Sections',
+        'roles.shared': 'shared',
+        'roles.shared_section': 'Screens this menu opens that belong to other sections — not counted in this one',
+        'roles.shared_hint': 'One screen opened by more than one menu — granting it here grants it in every section that shows it. Filed under:',
     },
 };

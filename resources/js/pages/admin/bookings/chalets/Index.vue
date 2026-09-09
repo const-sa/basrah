@@ -124,7 +124,7 @@ const props = defineProps<{
     stats: { total: number; deposit_paid: number; paid_in_full: number; unpaid: number };
 }>();
 
-const { can } = usePermissions();
+const { can, canActivity } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -543,7 +543,7 @@ const generateContract = (b: Booking) => {
                                             @click="router.visit(`/admin/contracts/${b.contract.id}`)"
                                         />
                                         <TableActionButton
-                                            v-else-if="can('contracts.create')"
+                                            v-else-if="canActivity('contracts', 'create', 'chalets')"
                                             variant="muted"
                                             :icon="FileSignature"
                                             title="توليد العقد"

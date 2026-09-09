@@ -106,14 +106,14 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     */
     Route::middleware('system:halls|chalets')->group(function () {
         // The approved contract forms — before units/{type?} so they are not read as a type
-        Route::get('units/contract-template', [HallContractTemplateController::class, 'show'])->middleware('perm:hall_contract.view')->name('units.contract_template');
-        Route::put('units/contract-template', [HallContractTemplateController::class, 'update'])->middleware('perm:hall_contract.edit')->name('units.contract_template.update');
-        Route::post('units/contract-template/reset', [HallContractTemplateController::class, 'reset'])->middleware('perm:hall_contract.edit')->name('units.contract_template.reset');
+        Route::get('units/contract-template', [HallContractTemplateController::class, 'show'])->middleware('perm:hall_contract_template.view')->name('units.contract_template');
+        Route::put('units/contract-template', [HallContractTemplateController::class, 'update'])->middleware('perm:hall_contract_template.edit')->name('units.contract_template.update');
+        Route::post('units/contract-template/reset', [HallContractTemplateController::class, 'reset'])->middleware('perm:hall_contract_template.edit')->name('units.contract_template.reset');
 
         // The chalets' daily-rental form
-        Route::get('units/chalet-contract-template', [ChaletContractTemplateController::class, 'show'])->middleware('perm:chalet_contract.view')->name('units.chalet_contract_template');
-        Route::put('units/chalet-contract-template', [ChaletContractTemplateController::class, 'update'])->middleware('perm:chalet_contract.edit')->name('units.chalet_contract_template.update');
-        Route::post('units/chalet-contract-template/reset', [ChaletContractTemplateController::class, 'reset'])->middleware('perm:chalet_contract.edit')->name('units.chalet_contract_template.reset');
+        Route::get('units/chalet-contract-template', [ChaletContractTemplateController::class, 'show'])->middleware('perm:chalet_contract_template.view')->name('units.chalet_contract_template');
+        Route::put('units/chalet-contract-template', [ChaletContractTemplateController::class, 'update'])->middleware('perm:chalet_contract_template.edit')->name('units.chalet_contract_template.update');
+        Route::post('units/chalet-contract-template/reset', [ChaletContractTemplateController::class, 'reset'])->middleware('perm:chalet_contract_template.edit')->name('units.chalet_contract_template.reset');
 
         // الوحدات والأقسام
         // شاشة واحدة بثلاث مداخل: القاعات، الشاليهات، والكل — يفصلها المقطع {type}
@@ -215,41 +215,43 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     | نظام العقود والواتساب
     |--------------------------------------------------------------------------
     */
-    Route::middleware('system:contracts')->group(function () {
+    // The activities reach their own contract registers, so the gate opens for
+    // them too; each route's own key still decides what may be opened.
+    Route::middleware('system:contracts|halls|chalets|pools')->group(function () {
         Route::get('contracts', [ContractsController::class, 'index'])->middleware('perm:contracts.view')->name('contracts.index');
         // The pools activity's own contract register — the same screen narrowed
         // to what was drawn from that activity's quotations. Its own path, not
         // a query string, so the menu keeps highlighting it while filtering.
-        Route::get('pools/contracts', [ContractsController::class, 'poolsIndex'])->middleware('perm:contracts.view')->name('contracts.pools');
+        Route::get('pools/contracts', [ContractsController::class, 'poolsIndex'])->middleware('perm:pool_contracts.view')->name('contracts.pools');
         // And the chalets', narrowed the same way to the stays let on them.
-        Route::get('chalets/contracts', [ContractsController::class, 'chaletsIndex'])->middleware('perm:contracts.view')->name('contracts.chalets');
+        Route::get('chalets/contracts', [ContractsController::class, 'chaletsIndex'])->middleware('perm:chalet_contracts.view')->name('contracts.chalets');
         // And the halls', narrowed to the two papers of an event.
-        Route::get('halls/contracts', [ContractsController::class, 'hallsIndex'])->middleware('perm:contracts.view')->name('contracts.halls');
+        Route::get('halls/contracts', [ContractsController::class, 'hallsIndex'])->middleware('perm:hall_contracts.view')->name('contracts.halls');
         // «pdf» قبل {contract} لا يلزم هنا لأنه مقطع ثانٍ، لكن ترتيبه قبل
         // show يبقي المسارات النوعية مجتمعة كما في بقية الملف.
-        Route::get('contracts/{contract}/pdf', [ContractsController::class, 'pdf'])->middleware('perm:contracts.export')->name('contracts.pdf');
-        Route::get('contracts/{contract}', [ContractsController::class, 'show'])->middleware('perm:contracts.view')->name('contracts.show');
-        Route::post('contracts', [ContractsController::class, 'store'])->middleware('perm:contracts.create')->name('contracts.store');
+        Route::get('contracts/{contract}/pdf', [ContractsController::class, 'pdf'])->name('contracts.pdf');
+        Route::get('contracts/{contract}', [ContractsController::class, 'show'])->name('contracts.show');
+        Route::post('contracts', [ContractsController::class, 'store'])->name('contracts.store');
         // Pools contracts are drawn from a quotation, not a booking — a separate
         // endpoint keeps each source's validation to its own fields.
-        Route::post('contracts/from-quotation', [ContractsController::class, 'storeFromQuotation'])->middleware('perm:contracts.create')->name('contracts.from_quotation');
+        Route::post('contracts/from-quotation', [ContractsController::class, 'storeFromQuotation'])->name('contracts.from_quotation');
         // A job contracted before it was quoted — the form is written on the
         // client alone, and «direct» before {contract} keeps it off show().
-        Route::post('contracts/direct', [ContractsController::class, 'storeDirect'])->middleware('perm:contracts.create')->name('contracts.direct');
+        Route::post('contracts/direct', [ContractsController::class, 'storeDirect'])->name('contracts.direct');
         // Editing the draft itself — its client, value, equipment and notes —
         // as against refresh, which only re-reads the template's wording.
-        Route::get('contracts/{contract}/edit', [ContractsController::class, 'edit'])->middleware('perm:contracts.edit')->name('contracts.edit');
+        Route::get('contracts/{contract}/edit', [ContractsController::class, 'edit'])->name('contracts.edit');
         // POST as well as PUT: shared hosting commonly refuses PUT outright —
         // the request never reaches Laravel, and the save comes back 403 with
         // no message to show. The verb is not what protects this route.
-        Route::match(['put', 'post'], 'contracts/{contract}', [ContractsController::class, 'update'])->middleware('perm:contracts.edit')->name('contracts.update');
-        Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->middleware('perm:contracts.edit')->name('contracts.refresh');
-        Route::post('contracts/{contract}/send', [ContractsController::class, 'send'])->middleware('perm:contracts.send')->name('contracts.send');
+        Route::match(['put', 'post'], 'contracts/{contract}', [ContractsController::class, 'update'])->name('contracts.update');
+        Route::post('contracts/{contract}/refresh', [ContractsController::class, 'refresh'])->name('contracts.refresh');
+        Route::post('contracts/{contract}/send', [ContractsController::class, 'send'])->name('contracts.send');
         // سند قبض على عقد مسابح — العربون وما تلاه من دفعات. القبض تحرير
         // للعقد لا محاسبة مستقلة، فيمرّ من باب العقود نفسه.
-        Route::post('contracts/{contract}/receipt', [ContractsController::class, 'receipt'])->middleware('perm:contracts.edit')->name('contracts.receipt');
-        Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->middleware('perm:contracts.edit')->name('contracts.status');
-        Route::delete('contracts/{contract}', [ContractsController::class, 'destroy'])->middleware('perm:contracts.delete')->name('contracts.destroy');
+        Route::post('contracts/{contract}/receipt', [ContractsController::class, 'receipt'])->name('contracts.receipt');
+        Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->name('contracts.status');
+        Route::delete('contracts/{contract}', [ContractsController::class, 'destroy'])->name('contracts.destroy');
 
         Route::get('contract-templates', [ContractTemplatesController::class, 'index'])->middleware('perm:contract_templates.view')->name('contract_templates.index');
         Route::post('contract-templates', [ContractTemplatesController::class, 'store'])->middleware('perm:contract_templates.create')->name('contract_templates.store');
@@ -271,7 +273,12 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
         // سجل الفواتير — استعراض فواتير القسم وحده مع مرتجعاتها وسنداتها
         Route::get('sales', [SalesController::class, 'index'])->middleware('perm:sales.view')->name('sales.index');
+        // Before the {sale} routes so "export" is not read as an id
+        Route::get('sales/export', [SalesController::class, 'export'])->middleware('perm:sales.export')->name('sales.export');
         Route::get('sales/{sale}', [SalesController::class, 'show'])->middleware('perm:sales.view')->name('sales.show');
+        // Voiding an invoice reverses its entry and its stock, then files it in
+        // the archive — where the sales type has always been listed, unfilled.
+        Route::delete('sales/{sale}', [SalesController::class, 'destroy'])->middleware('perm:sales.delete')->name('sales.destroy');
         Route::post('sales/{sale}/settle', [SalesController::class, 'settle'])->middleware('perm:sales.create')->name('sales.settle');
         Route::post('sales/{sale}/refund', [SalesController::class, 'refund'])->middleware('perm:sales.create')->name('sales.refund');
 
@@ -283,7 +290,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::patch('items/{item}/toggle', [ItemsController::class, 'toggle'])->middleware('perm:items.edit')->name('items.toggle');
         Route::delete('items/{item}', [ItemsController::class, 'destroy'])->middleware('perm:items.delete')->name('items.destroy');
 
-        Route::post('inventory/items/{item}/adjust', [ItemsController::class, 'adjustStock'])->middleware('perm:items.edit')->name('items.adjust');
+        // Correcting one item's balance, short of a full stocktake. The item
+        // card is items.edit; the balance behind it is the inventory's own key.
+        Route::post('inventory/items/{item}/adjust', [ItemsController::class, 'adjustStock'])->middleware('perm:inventory.edit')->name('items.adjust');
 
         // مجموعات الأصناف — تحديد محفوظ يُملأ به الفاتورة أو عرض السعر دفعةً واحدة
         Route::get('item-groups', [ItemGroupsController::class, 'index'])->middleware('perm:item_groups.view')->name('item_groups.index');
@@ -318,14 +327,16 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('inventory/movements', [ItemsController::class, 'movements'])->middleware('perm:inventory.view')->name('inventory.movements');
 
         // وحدات القياس وأقسام المستودع
-        Route::get('inventory/units', [MeasureUnitsController::class, 'index'])->middleware('perm:items.view')->name('measure_units.index');
-        Route::post('inventory/units', [MeasureUnitsController::class, 'store'])->middleware('perm:items.create')->name('measure_units.store');
-        Route::put('inventory/units/{unit}', [MeasureUnitsController::class, 'update'])->middleware('perm:items.edit')->name('measure_units.update');
-        Route::delete('inventory/units/{unit}', [MeasureUnitsController::class, 'destroy'])->middleware('perm:items.delete')->name('measure_units.destroy');
+        // Its own keys, not items.*: the screen is a row in the permissions
+        // matrix now, so it can be granted and withheld like any other.
+        Route::get('inventory/units', [MeasureUnitsController::class, 'index'])->middleware('perm:measure_units.view')->name('measure_units.index');
+        Route::post('inventory/units', [MeasureUnitsController::class, 'store'])->middleware('perm:measure_units.create')->name('measure_units.store');
+        Route::put('inventory/units/{unit}', [MeasureUnitsController::class, 'update'])->middleware('perm:measure_units.edit')->name('measure_units.update');
+        Route::delete('inventory/units/{unit}', [MeasureUnitsController::class, 'destroy'])->middleware('perm:measure_units.delete')->name('measure_units.destroy');
 
-        Route::post('inventory/departments', [MeasureUnitsController::class, 'storeDepartment'])->middleware('perm:items.create')->name('inv_departments.store');
-        Route::put('inventory/departments/{department}', [MeasureUnitsController::class, 'updateDepartment'])->middleware('perm:items.edit')->name('inv_departments.update');
-        Route::delete('inventory/departments/{department}', [MeasureUnitsController::class, 'destroyDepartment'])->middleware('perm:items.delete')->name('inv_departments.destroy');
+        Route::post('inventory/departments', [MeasureUnitsController::class, 'storeDepartment'])->middleware('perm:measure_units.create')->name('inv_departments.store');
+        Route::put('inventory/departments/{department}', [MeasureUnitsController::class, 'updateDepartment'])->middleware('perm:measure_units.edit')->name('inv_departments.update');
+        Route::delete('inventory/departments/{department}', [MeasureUnitsController::class, 'destroyDepartment'])->middleware('perm:measure_units.delete')->name('inv_departments.destroy');
     });
 
     /*
@@ -333,7 +344,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     | نظام المحاسبة
     |--------------------------------------------------------------------------
     */
-    Route::middleware('system:accounting')->group(function () {
+    // The activities reach their own spend registers through this gate too.
+    Route::middleware('system:accounting|halls|chalets|pools')->group(function () {
         Route::get('accounting/accounts', [AccountingController::class, 'accounts'])->middleware('perm:accounts.view')->name('accounts.index');
         Route::post('accounting/accounts', [AccountingController::class, 'storeAccount'])->middleware('perm:accounts.create')->name('accounts.store');
         Route::put('accounting/accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('perm:accounts.edit')->name('accounts.update');
@@ -357,21 +369,23 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('accounting/expenses', [ExpensesController::class, 'index'])->middleware('perm:expenses.view')->name('expenses.index');
         // One activity's spend, opened from that activity's menu. Kept in this
         // group with the rest: the screen is the accounting system's either way.
-        Route::get('halls/expenses', [ExpensesController::class, 'hallExpenses'])->middleware('perm:expenses.view')->name('expenses.halls');
-        Route::get('chalets/expenses', [ExpensesController::class, 'chaletExpenses'])->middleware('perm:expenses.view')->name('expenses.chalets');
-        Route::get('pools/expenses', [ExpensesController::class, 'poolExpenses'])->middleware('perm:expenses.view')->name('expenses.pools');
-        Route::get('accounting/expenses/export', [ExpensesController::class, 'export'])->middleware('perm:expenses.view')->name('expenses.export');
-        Route::post('accounting/expenses', [ExpensesController::class, 'store'])->middleware('perm:expenses.create')->name('expenses.store');
-        Route::put('accounting/expenses/{expense}', [ExpensesController::class, 'update'])->middleware('perm:expenses.edit')->name('expenses.update');
-        Route::post('accounting/expenses/{expense}/post', [ExpensesController::class, 'post'])->middleware('perm:expenses.approve')->name('expenses.post');
-        Route::post('accounting/expenses/{expense}/cancel', [ExpensesController::class, 'cancel'])->middleware('perm:expenses.approve')->name('expenses.cancel');
-        Route::delete('accounting/expenses/{expense}', [ExpensesController::class, 'destroy'])->middleware('perm:expenses.delete')->name('expenses.destroy');
+        Route::get('halls/expenses', [ExpensesController::class, 'hallExpenses'])->middleware('perm:hall_expenses.view')->name('expenses.halls');
+        Route::get('chalets/expenses', [ExpensesController::class, 'chaletExpenses'])->middleware('perm:chalet_expenses.view')->name('expenses.chalets');
+        Route::get('pools/expenses', [ExpensesController::class, 'poolExpenses'])->middleware('perm:pool_expenses.view')->name('expenses.pools');
+        // The activity of a spend is its cost centre's, so these authorize from
+        // the record rather than from a key nailed to the route.
+        Route::get('accounting/expenses/export', [ExpensesController::class, 'export'])->name('expenses.export');
+        Route::post('accounting/expenses', [ExpensesController::class, 'store'])->name('expenses.store');
+        Route::put('accounting/expenses/{expense}', [ExpensesController::class, 'update'])->name('expenses.update');
+        Route::post('accounting/expenses/{expense}/post', [ExpensesController::class, 'post'])->name('expenses.post');
+        Route::post('accounting/expenses/{expense}/cancel', [ExpensesController::class, 'cancel'])->name('expenses.cancel');
+        Route::delete('accounting/expenses/{expense}', [ExpensesController::class, 'destroy'])->name('expenses.destroy');
 
         // أنواع المصروف — تُدار من الشاشة نفسها لا من شجرة الحسابات
-        Route::post('accounting/expense-categories', [ExpensesController::class, 'storeCategory'])->middleware('perm:expenses.create')->name('expense_categories.store');
-        Route::put('accounting/expense-categories/{category}', [ExpensesController::class, 'updateCategory'])->middleware('perm:expenses.edit')->name('expense_categories.update');
-        Route::patch('accounting/expense-categories/{category}/toggle', [ExpensesController::class, 'toggleCategory'])->middleware('perm:expenses.edit')->name('expense_categories.toggle');
-        Route::delete('accounting/expense-categories/{category}', [ExpensesController::class, 'destroyCategory'])->middleware('perm:expenses.delete')->name('expense_categories.destroy');
+        Route::post('accounting/expense-categories', [ExpensesController::class, 'storeCategory'])->name('expense_categories.store');
+        Route::put('accounting/expense-categories/{category}', [ExpensesController::class, 'updateCategory'])->name('expense_categories.update');
+        Route::patch('accounting/expense-categories/{category}/toggle', [ExpensesController::class, 'toggleCategory'])->name('expense_categories.toggle');
+        Route::delete('accounting/expense-categories/{category}', [ExpensesController::class, 'destroyCategory'])->name('expense_categories.destroy');
 
         Route::get('accounting/reports', [FinancialReportsController::class, 'index'])->middleware('perm:fin_reports.view')->name('fin_reports.index');
     });
@@ -460,18 +474,20 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::get('clients', [ClientsController::class, 'index'])->middleware('perm:clients.view')->name('clients.index');
     // سجل عملاء كل نشاط — الشاشة نفسها مقصورةً على سجلٍّ واحد، يفتحها
     // الموظف من قائمة نشاطه فلا يمرّ على عملاء نشاطٍ لا يعمل فيه.
-    Route::get('halls/clients', [ClientsController::class, 'hallClients'])->middleware('perm:clients.view')->name('clients.halls');
-    Route::get('chalets/clients', [ClientsController::class, 'chaletClients'])->middleware('perm:clients.view')->name('clients.chalets');
-    Route::get('pools/clients', [ClientsController::class, 'poolClients'])->middleware('perm:clients.view')->name('clients.pools');
-    Route::get('clients/export', [ClientsController::class, 'export'])->middleware('perm:clients.view')->name('clients.export');
-    Route::post('clients', [ClientsController::class, 'store'])->middleware('perm:clients.create')->name('clients.store');
+    // Each register carries its own key; the record routes below cannot, because
+    // the activity is the record's own, so those authorize inside the controller.
+    Route::get('halls/clients', [ClientsController::class, 'hallClients'])->middleware('perm:hall_clients.view')->name('clients.halls');
+    Route::get('chalets/clients', [ClientsController::class, 'chaletClients'])->middleware('perm:chalet_clients.view')->name('clients.chalets');
+    Route::get('pools/clients', [ClientsController::class, 'poolClients'])->middleware('perm:pool_clients.view')->name('clients.pools');
+    Route::get('clients/export', [ClientsController::class, 'export'])->name('clients.export');
+    Route::post('clients', [ClientsController::class, 'store'])->name('clients.store');
     // إضافة سريعة من شاشات الحجز — قبل مسارات {client} كي لا تُفسَّر "quick" معرّفًا
-    Route::post('clients/quick', [ClientsController::class, 'quickStore'])->middleware('perm:clients.create')->name('clients.quick');
+    Route::post('clients/quick', [ClientsController::class, 'quickStore'])->name('clients.quick');
     // ملف العميل — بعد المسارات الثابتة كي لا تُفسَّر «export» معرّفًا
-    Route::get('clients/{client}', [ClientsController::class, 'show'])->middleware('perm:clients.view')->name('clients.show');
-    Route::put('clients/{client}', [ClientsController::class, 'update'])->middleware('perm:clients.edit')->name('clients.update');
-    Route::patch('clients/{client}/toggle', [ClientsController::class, 'toggle'])->middleware('perm:clients.edit')->name('clients.toggle');
-    Route::delete('clients/{client}', [ClientsController::class, 'destroy'])->middleware('perm:clients.delete')->name('clients.destroy');
+    Route::get('clients/{client}', [ClientsController::class, 'show'])->name('clients.show');
+    Route::put('clients/{client}', [ClientsController::class, 'update'])->name('clients.update');
+    Route::patch('clients/{client}/toggle', [ClientsController::class, 'toggle'])->name('clients.toggle');
+    Route::delete('clients/{client}', [ClientsController::class, 'destroy'])->name('clients.destroy');
 
     // طرق الدفع — تُدار من الإعدادات وتقرأها شاشات الحجوزات والكاشير والسندات
     Route::get('settings/payment-methods', [PaymentMethodsController::class, 'index'])->middleware('perm:payment_methods.view')->name('payment_methods.index');

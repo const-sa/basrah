@@ -53,7 +53,9 @@ interface SidebarUnit {
  * عنصر تنقّل مع الصلاحية التي تحكم ظهوره.
  * العنصر بلا `perm` يظهر لكل مستخدم مسجّل.
  */
-export type GuardedNavItem = NavItem & { perm?: string; children?: GuardedNavItem[] };
+// `shared` marks a screen this menu only borrows — it belongs to another section,
+// so holding its key must not keep this activity's menu open on its own.
+export type GuardedNavItem = NavItem & { perm?: string; shared?: boolean; children?: GuardedNavItem[] };
 
 /**
  * هل ينتمي المسار الحالي إلى هذا المدخل؟ يشمل صفحاته الفرعية،
@@ -107,17 +109,17 @@ export function useNavigation() {
                 { title: t('nav.hall_bookings'), href: '/admin/bookings/halls', icon: CalendarDays, perm: 'hall_bookings.view' },
                 { title: t('nav.hall_calendar'), href: '/admin/calendar/halls', icon: CalendarRange, perm: 'hall_calendar.view' },
                 { title: t('nav.hall_month_calendar'), href: '/admin/calendar/halls/month', icon: CalendarDays, perm: 'hall_calendar.view' },
-                { title: t('nav.clients'), href: '/admin/halls/clients', icon: Contact, perm: 'clients.view' },
+                { title: t('nav.clients'), href: '/admin/halls/clients', icon: Contact, perm: 'hall_clients.view' },
                 // Spend is recorded where it is incurred: the register opens on
                 // this activity's centres, and on the employee's own units.
-                { title: t('nav.expenses'), href: '/admin/halls/expenses', icon: Receipt, perm: 'expenses.view' },
+                { title: t('nav.expenses'), href: '/admin/halls/expenses', icon: Receipt, perm: 'hall_expenses.view' },
                 { title: t('nav.all_halls'), href: '/admin/units/halls', icon: Building2, perm: 'halls.view' },
                 // The two papers of an event — the rental pad and the services
                 // list — as the chalets and pools menus hold their own.
-                { title: t('nav.contracts_list'), href: '/admin/halls/contracts', icon: FileSignature, perm: 'contracts.view' },
+                { title: t('nav.contracts_list'), href: '/admin/halls/contracts', icon: FileSignature, perm: 'hall_contracts.view' },
                 { title: t('nav.packages'), href: '/admin/packages', icon: PackageIcon, perm: 'packages.view' },
                 { title: t('nav.event_types'), href: '/admin/event-types', icon: PartyPopper, perm: 'event_types.view' },
-                { title: t('nav.hall_contract_template'), href: '/admin/units/contract-template', icon: FileText, perm: 'hall_contract.view' },
+                { title: t('nav.hall_contract_template'), href: '/admin/units/contract-template', icon: FileText, perm: 'hall_contract_template.view' },
                 // كل قاعة مدخل مستقل: لها حجوزاتها وفواتيرها وربحيتها، فالوصول
                 // إليها مباشرة أسرع من تصفية الشاشات العامة في كل مرة.
                 ...unitsOfType('hall').map((u) => ({
@@ -136,14 +138,14 @@ export function useNavigation() {
             children: [
                 { title: t('nav.chalet_bookings'), href: '/admin/bookings/chalets', icon: CalendarDays, perm: 'chalet_bookings.view' },
                 { title: t('nav.chalet_calendar'), href: '/admin/calendar/chalets', icon: CalendarRange, perm: 'chalet_calendar.view' },
-                { title: t('nav.clients'), href: '/admin/chalets/clients', icon: Contact, perm: 'clients.view' },
-                { title: t('nav.expenses'), href: '/admin/chalets/expenses', icon: Receipt, perm: 'expenses.view' },
+                { title: t('nav.clients'), href: '/admin/chalets/clients', icon: Contact, perm: 'chalet_clients.view' },
+                { title: t('nav.expenses'), href: '/admin/chalets/expenses', icon: Receipt, perm: 'chalet_expenses.view' },
                 { title: t('nav.all_chalets'), href: '/admin/units/chalets', icon: Home, perm: 'chalets.view' },
                 // The rental sheets let on the chalets, as the pools menu holds
                 // theirs: the employee here wants this activity's contracts,
                 // not every hall rental and pool job in the business.
-                { title: t('nav.contracts_list'), href: '/admin/chalets/contracts', icon: FileSignature, perm: 'contracts.view' },
-                { title: t('nav.chalet_contract_template'), href: '/admin/units/chalet-contract-template', icon: FileText, perm: 'chalet_contract.view' },
+                { title: t('nav.contracts_list'), href: '/admin/chalets/contracts', icon: FileSignature, perm: 'chalet_contracts.view' },
+                { title: t('nav.chalet_contract_template'), href: '/admin/units/chalet-contract-template', icon: FileText, perm: 'chalet_contract_template.view' },
                 ...unitsOfType('chalet').map((u) => ({
                     title: u.name,
                     href: `/admin/units/${u.id}/workspace`,
@@ -169,13 +171,13 @@ export function useNavigation() {
             children: [
                 { title: t('nav.cashier'), href: '/admin/pos', icon: ShoppingCart, perm: 'pos.view' },
                 { title: t('nav.sales'), href: '/admin/sales', icon: Receipt, perm: 'sales.view' },
-                { title: t('nav.clients'), href: '/admin/pools/clients', icon: Contact, perm: 'clients.view' },
-                { title: t('nav.expenses'), href: '/admin/pools/expenses', icon: Receipt, perm: 'expenses.view' },
+                { title: t('nav.clients'), href: '/admin/pools/clients', icon: Contact, perm: 'pool_clients.view' },
+                { title: t('nav.expenses'), href: '/admin/pools/expenses', icon: Receipt, perm: 'pool_expenses.view' },
                 { title: t('nav.items'), href: '/admin/items', icon: Boxes, perm: 'items.view' },
                 { title: t('nav.item_groups'), href: '/admin/item-groups', icon: Layers, perm: 'item_groups.view' },
-                { title: t('nav.measure_units'), href: '/admin/inventory/units', icon: Ruler, perm: 'items.view' },
+                { title: t('nav.measure_units'), href: '/admin/inventory/units', icon: Ruler, perm: 'measure_units.view' },
                 { title: t('nav.movements'), href: '/admin/inventory/movements', icon: History, perm: 'inventory.view' },
-                { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view' },
+                { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view', shared: true },
                 { title: t('nav.purchases'), href: '/admin/purchases', icon: ShoppingBag, perm: 'purchases.view' },
                 { title: t('nav.quotations'), href: '/admin/quotations', icon: FileText, perm: 'quotations.view' },
                 // A pools contract is drawn from the quotation the client
@@ -183,7 +185,7 @@ export function useNavigation() {
                 // It points at the pools register, not the full one: from here
                 // the employee wants this activity's contracts, not every
                 // hall and chalet rental in the business.
-                { title: t('nav.contracts_list'), href: '/admin/pools/contracts', icon: FileSignature, perm: 'contracts.view' },
+                { title: t('nav.contracts_list'), href: '/admin/pools/contracts', icon: FileSignature, perm: 'pool_contracts.view' },
             ],
         },
         {
@@ -194,7 +196,7 @@ export function useNavigation() {
                 { title: t('nav.accounts'), href: '/admin/accounting/accounts', icon: CalculatorIcon, perm: 'accounts.view' },
                 // المورّد طرف دائن في دفاتر المحاسبة قبل أن يكون شاشة إدارية،
                 // فمكانه مع الحسابات والسندات لا مع لوحة التحكم والعملاء.
-                { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view' },
+                { title: t('nav.suppliers'), href: '/admin/suppliers', icon: Truck, perm: 'suppliers.view', shared: true },
                 { title: t('nav.journal'), href: '/admin/accounting/journal', icon: FileText, perm: 'journal.view' },
                 { title: t('nav.vouchers'), href: '/admin/accounting/vouchers', icon: Receipt, perm: 'vouchers.view' },
                 { title: t('nav.revenues'), href: '/admin/accounting/revenues', icon: TrendingUp, perm: 'revenues.view' },
@@ -256,14 +258,20 @@ export function useNavigation() {
     /**
      * إخفاء ما لا يملك المستخدم صلاحيته، وإخفاء المجموعة كاملة إذا خلت من أبنائها.
      * الحماية الفعلية على الخادم — هذا تنظيف للواجهة فقط.
+     *
+     * A group opens on its own screens only. Clients, expenses, suppliers and
+     * contracts are one key each, shared by all three activities, so a pools
+     * employee holding them would otherwise be shown a halls and a chalets menu
+     * carrying nothing but those borrowed rows.
      */
     const navItems = computed<GuardedNavItem[]>(() =>
         allNavItems.value
             .map((item) => {
                 if (!item.children) return item.perm && !can(item.perm) ? null : item;
 
-                const children = item.children.filter((c) => !c.perm || can(c.perm));
-                return children.length ? { ...item, children } : null;
+                // Cast: the intersection widens children back to NavItem, dropping perm/shared.
+                const children = (item.children as GuardedNavItem[]).filter((c) => !c.perm || can(c.perm));
+                return children.some((c) => !c.shared) ? { ...item, children } : null;
             })
             .filter((item): item is GuardedNavItem => item !== null),
     );

@@ -67,7 +67,11 @@ const props = defineProps<{
     activity: ClientTypeKey | null;
     activityLabel: string | null;
     cities: string[];
+    can: Record<string, boolean>;
 }>();
+
+// The server answered these for this register's activity; the buttons follow it.
+const may = computed(() => props.can);
 
 /** المسار الذي تعود إليه الفلاتر والتصدير — سجل النشاط أو الدليل كله. */
 const basePath = computed(() => (props.activity ? `/admin/${ACTIVITY_SEGMENT[props.activity]}/clients` : '/admin/clients'));
@@ -259,6 +263,7 @@ const destroy = (c: ClientRow) => {
                         </select>
                         <!-- إضافة -->
                         <button
+                            v-if="may.create"
                             type="button"
                             @click="openCreate"
                             class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
@@ -267,6 +272,7 @@ const destroy = (c: ClientRow) => {
                         </button>
                         <!-- تصدير -->
                         <a
+                            v-if="may.export"
                             :href="exportUrl"
                             class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
                         >
@@ -359,6 +365,7 @@ const destroy = (c: ClientRow) => {
                                                 <Eye class="h-4 w-4" />
                                             </Link>
                                             <button
+                                                v-if="may.edit"
                                                 type="button"
                                                 @click="openEdit(c)"
                                                 title="تعديل"
@@ -367,7 +374,7 @@ const destroy = (c: ClientRow) => {
                                                 <Pencil class="h-4 w-4" />
                                             </button>
                                             <button
-                                                v-if="!c.is_walk_in"
+                                                v-if="may.edit && !c.is_walk_in"
                                                 type="button"
                                                 @click="toggle(c)"
                                                 title="تفعيل/إيقاف"
@@ -376,7 +383,7 @@ const destroy = (c: ClientRow) => {
                                                 <Power class="h-4 w-4" />
                                             </button>
                                             <button
-                                                v-if="!c.is_walk_in"
+                                                v-if="may.delete && !c.is_walk_in"
                                                 type="button"
                                                 @click="destroy(c)"
                                                 title="حذف"

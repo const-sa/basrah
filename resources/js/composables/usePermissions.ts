@@ -37,6 +37,18 @@ export function usePermissions() {
     const canBooking = (type: string | null | undefined, action: string): boolean =>
         can(`${type === 'chalet' ? 'chalet' : 'hall'}_bookings.${action}`);
 
+    /**
+     * Clients, expenses and contracts are one screen per activity: the global key
+     * answers for all three, the scoped one only for its own. Mirrors ActivityPermission.
+     */
+    const ACTIVITY_PREFIX: Record<string, string> = { halls: 'hall', chalets: 'chalet', pools: 'pool' };
+
+    const canActivity = (screen: string, action: string, activity: 'halls' | 'chalets' | 'pools' | null): boolean => {
+        if (can(`${screen}.${action}`)) return true;
+        const prefix = activity ? ACTIVITY_PREFIX[activity] : null;
+        return prefix ? can(`${prefix}_${screen}.${action}`) : false;
+    };
+
     /** هل يصل المستخدم إلى نظام كامل مثل accounting؟ */
     const inSystem = (system: string): boolean =>
         isSuperAdmin.value || (auth.value.systems ?? []).includes(system);
@@ -49,5 +61,5 @@ export function usePermissions() {
     const canAccessUnit = (unitId: number): boolean =>
         seesAllUnits.value || (unitIds.value ?? []).includes(unitId);
 
-    return { can, canAny, canUnit, canBooking, inSystem, isSuperAdmin, unitIds, seesAllUnits, canAccessUnit };
+    return { can, canAny, canActivity, canUnit, canBooking, inSystem, isSuperAdmin, unitIds, seesAllUnits, canAccessUnit };
 }

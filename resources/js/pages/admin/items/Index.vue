@@ -5,7 +5,7 @@ import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ClipboardList, History, Pencil, Plus, Power, Search, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, ClipboardList, History, Pencil, Plus, Power, Scale, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Component {
@@ -164,6 +164,26 @@ const submitStocktake = () => {
 
 const changedCount = computed(() => stocktake.adjustments.filter((a) => a.counted_qty !== a.current).length);
 
+// ── تصحيح رصيد صنف واحد ─────────────────────────────────────
+const showAdjust = ref(false);
+const adjustItem = ref<Item | null>(null);
+const adjust = useForm({ counted_qty: 0, notes: '' });
+
+const openAdjust = (i: Item) => {
+    adjustItem.value = i;
+    adjust.reset();
+    adjust.counted_qty = i.stock_qty;
+    showAdjust.value = true;
+};
+
+const submitAdjust = () => {
+    if (!adjustItem.value) return;
+    adjust.post(`/admin/inventory/items/${adjustItem.value.id}/adjust`, {
+        preserveScroll: true,
+        onSuccess: () => (showAdjust.value = false),
+    });
+};
+
 const typeClass = (t: string) =>
     ({
         stock: 'bg-sky-100 text-sky-700',
@@ -321,6 +341,13 @@ const typeClass = (t: string) =>
                                             :icon="Power"
                                             title="تفعيل/تعطيل"
                                             @click="toggle(i)"
+                                        />
+                                        <TableActionButton
+                                            v-if="can('inventory.edit') && i.tracks_stock"
+                                            variant="warning"
+                                            :icon="Scale"
+                                            title="تصحيح الرصيد"
+                                            @click="openAdjust(i)"
                                         />
                                         <TableActionButton
                                             v-if="can('items.delete')"
@@ -601,6 +628,40 @@ const typeClass = (t: string) =>
                                 اعتماد التسوية
                             </button>
                         </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- One item's balance, short of a full stocktake -->
+        <div v-if="showAdjust" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="showAdjust = false">
+            <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+                <form @submit.prevent="submitAdjust">
+                    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                        <h2 class="text-lg font-extrabold text-slate-900">تصحيح رصيد «{{ adjustItem?.name }}»</h2>
+                        <button type="button" @click="showAdjust = false" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
+                    </div>
+
+                    <div class="space-y-4 px-6 py-5">
+                        <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600">
+                            الرصيد الدفتري: <span dir="ltr">{{ adjustItem?.stock_qty }}</span>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-bold text-slate-600">الرصيد المعدود</label>
+                            <input v-model.number="adjust.counted_qty" type="number" step="0.001" min="0" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                            <p v-if="adjust.errors.counted_qty" class="mt-1 text-xs font-bold text-red-600">{{ adjust.errors.counted_qty }}</p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-bold text-slate-600">السبب</label>
+                            <textarea v-model="adjust.notes" rows="2" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+                        <button type="button" @click="showAdjust = false" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600">إلغاء</button>
+                        <button type="submit" :disabled="adjust.processing" class="rounded-md bg-amber-500 px-5 py-2 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50">
+                            تسجيل التسوية
+                        </button>
                     </div>
                 </form>
             </div>

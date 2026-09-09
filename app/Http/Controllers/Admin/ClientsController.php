@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesActivities;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendWhatsappMessage;
 use App\Models\Booking;
@@ -14,9 +15,10 @@ use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Voucher;
 use App\Services\WaGateway;
-use Illuminate\Database\Eloquent\Builder;
+use App\Support\ActivityPermission;
 use App\Support\ClientType;
 use App\Support\NotificationCatalog;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,6 +31,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientsController extends Controller
 {
+    use AuthorizesActivities;
+
+    /** The actions the clients screen can offer. */
+    private const ACTIONS = ['view', 'create', 'edit', 'delete', 'export'];
+
     public function hallClients(Request $request): Response
     {
         return $this->index($request, ClientType::HALL);
@@ -109,6 +116,8 @@ class ClientsController extends Controller
             // النشاط المثبَّت — الشاشة تُخفي تبويبات الأنشطة حين يُفتح سجلٌّ بعينه.
             'activity' => $activity,
             'activityLabel' => $activity ? ClientType::label($activity) : null,
+            // The buttons follow the same answer the routes enforce.
+            'can' => $this->activityAbilities($request, 'clients', ActivityPermission::fromClientType($activity), self::ACTIONS),
             // قائمة المدن المفعّلة لتعبئة قائمة الاختيار في نموذج العميل.
             'cities' => City::where('is_active', true)->orderBy('name')->pluck('name'),
         ]);
@@ -120,6 +129,11 @@ class ClientsController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $filters = $this->parseFilters($request);
+
+        // Exporting one activity's register needs that activity's key; exporting
+        // the whole directory unfiltered needs the global one.
+        $this->authorizeActivity($request, 'clients', 'export', ActivityPermission::fromClientType($filters['type'] ?: null));
+
         $query = $this->filteredQuery($filters)->latest('id');
 
         $filename = 'clients-'.now()->format('Ymd-His').'.csv';
@@ -177,8 +191,10 @@ class ClientsController extends Controller
      * ودفعاته وفواتيره وعقوده وسنداته في صفحة واحدة، وترتيبها بالأحدث
      * لأن آخر تعامل هو المسؤول عنه غالبًا.
      */
-    public function show(Client $client): Response
+    public function show(Request $request, Client $client): Response
     {
+        $this->authorizeActivity($request, 'clients', 'view', ActivityPermission::ofClient($client));
+
         $bookings = $client->bookings()
             ->with(['unit:id,name,type', 'eventType:id,name'])
             ->orderByDesc('booking_date')
@@ -207,6 +223,11 @@ class ClientsController extends Controller
                 'is_walk_in' => $client->is_walk_in,
                 'notes' => $client->notes,
                 'created_at' => $client->created_at?->format('Y-m-d'),
+            ],
+            'can' => [
+                ...$this->activityAbilities($request, 'clients', ActivityPermission::ofClient($client), self::ACTIONS),
+                // The contracts panel on the profile follows the same client's activity.
+                'contracts' => ActivityPermission::allows($request->user(), 'contracts', 'view', ActivityPermission::ofClient($client)),
             ],
             'stats' => $this->profileStats($bookings, $sales),
             'bookings' => $bookings->map(fn (Booking $b) => [
@@ -389,6 +410,10 @@ class ClientsController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorizeActivity($request, 'clients', 'create', ActivityPermission::fromClientType(
+            ClientType::normalize($request->string('type')->toString() ?: null),
+        ));
+
         $client = $this->persist($request, new Client);
 
         $this->sendWelcome($client, $client->type);
@@ -415,6 +440,8 @@ class ClientsController extends Controller
 
         $type = ClientType::normalize($data['type'] ?? null);
 
+        $this->authorizeActivity($request, 'clients', 'create', ActivityPermission::fromClientType($type));
+
         $client = (new Client)->fill([
             'name' => $data['name'],
             'mobile' => $data['mobile'] ?? null,
@@ -438,13 +465,21 @@ class ClientsController extends Controller
 
     public function update(Request $request, Client $client): RedirectResponse
     {
+        // Both ends: the register it sits in now, and the one it is being moved to.
+        $this->authorizeActivity($request, 'clients', 'edit', ActivityPermission::ofClient($client));
+        $this->authorizeActivity($request, 'clients', 'edit', ActivityPermission::fromClientType(
+            ClientType::normalize($request->string('type')->toString() ?: $client->type),
+        ));
+
         $this->persist($request, $client);
 
         return back()->with('success', 'تم تحديث بيانات العميل');
     }
 
-    public function toggle(Client $client): RedirectResponse
+    public function toggle(Request $request, Client $client): RedirectResponse
     {
+        $this->authorizeActivity($request, 'clients', 'edit', ActivityPermission::ofClient($client));
+
         // إيقاف العميل النقدي يوقف كل بيع بلا عميل محدد — فلا يُوقَف.
         if ($client->isWalkIn()) {
             return back()->with('warning', 'العميل النقدي الافتراضي لا يُوقَف — عليه تُحمل فواتير البيع بلا عميل.');
@@ -455,8 +490,10 @@ class ClientsController extends Controller
         return back()->with('success', 'تم تغيير حالة العميل');
     }
 
-    public function destroy(Client $client): RedirectResponse
+    public function destroy(Request $request, Client $client): RedirectResponse
     {
+        $this->authorizeActivity($request, 'clients', 'delete', ActivityPermission::ofClient($client));
+
         if ($client->isWalkIn()) {
             return back()->with('warning', 'العميل النقدي الافتراضي لا يُحذف — عليه تُحمل فواتير البيع بلا عميل.');
         }

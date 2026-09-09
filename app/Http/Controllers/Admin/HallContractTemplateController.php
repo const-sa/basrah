@@ -41,7 +41,7 @@ class HallContractTemplateController extends UnitContractTemplateController
             'back_href' => '/admin/units/halls',
             'back_label' => 'القاعات',
             'endpoint' => '/admin/units/contract-template',
-            'edit_perm' => 'hall_contract.edit',
+            'edit_perm' => 'hall_contract_template.edit',
         ];
     }
 }

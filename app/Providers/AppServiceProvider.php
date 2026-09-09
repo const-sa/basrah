@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\RolesController;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Observers\AuditObserver;
+use App\Support\ActivitySegment;
 use App\Support\BookingTimes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -24,6 +25,10 @@ class AppServiceProvider extends ServiceProvider
         // a list), so they resolve once. A singleton rather than a static so
         // nothing leaks between tests, and Setting::booted() drops it on save.
         $this->app->singleton(BookingTimes::class);
+
+        // The centre → activity map is one query, read on every scoped
+        // permission check, so it resolves once per request rather than per call.
+        $this->app->scoped(ActivitySegment::class);
     }
 
     /**

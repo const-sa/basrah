@@ -24,6 +24,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * سجل فواتير الأقسام البائعة (المسابح وغيرها) منفصلًا عن شاشة الكاشير.
@@ -53,34 +54,8 @@ class SalesController extends Controller
                 ->find($request->integer('invoice'))
             : null;
 
-        $departmentParam = $request->string('department_id')->toString();
-        $departmentId = $departmentParam === 'all'
-            ? null
-            // القائمة تُفتح على قسم الفاتورة المقصودة، وإلا اختفت من خلفها.
-            : ((int) $departmentParam ?: ($openSale?->department_id ?? $departments->first()->id ?? null));
-
-        $filters = [
-            'department_id' => $departmentParam === 'all' ? 'all' : (string) ($departmentId ?? ''),
-            'type' => $request->string('type')->toString() ?: null,
-            'payment_status' => $request->string('payment_status')->toString() ?: null,
-            'payment_method_id' => $request->integer('payment_method_id') ?: null,
-            'from' => $request->date('from')?->toDateString(),
-            'to' => $request->date('to')?->toDateString(),
-            'search' => $request->string('search')->toString() ?: null,
-        ];
-
-        $query = Sale::query()
-            ->when($departmentId, fn ($q, $id) => $q->where('sales.department_id', $id))
-            ->when($filters['type'], fn ($q, $t) => $q->where('sales.type', $t))
-            ->when($filters['payment_method_id'], fn ($q, $id) => $q->where('sales.payment_method_id', $id))
-            ->when($filters['payment_status'], fn ($q, $s) => $q->paymentStatus($s))
-            ->when($filters['from'], fn ($q, $d) => $q->whereDate('sales.created_at', '>=', $d))
-            ->when($filters['to'], fn ($q, $d) => $q->whereDate('sales.created_at', '<=', $d))
-            ->when($filters['search'], fn ($q, $s) => $q->where(fn ($w) => $w
-                ->where('sales.number', 'like', "%{$s}%")
-                ->orWhereHas('client', fn ($c) => $c
-                    ->where('name', 'like', "%{$s}%")
-                    ->orWhere('mobile', 'like', "%{$s}%"))));
+        $filters = $this->filters($request, $openSale, $departments->first()?->id);
+        $query = $this->filtered($filters);
 
         return Inertia::render('admin/sales/Index', [
             'sales' => (clone $query)
@@ -105,6 +80,106 @@ class SalesController extends Controller
             'voucherMethods' => PaymentMethod::options(),
             'openSale' => $openSale ? $this->summarize($openSale) : null,
         ]);
+    }
+
+    /**
+     * The list's filters as the screen echoes them — list and export read one set.
+     *
+     * @return array<string, mixed>
+     */
+    private function filters(Request $request, ?Sale $openSale = null, ?int $fallbackDepartment = null): array
+    {
+        $param = $request->string('department_id')->toString();
+
+        // القائمة تُفتح على قسم الفاتورة المقصودة، وإلا اختفت من خلفها.
+        $departmentId = $param === 'all'
+            ? null
+            : ((int) $param ?: ($openSale?->department_id ?? $fallbackDepartment));
+
+        return [
+            'department_id' => $param === 'all' ? 'all' : (string) ($departmentId ?? ''),
+            'type' => $request->string('type')->toString() ?: null,
+            'payment_status' => $request->string('payment_status')->toString() ?: null,
+            'payment_method_id' => $request->integer('payment_method_id') ?: null,
+            'from' => $request->date('from')?->toDateString(),
+            'to' => $request->date('to')?->toDateString(),
+            'search' => $request->string('search')->toString() ?: null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return Builder<Sale>
+     */
+    private function filtered(array $filters): Builder
+    {
+        $departmentId = $filters['department_id'] === 'all' ? null : ((int) $filters['department_id'] ?: null);
+
+        return Sale::query()
+            ->when($departmentId, fn ($q, $id) => $q->where('sales.department_id', $id))
+            ->when($filters['type'], fn ($q, $t) => $q->where('sales.type', $t))
+            ->when($filters['payment_method_id'], fn ($q, $id) => $q->where('sales.payment_method_id', $id))
+            ->when($filters['payment_status'], fn ($q, $s) => $q->paymentStatus($s))
+            ->when($filters['from'], fn ($q, $d) => $q->whereDate('sales.created_at', '>=', $d))
+            ->when($filters['to'], fn ($q, $d) => $q->whereDate('sales.created_at', '<=', $d))
+            ->when($filters['search'], fn ($q, $s) => $q->where(fn ($w) => $w
+                ->where('sales.number', 'like', "%{$s}%")
+                ->orWhereHas('client', fn ($c) => $c
+                    ->where('name', 'like', "%{$s}%")
+                    ->orWhere('mobile', 'like', "%{$s}%"))));
+    }
+
+    /**
+     * Export the filtered register — the screen's numbers, not just its visible page.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $filters = $this->filters($request, null, Department::selling()->orderBy('sort_order')->value('id'));
+        $filename = 'sales-'.now()->format('Y-m-d-His').'.csv';
+
+        return response()->streamDownload(function () use ($filters) {
+            $out = fopen('php://output', 'w');
+
+            // BOM حتى يفتح إكسل العربية بترميزها الصحيح بدل رموز مبهمة.
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, ['الرقم', 'التاريخ', 'الوقت', 'النوع', 'القسم', 'العميل', 'الجوال', 'الكاشير', 'طريقة الدفع', 'قبل الضريبة', 'الضريبة', 'الإجمالي', 'المرتجع', 'الصافي', 'المدفوع', 'المتبقي', 'حالة السداد']);
+
+            $this->filtered($filters)
+                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name'])
+                ->orderByDesc('sales.id')
+                ->chunk(500, function ($chunk) use ($out) {
+                    foreach ($chunk as $sale) {
+                        $row = $this->summarize($sale);
+
+                        fputcsv($out, [
+                            $row['number'], $row['date'], $row['time'], $row['type_label'],
+                            $row['department'], $row['client'], $row['client_mobile'], $row['cashier'],
+                            $row['method_label'], $row['amount_before_tax'], $row['tax_amount'],
+                            $row['total'], $row['returned'], $row['net_total'],
+                            $row['paid'], $row['remaining'], $row['payment_status_label'],
+                        ]);
+                    }
+                });
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Void an invoice and file it in the archive.
+     */
+    public function destroy(Request $request, Sale $sale): RedirectResponse
+    {
+        $reason = $request->string('reason')->toString() ?: null;
+
+        try {
+            $this->sales->void($sale, $request->user()?->id, $reason);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        return back()->with('success', "تم إلغاء الفاتورة {$sale->number} ونقلها إلى الأرشيف.");
     }
 
     /**

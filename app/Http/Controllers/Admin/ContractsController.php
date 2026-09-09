@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\AuthorizesActivities;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Client;
@@ -16,6 +17,8 @@ use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
+use App\Support\ActivityPermission;
+use App\Support\ActivitySegment;
 use App\Support\ChaletContractTemplate;
 use App\Support\ClientType;
 use App\Support\HallRentalContractTemplate;
@@ -31,6 +34,11 @@ use RuntimeException;
 
 class ContractsController extends Controller
 {
+    use AuthorizesActivities;
+
+    /** The actions the contracts screen can offer. */
+    private const ACTIONS = ['view', 'create', 'edit', 'delete', 'send', 'export'];
+
     /**
      * حقول العربون المقبوض وقت تحرير العقد — مشتركة بين مصدري عقود المسابح.
      */
@@ -56,6 +64,8 @@ class ContractsController extends Controller
      */
     public function pdf(Request $request, Contract $contract): HttpResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'export', ActivityPermission::ofContract($contract));
+
         try {
             $content = $this->pdf->render($contract);
         } catch (RuntimeException $e) {
@@ -185,6 +195,7 @@ class ContractsController extends Controller
                     'created_at' => $c->created_at->toDateString(),
                 ]),
             'scope' => $scope,
+            'can' => $this->activityAbilities($request, 'contracts', ActivityPermission::ofScope($scope), self::ACTIONS),
             // The register is headed by whoever its contracts are drawn under —
             // the pools activity on its own screen, the business on the full one.
             'letterhead' => collect($this->issuer(null, $poolsOnly))
@@ -288,8 +299,10 @@ class ContractsController extends Controller
         return $own->isNotEmpty() ? $own : $templates;
     }
 
-    public function show(Contract $contract): Response
+    public function show(Request $request, Contract $contract): Response
     {
+        $this->authorizeActivity($request, 'contracts', 'view', ActivityPermission::ofContract($contract));
+
         $contract->load([
             // The quotation's department is what heads a pools sheet.
             'booking.unit', 'booking.eventType', 'quotation.department', 'client', 'template',
@@ -307,6 +320,7 @@ class ContractsController extends Controller
             ->all();
 
         return Inertia::render('admin/contracts/Show', [
+            'can' => $this->activityAbilities($request, 'contracts', ActivityPermission::ofContract($contract), self::ACTIONS),
             'contract' => [
                 'id' => $contract->id,
                 'number' => $contract->number,
@@ -424,6 +438,13 @@ class ContractsController extends Controller
             abort(403, 'ليس لديك صلاحية العمل على هذه الوحدة.');
         }
 
+        // The paper belongs to the activity of the unit it is written on.
+        $this->authorizeActivity($request, 'contracts', 'create', match ($booking->unit?->type) {
+            'hall' => ActivitySegment::HALLS,
+            'chalet' => ActivitySegment::CHALETS,
+            default => null,
+        });
+
         $template = isset($data['contract_template_id'])
             ? ContractTemplate::find($data['contract_template_id'])
             : null;
@@ -452,6 +473,9 @@ class ContractsController extends Controller
      */
     public function storeFromQuotation(Request $request): RedirectResponse
     {
+        // A quotation contract is the pools' by definition.
+        $this->authorizeActivity($request, 'contracts', 'create', ActivitySegment::POOLS);
+
         $data = $request->validate([
             'quotation_id' => ['required', 'exists:quotations,id'],
             'contract_template_id' => ['nullable', 'exists:contract_templates,id'],
@@ -515,6 +539,11 @@ class ContractsController extends Controller
             ? ContractTemplate::find($data['contract_template_id'])
             : null;
 
+        // No booking behind it, so the chosen form names the activity.
+        $this->authorizeActivity($request, 'contracts', 'create', ActivityPermission::ofForm(
+            $template ? ContractService::formFor($template) : null,
+        ));
+
         try {
             $contract = $this->contracts->generateDirect(
                 Client::findOrFail($data['client_id']),
@@ -541,6 +570,8 @@ class ContractsController extends Controller
      */
     public function receipt(Request $request, Contract $contract): RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+
         abort_unless($contract->takesReceipts(), 404);
 
         $data = $request->validate([
@@ -664,8 +695,10 @@ class ContractsController extends Controller
     /**
      * The edit form for a draft — every field the contract prints.
      */
-    public function edit(Contract $contract): Response|RedirectResponse
+    public function edit(Request $request, Contract $contract): Response|RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+
         if ($contract->isSent()) {
             return redirect()->route('contracts.show', $contract)
                 ->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
@@ -753,6 +786,8 @@ class ContractsController extends Controller
      */
     public function update(Request $request, Contract $contract): RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+
         // A sent or signed contract is the paper the client holds: correcting
         // it under its own number forges what was signed.
         if ($contract->isSent()) {
@@ -815,6 +850,8 @@ class ContractsController extends Controller
      */
     public function refresh(Request $request, Contract $contract): RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+
         // العقد المُرسل أو الموقّع نسخةٌ بيد العميل: تغيير نصه بعدها تزويرٌ
         // للورقة التي وقّعها، فيُلغى ويُولَّد غيره لا أن يُبدَّل تحت رقمه.
         if ($contract->isSent()) {
@@ -843,6 +880,8 @@ class ContractsController extends Controller
      */
     public function send(Request $request, Contract $contract): RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'send', ActivityPermission::ofContract($contract));
+
         $contract->loadMissing('client');
 
         if (blank($contract->client?->mobile)) {
@@ -867,6 +906,8 @@ class ContractsController extends Controller
 
     public function changeStatus(Request $request, Contract $contract): RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+
         $data = $request->validate([
             'status' => ['required', Rule::in(array_keys(Contract::STATUSES))],
         ]);
@@ -879,8 +920,10 @@ class ContractsController extends Controller
         return back()->with('success', 'تم تحديث حالة العقد');
     }
 
-    public function destroy(Contract $contract): RedirectResponse
+    public function destroy(Request $request, Contract $contract): RedirectResponse
     {
+        $this->authorizeActivity($request, 'contracts', 'delete', ActivityPermission::ofContract($contract));
+
         if ($contract->isSent()) {
             return back()->with('warning', 'لا يُحذف عقد أُرسل للعميل — ألغِه بدل حذفه.');
         }

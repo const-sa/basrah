@@ -10,7 +10,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import { jsonHeaders } from '@/lib/csrf';
 import { type ClientTypeKey } from '@/types';
 import { Loader2, UserPlus, X } from 'lucide-vue-next';
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 export interface QuickClient {
     id: number;
@@ -26,7 +26,11 @@ const props = withDefaults(
     { type: undefined },
 );
 
-const { can } = usePermissions();
+const { canActivity } = usePermissions();
+
+// The client is filed in this screen's register, so the key is that register's.
+const ACTIVITY_OF: Record<string, 'halls' | 'chalets' | 'pools'> = { hall: 'halls', chalet: 'chalets', pool: 'pools' };
+const mayCreate = computed(() => canActivity('clients', 'create', ACTIVITY_OF[props.type ?? 'pool'] ?? 'pools'));
 
 const open = ref(false);
 const saving = ref(false);
@@ -104,7 +108,7 @@ const submit = async () => {
 
 <template>
     <button
-        v-if="can('clients.create')"
+        v-if="mayCreate"
         type="button"
         @click="openModal"
         title="إضافة عميل جديد"

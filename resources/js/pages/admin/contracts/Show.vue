@@ -5,7 +5,6 @@ import InstallationContractDocument from '@/components/contracts/InstallationCon
 import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StandardContractDocument from '@/components/contracts/StandardContractDocument.vue';
 import StayContractDocument from '@/components/contracts/StayContractDocument.vue';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -87,9 +86,11 @@ const props = defineProps<{
         manager_signature_url: string | null;
         stamp_url: string | null;
     };
+    can: Record<string, boolean>;
 }>();
 
-const { can } = usePermissions();
+
+const may = computed(() => props.can);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -215,14 +216,14 @@ const submitReceipt = () => {
                     <!-- المستند يُبنى على الخادم لا في المتصفح: ما يُنزَّل هنا
                          هو نفسه ما يصل العميل على واتساب، لا صورةً أخرى منه. -->
                     <a
-                        v-if="can('contracts.export')"
+                        v-if="may.export"
                         :href="`/admin/contracts/${contract.id}/pdf?download=1`"
                         class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
                     >
                         <FileDown class="h-4 w-4" /> تحميل PDF
                     </a>
                     <button
-                        v-if="can('contracts.send') && contract.status !== 'cancelled'"
+                        v-if="may.send && contract.status !== 'cancelled'"
                         type="button"
                         @click="send"
                         class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
@@ -231,14 +232,14 @@ const submitReceipt = () => {
                     </button>
                     <!-- تعديل العقد نفسه — بخلاف «تحديث من النموذج» الذي يعيد قراءة صياغته -->
                     <Link
-                        v-if="can('contracts.edit') && contract.status === 'draft'"
+                        v-if="may.edit && contract.status === 'draft'"
                         :href="`/admin/contracts/${contract.id}/edit`"
                         class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
                     >
                         <Pencil class="h-4 w-4" /> تعديل
                     </Link>
                     <button
-                        v-if="can('contracts.edit') && contract.status === 'draft'"
+                        v-if="may.edit && contract.status === 'draft'"
                         type="button"
                         @click="refresh"
                         class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
@@ -279,7 +280,7 @@ const submitReceipt = () => {
                         <ReceiptText class="h-4 w-4 text-slate-500" /> سندات القبض
                     </h3>
                     <button
-                        v-if="can('contracts.edit') && contract.accepts_receipt && !showReceipt"
+                        v-if="may.edit && contract.accepts_receipt && !showReceipt"
                         type="button"
                         @click="openReceipt"
                         class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"

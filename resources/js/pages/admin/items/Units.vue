@@ -96,7 +96,7 @@ const destroyDept = (d: Dept) => {
                     <h2 class="flex items-center gap-1.5 font-extrabold text-slate-800">
                         <Boxes class="h-4 w-4" /> أقسام المستودع
                     </h2>
-                    <button v-if="can('items.create')" type="button" @click="openDept()" class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
+                    <button v-if="can('measure_units.create')" type="button" @click="openDept()" class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
                         <Plus class="h-3.5 w-3.5" /> قسم جديد
                     </button>
                 </div>
@@ -130,8 +130,8 @@ const destroyDept = (d: Dept) => {
                             <td class="px-4 py-2.5 text-left font-extrabold text-slate-800" dir="ltr">{{ money(d.stock_value) }}</td>
                             <td class="px-4 py-2.5">
                                 <div class="flex items-center justify-center gap-1">
-                                    <TableActionButton v-if="can('items.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openDept(d)" />
-                                    <TableActionButton v-if="can('items.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroyDept(d)" />
+                                    <TableActionButton v-if="can('measure_units.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openDept(d)" />
+                                    <TableActionButton v-if="can('measure_units.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroyDept(d)" />
                                 </div>
                             </td>
                         </tr>
@@ -146,7 +146,7 @@ const destroyDept = (d: Dept) => {
                     <h2 class="flex items-center gap-1.5 font-extrabold text-slate-800">
                         <Ruler class="h-4 w-4" /> وحدات القياس
                     </h2>
-                    <button v-if="can('items.create')" type="button" @click="openUnit()" class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
+                    <button v-if="can('measure_units.create')" type="button" @click="openUnit()" class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
                         <Plus class="h-3.5 w-3.5" /> وحدة جديدة
                     </button>
                 </div>
@@ -176,8 +176,8 @@ const destroyDept = (d: Dept) => {
                             <td class="px-4 py-2.5 text-center font-bold text-slate-700">{{ u.items_count }}</td>
                             <td class="px-4 py-2.5">
                                 <div class="flex items-center justify-center gap-1">
-                                    <TableActionButton v-if="can('items.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openUnit(u)" />
-                                    <TableActionButton v-if="can('items.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroyUnit(u)" />
+                                    <TableActionButton v-if="can('measure_units.edit')" variant="edit" :icon="Pencil" title="تعديل" @click="openUnit(u)" />
+                                    <TableActionButton v-if="can('measure_units.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroyUnit(u)" />
                                 </div>
                             </td>
                         </tr>

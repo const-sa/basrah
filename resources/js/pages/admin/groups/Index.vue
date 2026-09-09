@@ -39,7 +39,8 @@ interface Role {
     is_locked: boolean;
 }
 interface ModuleAction { key: string; action: string; label: string }
-interface Module { key: string; label: string; actions: ModuleAction[] }
+// A shared module is one key shown in several cards — `owner` names the section it is filed under.
+interface Module { key: string; label: string; shared: boolean; owner: string | null; actions: ModuleAction[] }
 interface System {
     key: string;
     label: string;
@@ -63,7 +64,8 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 // ترتيب أعمدة الإجراءات الثابت في المصفوفة.
 const actionOrder = Object.keys(props.actionLabels);
 
-const allKeys = computed(() => props.systems.flatMap((s) => s.permission_keys));
+// Deduped: a shared key is listed by every card that shows it.
+const allKeys = computed(() => [...new Set(props.systems.flatMap((s) => s.permission_keys))]);
 
 /**
  * أقسام النشاط الثلاثة تُعرض أولًا ومفصولة عن الأقسام الإدارية: هي التي
@@ -120,17 +122,27 @@ const toggleModule = (m: Module) => {
     form.permissions = [...set];
 };
 
+// Keys the section owns — a mirrored key belongs to its owner's section, not this one.
+const ownedKeys = (s: System) => s.modules.filter((m) => !m.shared).flatMap((m) => m.actions.map((a) => a.key));
+
 // ── مستوى القسم: منح أو سحب قسم كامل بضغطة واحدة ────────────
-const systemAllOn = (s: System) => s.permission_keys.every((k) => has(k));
-const systemSomeOn = (s: System) => s.permission_keys.some((k) => has(k));
-const systemCount = (s: System) => s.permission_keys.filter((k) => has(k)).length;
+// Counted and toggled on owned keys alone: a mirrored screen is listed here for
+// reach, but it belongs to its own section and must not light this one up.
+const systemAllOn = (s: System) => ownedKeys(s).every((k) => has(k));
+const systemSomeOn = (s: System) => ownedKeys(s).some((k) => has(k));
+const systemCount = (s: System) => ownedKeys(s).filter((k) => has(k)).length;
+const systemTotal = (s: System) => ownedKeys(s).length;
 
 const toggleSystem = (s: System) => {
     const on = !systemAllOn(s);
     const set = new Set(form.permissions);
-    s.permission_keys.forEach((k) => (on ? set.add(k) : set.delete(k)));
+    ownedKeys(s).forEach((k) => (on ? set.add(k) : set.delete(k)));
     form.permissions = [...set];
 };
+
+// Own screens first, then the mirrored ones — the table draws a divider between them.
+const ownModules = (s: System) => s.modules.filter((m) => !m.shared);
+const sharedModules = (s: System) => s.modules.filter((m) => m.shared);
 
 // طيّ الأقسام لتقصير النموذج — يُفتح القسم فتظهر شاشاته.
 const openSystems = ref<Set<string>>(new Set());
@@ -148,12 +160,17 @@ const toggleAll = () => {
 
 const selectedCount = computed(() => form.permissions.length);
 
+// t() takes no parameters, so the owning section is appended rather than interpolated.
+const sharedHint = (m: Module) => `${t('roles.shared_hint')} ${m.owner ?? ''}`.trim();
+
 // ملخص الأقسام التي تصل إليها المجموعة — يُعرض على البطاقة بدل سرد كل صلاحية.
+// Counted on owned keys only, so a bookkeeper with expenses.view is not listed as reaching the pools.
 const summary = (role: Role) =>
     props.systems
         .map((s) => {
-            const granted = s.permission_keys.filter((k) => role.permissions.includes(k)).length;
-            return granted ? { key: s.key, label: s.label, granted, total: s.permission_keys.length } : null;
+            const keys = ownedKeys(s);
+            const granted = keys.filter((k) => role.permissions.includes(k)).length;
+            return granted ? { key: s.key, label: s.label, granted, total: keys.length } : null;
         })
         .filter((x): x is { key: string; label: string; granted: number; total: number } => x !== null);
 
@@ -344,7 +361,7 @@ const destroy = (r: Role) => {
                                                     class="rounded-full px-2 py-0.5 text-[11px] font-bold"
                                                     :class="systemSomeOn(s) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
                                                     dir="ltr"
-                                                >{{ systemCount(s) }}/{{ s.permission_keys.length }}</span>
+                                                >{{ systemCount(s) }}/{{ systemTotal(s) }}</span>
                                                 <ChevronDown class="h-4 w-4 text-slate-400 transition" :class="isOpen(s) && 'rotate-180'" />
                                             </span>
                                         </button>
@@ -359,11 +376,24 @@ const destroy = (r: Role) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr v-for="m in s.modules" :key="m.key" class="group border-b border-slate-100 transition last:border-0 hover:bg-emerald-50/30">
+                                            <!-- Own screens, then a divider, then the ones this menu only borrows -->
+                                            <template v-for="(m, mi) in [...ownModules(s), ...sharedModules(s)]" :key="m.key">
+                                            <tr v-if="m.shared && mi === ownModules(s).length" class="border-y border-sky-100 bg-sky-50/50">
+                                                <td :colspan="actionOrder.length + 2" class="px-4 py-1.5 text-right text-[11px] font-extrabold text-sky-700">
+                                                    {{ t('roles.shared_section') }}
+                                                </td>
+                                            </tr>
+                                            <tr class="group border-b border-slate-100 transition last:border-0" :class="m.shared ? 'bg-sky-50/20 hover:bg-sky-50/50' : 'hover:bg-emerald-50/30'">
                                                 <td class="px-4 py-2.5 text-right">
-                                                    <span class="flex items-center gap-2 font-extrabold text-slate-800">
-                                                        <span class="h-2 w-2 rounded-full bg-emerald-500 transition group-hover:bg-emerald-600"></span>
+                                                    <span class="flex flex-wrap items-center gap-2 font-extrabold text-slate-800">
+                                                        <span class="h-2 w-2 rounded-full transition" :class="m.shared ? 'bg-sky-400 group-hover:bg-sky-500' : 'bg-emerald-500 group-hover:bg-emerald-600'"></span>
                                                         {{ m.label }}
+                                                        <!-- One key in several cards: ticking it here ticks it wherever else it shows. -->
+                                                        <span
+                                                            v-if="m.shared"
+                                                            class="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 ring-1 ring-sky-200"
+                                                            :title="sharedHint(m)"
+                                                        >{{ t('roles.shared') }}</span>
                                                     </span>
                                                 </td>
                                                 <td v-for="act in actionOrder" :key="act" class="px-2 py-2.5 text-center">
@@ -387,6 +417,7 @@ const destroy = (r: Role) => {
                                                     />
                                                 </td>
                                             </tr>
+                                            </template>
                                         </tbody>
                                     </table>
                                   </div>

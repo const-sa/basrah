@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\CostCenter;
 use App\Models\Item;
+use App\Models\JournalEntry;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\Accounting\Ledger;
@@ -201,6 +202,50 @@ class SalesService
             $this->postReturnEntry($return->fresh());
 
             return $return->fresh(['lines.item']);
+        });
+    }
+
+    /**
+     * Voiding an invoice: reverse its entry, put its goods back, archive it.
+     * Not a refund — a refund says the goods came back, a void says the paper
+     * should never have been written. So nothing built on it may be standing.
+     */
+    public function void(Sale $sale, ?int $userId = null, ?string $reason = null): Sale
+    {
+        if ($sale->isReturn()) {
+            throw new RuntimeException('المرتجع لا يُلغى — ألغِ الفاتورة الأصلية.');
+        }
+
+        if ($sale->returns()->exists()) {
+            throw new RuntimeException("الفاتورة {$sale->number} لها مرتجعات — لا تُلغى قبل معالجتها.");
+        }
+
+        if ($sale->vouchers()->exists()) {
+            throw new RuntimeException("الفاتورة {$sale->number} عليها سندات قبض — ألغِ السندات أولًا.");
+        }
+
+        return DB::transaction(function () use ($sale, $userId, $reason) {
+            $sale->loadMissing('lines.item');
+
+            foreach ($sale->lines as $line) {
+                if ($line->item) {
+                    $this->inventory->restoreForReturn($line->item, (float) $line->quantity, $sale, $userId);
+                }
+            }
+
+            // The original entry stays and is answered by a counter-entry — that is what keeps the audit trail.
+            $entries = JournalEntry::where('reference_type', Sale::class)
+                ->where('reference_id', $sale->id)
+                ->where('status', 'posted')
+                ->get();
+
+            foreach ($entries as $entry) {
+                $this->ledger->reverse($entry, $reason ?? "إلغاء الفاتورة {$sale->number}", $userId);
+            }
+
+            $sale->delete();
+
+            return $sale;
         });
     }
 

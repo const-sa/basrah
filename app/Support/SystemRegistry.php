@@ -16,6 +16,9 @@ namespace App\Support;
  * يخدم القاعات والشاليهات معًا، فمنحُ موظفِ القاعات حجوزاتِها يمنحه حجوزات
  * الشاليهات كذلك دون أن يظهر ذلك في الشاشة؛ والفصل هنا يجعل ما تراه في
  * المجموعة هو ما يُمنح فعلًا. ثم تأتي الأقسام الإدارية المشتركة.
+ *
+ * Clients, expenses, suppliers and contracts are one screen each, opened by all
+ * three activity menus: owned by one section, listed in `shared` by the rest.
  */
 class SystemRegistry
 {
@@ -36,7 +39,7 @@ class SystemRegistry
     /**
      * الأقسام وشاشاتها.
      *
-     * @var array<string, array{label: string, icon: string, description: string, modules: array<string, array{label: string, actions: list<string>}>}>
+     * @var array<string, array{label: string, icon: string, description: string, modules: array<string, array{label: string, actions: list<string>}>, shared?: list<string>}>
      */
     public const SYSTEMS = [
         'halls' => [
@@ -49,7 +52,12 @@ class SystemRegistry
                 'halls' => ['label' => 'القاعات ومساحات عملها', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'packages' => ['label' => 'باقات القاعات', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'event_types' => ['label' => 'أنواع المناسبات', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'hall_contract' => ['label' => 'قالب عقد القاعات', 'actions' => ['view', 'edit']],
+                'hall_contract_template' => ['label' => 'قالب عقد القاعات', 'actions' => ['view', 'edit']],
+                // This activity's own registers. The screens were always separate
+                // — only the keys were shared, which lit up every activity at once.
+                'hall_clients' => ['label' => 'عملاء القاعات', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],
+                'hall_expenses' => ['label' => 'مصروفات القاعات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'hall_contracts' => ['label' => 'عقود القاعات', 'actions' => ['view', 'create', 'edit', 'delete', 'send', 'export']],
             ],
         ],
 
@@ -61,7 +69,10 @@ class SystemRegistry
                 'chalet_bookings' => ['label' => 'حجوزات الشاليهات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'chalet_calendar' => ['label' => 'تقويم الشاليهات', 'actions' => ['view']],
                 'chalets' => ['label' => 'الشاليهات ومساحات عملها', 'actions' => ['view', 'create', 'edit', 'delete']],
-                'chalet_contract' => ['label' => 'قالب عقد الشاليهات', 'actions' => ['view', 'edit']],
+                'chalet_contract_template' => ['label' => 'قالب عقد الشاليهات', 'actions' => ['view', 'edit']],
+                'chalet_clients' => ['label' => 'عملاء الشاليهات', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],
+                'chalet_expenses' => ['label' => 'مصروفات الشاليهات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'chalet_contracts' => ['label' => 'عقود الشاليهات', 'actions' => ['view', 'create', 'edit', 'delete', 'send', 'export']],
             ],
         ],
 
@@ -74,10 +85,20 @@ class SystemRegistry
                 'sales' => ['label' => 'المبيعات والمرتجعات', 'actions' => ['view', 'create', 'delete', 'export']],
                 'items' => ['label' => 'الأصناف', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'item_groups' => ['label' => 'مجموعات الأصناف', 'actions' => ['view', 'create', 'edit', 'delete']],
+                // The units screen rode on items.* and had no row of its own, so
+                // it could be neither granted nor withheld from the matrix.
+                'measure_units' => ['label' => 'الأقسام ووحدات القياس', 'actions' => ['view', 'create', 'edit', 'delete']],
+                // Four rungs of one ladder: read the movements, open a balance,
+                // correct a single item, post a full stocktake.
                 'inventory' => ['label' => 'المخزون والجرد', 'actions' => ['view', 'create', 'edit', 'approve']],
-                'purchases' => ['label' => 'المشتريات', 'actions' => ['view', 'create']],
+                'purchases' => ['label' => 'المشتريات', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'quotations' => ['label' => 'عروض الأسعار', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'pool_clients' => ['label' => 'عملاء المسابح', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],
+                'pool_expenses' => ['label' => 'مصروفات المسابح', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'pool_contracts' => ['label' => 'عقود المسابح', 'actions' => ['view', 'create', 'edit', 'delete', 'send', 'export']],
             ],
+            // One suppliers screen exists, so it stays one key borrowed by two menus.
+            'shared' => ['suppliers'],
         ],
 
         'core' => [
@@ -96,7 +117,9 @@ class SystemRegistry
             'icon' => 'FileSignature',
             'description' => 'قوالب العقود، توليد PDF، الإرسال والتذكيرات عبر واتساب',
             'modules' => [
-                'contracts' => ['label' => 'العقود', 'actions' => ['view', 'create', 'edit', 'delete', 'send', 'export']],
+                // The register across every activity. Each activity's own sheet
+                // is a separate screen with its own key under that activity.
+                'contracts' => ['label' => 'العقود (كل الأنشطة)', 'actions' => ['view', 'create', 'edit', 'delete', 'send', 'export']],
                 'contract_templates' => ['label' => 'قوالب العقود', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'whatsapp' => ['label' => 'رسائل واتساب', 'actions' => ['view', 'send']],
             ],
@@ -115,11 +138,12 @@ class SystemRegistry
                 // الإيرادات شاشة قراءة لا إدخال: القيد يأتي من الحجز والفاتورة
                 // والسند، فلا معنى لـ create/edit فيها.
                 'revenues' => ['label' => 'الإيرادات', 'actions' => ['view', 'export']],
-                'expenses' => ['label' => 'المصروفات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'expenses' => ['label' => 'المصروفات (كل الأنشطة)', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'receivables' => ['label' => 'ذمم العملاء والموردين', 'actions' => ['view', 'create', 'edit', 'export']],
                 'cost_centers' => ['label' => 'مراكز التكلفة', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'fin_reports' => ['label' => 'التقارير المالية', 'actions' => ['view', 'export']],
             ],
+            'shared' => ['suppliers'],
         ],
 
         'hr' => [
@@ -141,7 +165,7 @@ class SystemRegistry
             'icon' => 'Contact',
             'description' => 'سجل العملاء والموردين وتذاكر الدعم',
             'modules' => [
-                'clients' => ['label' => 'العملاء', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],
+                'clients' => ['label' => 'دليل العملاء (كل الأنشطة)', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],
                 'suppliers' => ['label' => 'الموردون', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'tickets' => ['label' => 'تذاكر الدعم', 'actions' => ['view', 'create', 'edit', 'delete']],
             ],
@@ -191,10 +215,16 @@ class SystemRegistry
         'bookings.delete' => ['hall_bookings.delete', 'chalet_bookings.delete'],
         'bookings.approve' => ['hall_bookings.approve', 'chalet_bookings.approve'],
         'calendar.view' => ['hall_calendar.view', 'chalet_calendar.view'],
-        'units.view' => ['halls.view', 'chalets.view', 'hall_contract.view', 'chalet_contract.view'],
+        'units.view' => ['halls.view', 'chalets.view', 'hall_contract_template.view', 'chalet_contract_template.view'],
         'units.create' => ['halls.create', 'chalets.create'],
-        'units.edit' => ['halls.edit', 'chalets.edit', 'hall_contract.edit', 'chalet_contract.edit'],
+        'units.edit' => ['halls.edit', 'chalets.edit', 'hall_contract_template.edit', 'chalet_contract_template.edit'],
         'units.delete' => ['halls.delete', 'chalets.delete'],
+        // Renamed so the template key cannot be mistaken for the register key
+        // beside it — hall_contract.view against hall_contracts.view.
+        'hall_contract.view' => ['hall_contract_template.view'],
+        'hall_contract.edit' => ['hall_contract_template.edit'],
+        'chalet_contract.view' => ['chalet_contract_template.view'],
+        'chalet_contract.edit' => ['chalet_contract_template.edit'],
         // A screen that never had a route — it drops with no replacement.
         // (addons.* used to be listed here for the same reason; the add-ons
         // screen exists now, so those keys pass through untranslated again.)
@@ -238,6 +268,41 @@ class SystemRegistry
         }
 
         return $keys;
+    }
+
+    /**
+     * Keys a section's card shows: the ones it owns plus the ones it mirrors.
+     * Ownership tests use systemPermissionKeys(); only the card uses these.
+     *
+     * @return list<string>
+     */
+    public static function systemCardKeys(string $system): array
+    {
+        $keys = self::systemPermissionKeys($system);
+
+        foreach (self::SYSTEMS[$system]['shared'] ?? [] as $module) {
+            foreach (self::moduleMeta($module)['actions'] as $action) {
+                $keys[] = "{$module}.{$action}";
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * A module's definition, wherever it is filed.
+     *
+     * @return array{label: string, actions: list<string>}
+     */
+    private static function moduleMeta(string $module): array
+    {
+        foreach (self::SYSTEMS as $system) {
+            if (isset($system['modules'][$module])) {
+                return $system['modules'][$module];
+            }
+        }
+
+        throw new \InvalidArgumentException("شاشة غير معرّفة: {$module}");
     }
 
     /**
@@ -317,16 +382,38 @@ class SystemRegistry
             'label' => $system['label'],
             'icon' => $system['icon'],
             'description' => $system['description'],
-            'permission_keys' => self::systemPermissionKeys($systemKey),
-            'modules' => collect($system['modules'])->map(fn ($meta, $module) => [
-                'key' => $module,
-                'label' => $meta['label'],
-                'actions' => collect($meta['actions'])->map(fn ($action) => [
-                    'key' => "{$module}.{$action}",
-                    'action' => $action,
-                    'label' => self::ACTIONS[$action],
-                ])->values()->all(),
-            ])->values()->all(),
+            'permission_keys' => self::systemCardKeys($systemKey),
+            'modules' => [
+                ...collect($system['modules'])
+                    ->map(fn ($meta, $module) => self::moduleForView($module, $meta))
+                    ->values()
+                    ->all(),
+                // Mirrored last, flagged so the screen can say the key is one
+                // key: ticking it here ticks it in every card that shows it.
+                ...collect($system['shared'] ?? [])
+                    ->map(fn ($module) => self::moduleForView($module, self::moduleMeta($module), true))
+                    ->values()
+                    ->all(),
+            ],
         ])->values()->all();
+    }
+
+    /**
+     * @param  array{label: string, actions: list<string>}  $meta
+     * @return array<string, mixed>
+     */
+    private static function moduleForView(string $module, array $meta, bool $shared = false): array
+    {
+        return [
+            'key' => $module,
+            'label' => $meta['label'],
+            'shared' => $shared,
+            'owner' => $shared ? (self::SYSTEMS[self::moduleSystemMap()[$module]]['label'] ?? null) : null,
+            'actions' => collect($meta['actions'])->map(fn ($action) => [
+                'key' => "{$module}.{$action}",
+                'action' => $action,
+                'label' => self::ACTIONS[$action],
+            ])->values()->all(),
+        ];
     }
 }

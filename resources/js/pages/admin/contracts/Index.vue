@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { StatPill, TableActionButton } from '@/components/data-table';
 import PageShortcuts from '@/components/PageShortcuts.vue';
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -41,9 +40,14 @@ const props = defineProps<{
     payment_methods: { id: number; label: string; is_credit: boolean }[];
     treasuries: { id: number; name: string }[];
     stats: { total: number; draft: number; sent: number; signed: number };
+    // Answered per activity by the server, so the buttons match what the routes allow.
+    can: Record<string, boolean>;
 }>();
 
-const { can } = usePermissions();
+
+
+// The server answered these for this register's activity; the buttons follow it.
+const may = computed(() => props.can);
 
 const poolsOnly = computed(() => props.scope === 'quotation');
 const chaletsOnly = computed(() => props.scope === 'chalet');
@@ -250,7 +254,7 @@ const statusClass = (s: string) =>
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- اختصارات شاشات العقود — تُشتق من القائمة فلا تحتاج صيانة -->
                     <PageShortcuts />
-                    <button v-if="can('contracts.create')" type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                    <button v-if="may.create" type="button" @click="openCreate" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
                         <Plus class="h-4 w-4" /> عقد جديد
                     </button>
                 </div>
@@ -339,27 +343,27 @@ const statusClass = (s: string) =>
                                         <TableActionButton variant="view" :icon="Eye" title="عرض" :href="`/admin/contracts/${c.id}`" />
                                         <!-- A draft is still ours to correct; once sent it is the client's paper. -->
                                         <TableActionButton
-                                            v-if="can('contracts.edit') && c.status === 'draft'"
+                                            v-if="may.edit && c.status === 'draft'"
                                             variant="edit"
                                             :icon="Pencil"
                                             title="تعديل"
                                             :href="`/admin/contracts/${c.id}/edit`"
                                         />
                                         <TableActionButton
-                                            v-if="can('contracts.send') && c.status !== 'cancelled'"
+                                            v-if="may.send && c.status !== 'cancelled'"
                                             variant="success"
                                             :icon="MessageCircle"
                                             title="إرسال واتساب"
                                             @click="send(c)"
                                         />
                                         <TableActionButton
-                                            v-if="can('contracts.edit') && c.status === 'sent'"
+                                            v-if="may.edit && c.status === 'sent'"
                                             variant="primary"
                                             :icon="CheckCircle2"
                                             title="تعليم كموقّع"
                                             @click="markSigned(c)"
                                         />
-                                        <TableActionButton v-if="can('contracts.delete')" variant="danger" :icon="Trash2" title="حذف" @click="destroy(c)" />
+                                        <TableActionButton v-if="may.delete" variant="danger" :icon="Trash2" title="حذف" @click="destroy(c)" />
                                     </div>
                                 </td>
                             </tr>

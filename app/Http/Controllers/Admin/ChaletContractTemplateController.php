@@ -41,7 +41,7 @@ class ChaletContractTemplateController extends UnitContractTemplateController
             'back_href' => '/admin/units/chalets',
             'back_label' => 'الشاليهات',
             'endpoint' => '/admin/units/chalet-contract-template',
-            'edit_perm' => 'chalet_contract.edit',
+            'edit_perm' => 'chalet_contract_template.edit',
         ];
     }
 }

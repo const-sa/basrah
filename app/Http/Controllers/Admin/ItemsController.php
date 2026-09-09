@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 /**
  * الأصناف والمخزون والجرد.
@@ -95,8 +96,18 @@ class ItemsController extends Controller
     {
         $data = $this->validated($request);
 
-        $item = Item::create(collect($data)->except('components')->all());
+        // The balance is never written as a column: it starts at zero and an
+        // opening movement lifts it, so log and column agree from the first day.
+        $item = Item::create([...collect($data)->except(['components', 'stock_qty'])->all(), 'stock_qty' => 0]);
         $this->syncComponents($item, $data['components'] ?? []);
+
+        $opening = (float) ($data['stock_qty'] ?? 0);
+
+        if ($opening > 0 && ! $request->user()?->hasPermission('inventory.create')) {
+            return back()->with('warning', 'تم إضافة الصنف بدون رصيد افتتاحي — الرصيد يحتاج صلاحية «المخزون والجرد ← إضافة».');
+        }
+
+        $this->inventory->opening($item, $opening, $request->user()?->id);
 
         return back()->with('success', 'تم إضافة الصنف');
     }
@@ -193,6 +204,32 @@ class ItemsController extends Controller
         $item->delete();
 
         return back()->with('success', 'تم حذف الصنف');
+    }
+
+    /**
+     * Correct one item's balance without opening a full stocktake sheet.
+     */
+    public function adjustStock(Request $request, Item $item): RedirectResponse
+    {
+        $data = $request->validate([
+            'counted_qty' => ['required', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ], [], ['counted_qty' => 'الرصيد المعدود']);
+
+        try {
+            $movement = $this->inventory->adjust(
+                $item,
+                (float) $data['counted_qty'],
+                $request->user()?->id,
+                $data['notes'] ?? null,
+            );
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        return $movement
+            ? back()->with('success', "تم ضبط رصيد «{$item->name}» على {$data['counted_qty']}")
+            : back()->with('warning', 'الرصيد الدفتري مطابق للمعدود — لا تسوية.');
     }
 
     /**

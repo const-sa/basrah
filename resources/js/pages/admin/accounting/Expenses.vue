@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -54,9 +53,11 @@ const props = defineProps<{
     activity: string | null;
     activityLabel: string | null;
     scoped: boolean;
+    can: Record<string, boolean>;
 }>();
 
-const { can } = usePermissions();
+
+const may = computed(() => props.can);
 
 // Every visit stays on the register it was opened from, so a filter or an
 // export from an activity's page does not widen back to the whole book.
@@ -256,7 +257,7 @@ const removeCategory = (category: Category) => {
                 </div>
                 <div class="flex items-center gap-2">
                     <button
-                        v-if="can('expenses.edit')"
+                        v-if="may.edit"
                         type="button"
                         @click="showCategories = true"
                         class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
@@ -270,7 +271,7 @@ const removeCategory = (category: Category) => {
                         <Download class="h-4 w-4" /> تصدير
                     </a>
                     <button
-                        v-if="can('expenses.create')"
+                        v-if="may.create"
                         type="button"
                         @click="openCreate"
                         class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
@@ -384,7 +385,7 @@ const removeCategory = (category: Category) => {
                                 <td class="px-4 py-2.5">
                                     <div class="flex items-center justify-center gap-1">
                                         <button
-                                            v-if="e.status === 'draft' && can('expenses.approve')"
+                                            v-if="e.status === 'draft' && may.approve"
                                             type="button"
                                             @click="post(e)"
                                             title="ترحيل"
@@ -393,7 +394,7 @@ const removeCategory = (category: Category) => {
                                             <CheckCircle2 class="h-4 w-4" />
                                         </button>
                                         <button
-                                            v-if="e.status === 'draft' && can('expenses.edit')"
+                                            v-if="e.status === 'draft' && may.edit"
                                             type="button"
                                             @click="openEdit(e)"
                                             title="تعديل"
@@ -402,7 +403,7 @@ const removeCategory = (category: Category) => {
                                             <PencilLine class="h-4 w-4" />
                                         </button>
                                         <button
-                                            v-if="e.status !== 'cancelled' && can('expenses.approve')"
+                                            v-if="e.status !== 'cancelled' && may.approve"
                                             type="button"
                                             @click="cancel(e)"
                                             title="إلغاء"
@@ -411,7 +412,7 @@ const removeCategory = (category: Category) => {
                                             <Ban class="h-4 w-4" />
                                         </button>
                                         <button
-                                            v-if="e.status === 'draft' && can('expenses.delete')"
+                                            v-if="e.status === 'draft' && may.delete"
                                             type="button"
                                             @click="remove(e)"
                                             title="حذف"
@@ -540,7 +541,7 @@ const removeCategory = (category: Category) => {
                     </div>
 
                     <!-- Posting belongs to whoever approves; the rest leave a draft. -->
-                    <label v-if="!editing && can('expenses.approve')" class="flex items-center gap-2 text-sm font-bold text-slate-700 sm:col-span-2">
+                    <label v-if="!editing && may.approve" class="flex items-center gap-2 text-sm font-bold text-slate-700 sm:col-span-2">
                         <input v-model="form.post_now" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
                         ترحيل فوري إلى الدفاتر
                     </label>
@@ -683,7 +684,7 @@ const removeCategory = (category: Category) => {
                                             <Power class="h-3.5 w-3.5" />
                                         </button>
                                         <button
-                                            v-if="!c.is_system && !c.expenses_count && can('expenses.delete')"
+                                            v-if="!c.is_system && !c.expenses_count && may.delete"
                                             type="button"
                                             @click="removeCategory(c)"
                                             title="حذف"

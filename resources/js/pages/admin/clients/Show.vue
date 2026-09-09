@@ -84,9 +84,11 @@ const props = defineProps<{
     }[];
     vouchers: { id: number; number: string; voucher_date: string | null; type_label: string; amount: number; description: string | null }[];
     services: { name: string; times: number; kind: string }[];
+    can: Record<string, boolean>;
 }>();
 
 const { can, canBooking } = usePermissions();
+const may = computed(() => props.can);
 
 /** مقطع المسار الذي يفتح سجل كل نشاط — يطابق ما في routes/web.php. */
 const ACTIVITY_SEGMENT: Record<string, string> = { pool: 'pools', hall: 'halls', chalet: 'chalets' };
@@ -392,7 +394,7 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                                     <tr v-for="c in contracts" :key="c.id" class="border-t border-slate-100 hover:bg-slate-50">
                                         <td class="px-4 py-2.5">
                                             <Link
-                                                v-if="can('contracts.view')"
+                                                v-if="may.contracts"
                                                 :href="`/admin/contracts/${c.id}`"
                                                 class="font-bold text-slate-800 hover:text-blue-600"
                                             >
@@ -428,12 +430,12 @@ const whatsappLink = computed(() => (props.client.mobile ? `https://wa.me/${prop
                         <textarea
                             v-model="notes.notes"
                             rows="5"
-                            :disabled="!can('clients.edit')"
+                            :disabled="!may.edit"
                             placeholder="ما يُقال عن العميل ولا يُكتب يضيع: تفضيلاته، تنبيهات السداد، من يوصي به…"
                             class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"
                         />
                         <button
-                            v-if="can('clients.edit')"
+                            v-if="may.edit"
                             type="button"
                             @click="saveNotes"
                             :disabled="notes.processing"

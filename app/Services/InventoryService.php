@@ -130,6 +130,19 @@ class InventoryService
     }
 
     /**
+     * Opening balance for a newly created item.
+     * Written as a movement so the column and the log never start out apart.
+     */
+    public function opening(Item $item, float $quantity, ?int $userId = null): ?StockMovement
+    {
+        if ($quantity <= 0 || ! $item->tracksStock()) {
+            return null;
+        }
+
+        return $this->move($item, $quantity, 'opening', null, $userId, null, 'رصيد افتتاحي عند إنشاء الصنف');
+    }
+
+    /**
      * تسوية جرد: ضبط الرصيد على المعدود فعليًا وتسجيل الفرق.
      */
     public function adjust(Item $item, float $countedQty, ?int $userId = null, ?string $notes = null): ?StockMovement

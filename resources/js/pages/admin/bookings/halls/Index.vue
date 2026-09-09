@@ -157,7 +157,7 @@ const props = defineProps<{
     totals: { page: LedgerTotals; all: LedgerTotals };
 }>();
 
-const { can } = usePermissions();
+const { can, canActivity } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -765,7 +765,7 @@ const colorClass = statusChipClass;
                                             @click="router.visit(`/admin/contracts/${b.contract.id}`)"
                                         />
                                         <TableActionButton
-                                            v-else-if="can('contracts.create')"
+                                            v-else-if="canActivity('contracts', 'create', 'halls')"
                                             variant="muted"
                                             :icon="FileSignature"
                                             title="توليد العقد"
