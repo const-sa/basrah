@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Advance;
+use App\Models\Allowance;
 use App\Models\Attendance;
 use App\Models\Bonus;
+use App\Models\Deduction;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeGroup;
@@ -242,6 +244,32 @@ class HrController extends Controller
                     'status_label' => $b->statusLabel(),
                     'payroll_number' => $b->payroll?->number,
                 ]),
+            'deductions' => Deduction::with(['employee:id,name', 'payroll:id,number'])
+                ->latest('id')->limit(50)->get()
+                ->map(fn (Deduction $d) => [
+                    'id' => $d->id,
+                    'employee_name' => $d->employee?->name,
+                    'employee_id' => $d->employee_id,
+                    'amount' => (float) $d->amount,
+                    'reason' => $d->reason,
+                    'deducted_on' => $d->deducted_on->toDateString(),
+                    'status' => $d->status,
+                    'status_label' => $d->statusLabel(),
+                    'payroll_number' => $d->payroll?->number,
+                ]),
+            'allowances' => Allowance::with(['employee:id,name', 'payroll:id,number'])
+                ->latest('id')->limit(50)->get()
+                ->map(fn (Allowance $a) => [
+                    'id' => $a->id,
+                    'employee_name' => $a->employee?->name,
+                    'employee_id' => $a->employee_id,
+                    'amount' => (float) $a->amount,
+                    'reason' => $a->reason,
+                    'granted_on' => $a->granted_on->toDateString(),
+                    'status' => $a->status,
+                    'status_label' => $a->statusLabel(),
+                    'payroll_number' => $a->payroll?->number,
+                ]),
             'filters' => $request->only(['status']),
             'employees' => Employee::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'leaveTypes' => collect(Leave::TYPES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
@@ -305,6 +333,48 @@ class HrController extends Controller
         return back()->with('success', 'تم اعتماد السلفة — ستُستقطع من الرواتب القادمة');
     }
 
+    // ── الخصومات ─────────────────────────────────────────────
+
+    public function storeDeduction(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'employee_id' => ['required', 'exists:employees,id'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'deducted_on' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        Deduction::create([...$data, 'status' => 'pending']);
+
+        return back()->with('success', 'تم تسجيل الخصم');
+    }
+
+    public function approveDeduction(Request $request, Deduction $deduction): RedirectResponse
+    {
+        // المستقطعة استُقطعت ضمن مسيّر معتمد، فاعتمادها ثانيةً يعني استقطاعها مرتين.
+        if ($deduction->status !== 'pending') {
+            return back()->with('warning', 'لا يُعتمد إلا خصم قيد الاعتماد.');
+        }
+
+        $deduction->update(['status' => 'approved', 'approved_by' => $request->user()?->id]);
+
+        return back()->with('success', 'تم اعتماد الخصم — سيُستقطع من مسيّر شهره');
+    }
+
+    public function destroyDeduction(Deduction $deduction): RedirectResponse
+    {
+        // المستقطعة جزءٌ من مسيّر معتمد وقيدٍ مرحَّل، فحذفها يخالف ما استُقطع
+        // فعلًا. تُلغى قبل الاستقطاع لا بعده.
+        if ($deduction->status === 'paid') {
+            return back()->with('warning', 'لا يُحذف خصم استُقطع ضمن مسيّر معتمد.');
+        }
+
+        $deduction->delete();
+
+        return back()->with('success', 'تم حذف الخصم');
+    }
+
     // ── المكافآت ─────────────────────────────────────────────
 
     public function storeBonus(Request $request): RedirectResponse
@@ -347,6 +417,45 @@ class HrController extends Controller
         return back()->with('success', 'تم حذف المكافأة');
     }
 
+    // ── البدلات الظرفية ──────────────────────────────────────
+
+    public function storeAllowance(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'employee_id' => ['required', 'exists:employees,id'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'granted_on' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        Allowance::create([...$data, 'status' => 'pending']);
+
+        return back()->with('success', 'تم تسجيل البدل');
+    }
+
+    public function approveAllowance(Request $request, Allowance $allowance): RedirectResponse
+    {
+        if ($allowance->status !== 'pending') {
+            return back()->with('warning', 'لا يُعتمد إلا بدل قيد الاعتماد.');
+        }
+
+        $allowance->update(['status' => 'approved', 'approved_by' => $request->user()?->id]);
+
+        return back()->with('success', 'تم اعتماد البدل — سيُضاف إلى مسيّر شهره');
+    }
+
+    public function destroyAllowance(Allowance $allowance): RedirectResponse
+    {
+        if ($allowance->status === 'paid') {
+            return back()->with('warning', 'لا يُحذف بدل صُرف ضمن مسيّر معتمد.');
+        }
+
+        $allowance->delete();
+
+        return back()->with('success', 'تم حذف البدل');
+    }
+
     // ── الرواتب ──────────────────────────────────────────────
 
     public function payrolls(Request $request): Response
@@ -370,10 +479,12 @@ class HrController extends Controller
                     'employee_name' => $l->employee?->name,
                     'basic_salary' => (float) $l->basic_salary,
                     'allowances' => (float) $l->allowances,
+                    'other_allowance' => (float) $l->other_allowance,
                     'overtime_amount' => (float) $l->overtime_amount,
                     'bonus' => (float) $l->bonus,
                     'absence_deduction' => (float) $l->absence_deduction,
                     'advance_deduction' => (float) $l->advance_deduction,
+                    'other_deduction' => (float) $l->other_deduction,
                     'worked_days' => $l->worked_days,
                     'absent_days' => $l->absent_days,
                     'gross' => (float) $l->gross,

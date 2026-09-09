@@ -411,9 +411,18 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('hr/advances', [HrController::class, 'storeAdvance'])->middleware('perm:advances.create')->name('advances.store');
         Route::patch('hr/advances/{advance}/approve', [HrController::class, 'approveAdvance'])->middleware('perm:advances.approve')->name('advances.approve');
 
+        // الخصومات تشارك صلاحيات السلف (§ «السلف والخصومات» في سجل الأقسام) لأنها معًا ما يُستقطع من الموظف.
+        Route::post('hr/deductions', [HrController::class, 'storeDeduction'])->middleware('perm:advances.create')->name('deductions.store');
+        Route::patch('hr/deductions/{deduction}/approve', [HrController::class, 'approveDeduction'])->middleware('perm:advances.approve')->name('deductions.approve');
+        Route::delete('hr/deductions/{deduction}', [HrController::class, 'destroyDeduction'])->middleware('perm:advances.delete')->name('deductions.destroy');
+
         Route::post('hr/bonuses', [HrController::class, 'storeBonus'])->middleware('perm:bonuses.create')->name('bonuses.store');
         Route::patch('hr/bonuses/{bonus}/approve', [HrController::class, 'approveBonus'])->middleware('perm:bonuses.approve')->name('bonuses.approve');
         Route::delete('hr/bonuses/{bonus}', [HrController::class, 'destroyBonus'])->middleware('perm:bonuses.delete')->name('bonuses.destroy');
+
+        Route::post('hr/allowances', [HrController::class, 'storeAllowance'])->middleware('perm:allowances.create')->name('allowances.store');
+        Route::patch('hr/allowances/{allowance}/approve', [HrController::class, 'approveAllowance'])->middleware('perm:allowances.approve')->name('allowances.approve');
+        Route::delete('hr/allowances/{allowance}', [HrController::class, 'destroyAllowance'])->middleware('perm:allowances.delete')->name('allowances.destroy');
 
         Route::get('hr/payroll', [HrController::class, 'payrolls'])->middleware('perm:payroll.view')->name('payroll.index');
         Route::post('hr/payroll/generate', [HrController::class, 'generatePayroll'])->middleware('perm:payroll.create')->name('payroll.generate');

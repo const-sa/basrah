@@ -12,7 +12,7 @@ class PayrollLine extends Model
 {
     protected $fillable = [
         'payroll_id', 'employee_id', 'unit_id',
-        'basic_salary', 'allowances', 'overtime_amount', 'bonus',
+        'basic_salary', 'allowances', 'other_allowance', 'overtime_amount', 'bonus',
         'absence_deduction', 'advance_deduction', 'other_deduction',
         'gross', 'net', 'worked_days', 'absent_days', 'overtime_hours', 'notes',
     ];
@@ -22,6 +22,7 @@ class PayrollLine extends Model
         return [
             'basic_salary' => 'decimal:2',
             'allowances' => 'decimal:2',
+            'other_allowance' => 'decimal:2',
             'overtime_amount' => 'decimal:2',
             'bonus' => 'decimal:2',
             'absence_deduction' => 'decimal:2',

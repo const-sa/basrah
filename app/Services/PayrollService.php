@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Advance;
+use App\Models\Allowance;
 use App\Models\Attendance;
 use App\Models\Bonus;
 use App\Models\CostCenter;
+use App\Models\Deduction;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Services\Accounting\Ledger;
@@ -98,19 +100,25 @@ class PayrollService
         // تضيع بإعادة التوليد، وتُقفل عند الاعتماد فلا تُصرف مرتين.
         $bonus = round((float) $this->payableBonuses($employee, $start, $end)->sum('amount'), 2);
 
-        $gross = round($basic + $allowances + $overtimeAmount + $bonus, 2);
-        $net = round(max(0, $gross - $absenceDeduction - $advanceDeduction), 2);
+        // البدلات والخصومات الظرفية لهذا الشهر — نفس منطق المكافأة، إضافةً
+        // أو طرحًا بدل الإضافة وحدها.
+        $otherAllowance = round((float) $this->payableAllowances($employee, $start, $end)->sum('amount'), 2);
+        $otherDeduction = round((float) $this->payableDeductions($employee, $start, $end)->sum('amount'), 2);
+
+        $gross = round($basic + $allowances + $otherAllowance + $overtimeAmount + $bonus, 2);
+        $net = round(max(0, $gross - $absenceDeduction - $advanceDeduction - $otherDeduction), 2);
 
         return [
             'employee_id' => $employee->id,
             'unit_id' => $employee->unit_id,
             'basic_salary' => $basic,
             'allowances' => $allowances,
+            'other_allowance' => $otherAllowance,
             'overtime_amount' => $overtimeAmount,
             'bonus' => $bonus,
             'absence_deduction' => $absenceDeduction,
             'advance_deduction' => $advanceDeduction,
-            'other_deduction' => 0,
+            'other_deduction' => $otherDeduction,
             'gross' => $gross,
             'net' => $net,
             'worked_days' => max(0, $workedDays),
@@ -133,6 +141,32 @@ class PayrollService
     }
 
     /**
+     * بدلات الموظف الظرفية المستحقة في شهر المسيّر.
+     *
+     * @return Collection<int, Allowance>
+     */
+    private function payableAllowances(Employee $employee, CarbonImmutable $start, CarbonImmutable $end)
+    {
+        return $employee->allowances()
+            ->payable()
+            ->grantedIn($start->toDateString(), $end->toDateString())
+            ->get();
+    }
+
+    /**
+     * خصومات الموظف الظرفية المستحقة في شهر المسيّر.
+     *
+     * @return Collection<int, Deduction>
+     */
+    private function payableDeductions(Employee $employee, CarbonImmutable $start, CarbonImmutable $end)
+    {
+        return $employee->deductions()
+            ->payable()
+            ->appliesIn($start->toDateString(), $end->toDateString())
+            ->get();
+    }
+
+    /**
      * اعتماد المسيّر: تثبيت القيد المحاسبي وتسجيل استقطاع السلف.
      *
      * الاستقطاع يُسجَّل هنا لا عند التوليد، لأن التوليد قابل للتكرار
@@ -150,6 +184,8 @@ class PayrollService
             $entry = $this->postEntry($payroll, $userId);
 
             $this->settleBonuses($payroll);
+            $this->settleAllowances($payroll);
+            $this->settleDeductions($payroll);
 
             foreach ($payroll->lines as $line) {
                 $remaining = (float) $line->advance_deduction;
@@ -202,6 +238,32 @@ class PayrollService
     }
 
     /**
+     * إقفال بدلات الشهر الظرفية على هذا المسيّر — نفس سبب إقفال المكافآت.
+     */
+    private function settleAllowances(Payroll $payroll): void
+    {
+        $start = CarbonImmutable::create($payroll->year, $payroll->month, 1)->startOfMonth();
+
+        Allowance::payable()
+            ->whereIn('employee_id', $payroll->lines->pluck('employee_id'))
+            ->grantedIn($start->toDateString(), $start->endOfMonth()->toDateString())
+            ->update(['status' => 'paid', 'payroll_id' => $payroll->id]);
+    }
+
+    /**
+     * إقفال خصومات الشهر الظرفية على هذا المسيّر — نفس سبب إقفال المكافآت.
+     */
+    private function settleDeductions(Payroll $payroll): void
+    {
+        $start = CarbonImmutable::create($payroll->year, $payroll->month, 1)->startOfMonth();
+
+        Deduction::payable()
+            ->whereIn('employee_id', $payroll->lines->pluck('employee_id'))
+            ->appliesIn($start->toDateString(), $start->endOfMonth()->toDateString())
+            ->update(['status' => 'paid', 'payroll_id' => $payroll->id]);
+    }
+
+    /**
      * قيد الرواتب: مدين مصروف الرواتب لكل مركز تكلفة، دائن رواتب مستحقة.
      */
     private function postEntry(Payroll $payroll, ?int $userId)
@@ -217,7 +279,12 @@ class PayrollService
         $byUnit = $payroll->lines->groupBy('unit_id');
 
         foreach ($byUnit as $unitId => $group) {
-            $amount = round((float) $group->sum('gross') - (float) $group->sum('absence_deduction'), 2);
+            // الخصم الظرفي كالغياب: يخفّض ما يُنفَق فعلًا، لا ذمّةً تُسدَّد
+            // لاحقًا كالسلفة — فيُطرح من المصروف المُثبَت لا من الذمم.
+            $amount = round(
+                (float) $group->sum('gross') - (float) $group->sum('absence_deduction') - (float) $group->sum('other_deduction'),
+                2,
+            );
 
             if ($amount <= 0) {
                 continue;

@@ -8,8 +8,8 @@ import { ref } from 'vue';
 
 interface Line {
     employee_name: string | null;
-    basic_salary: number; allowances: number; overtime_amount: number; bonus: number;
-    absence_deduction: number; advance_deduction: number;
+    basic_salary: number; allowances: number; other_allowance: number; overtime_amount: number; bonus: number;
+    absence_deduction: number; advance_deduction: number; other_deduction: number;
     worked_days: number; absent_days: number; gross: number; net: number;
 }
 interface Payroll {
@@ -112,10 +112,12 @@ const approve = (p: Payroll) => {
                                     <th class="px-3 py-2 text-center font-extrabold text-[#1e3a8a]">أيام</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">الأساسي</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">البدلات</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">بدل ظرفي</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">إضافي</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">مكافآت</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">غياب</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">سلف</th>
+                                    <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">خصم</th>
                                     <th class="px-3 py-2 text-left font-extrabold text-[#1e3a8a]">الصافي</th>
                                 </tr>
                             </thead>
@@ -128,10 +130,12 @@ const approve = (p: Payroll) => {
                                     </td>
                                     <td class="px-3 py-1.5 text-left text-slate-700" dir="ltr">{{ money(l.basic_salary) }}</td>
                                     <td class="px-3 py-1.5 text-left text-slate-700" dir="ltr">{{ money(l.allowances) }}</td>
+                                    <td class="px-3 py-1.5 text-left text-emerald-600" dir="ltr">{{ l.other_allowance ? money(l.other_allowance) : '—' }}</td>
                                     <td class="px-3 py-1.5 text-left text-emerald-600" dir="ltr">{{ l.overtime_amount ? money(l.overtime_amount) : '—' }}</td>
                                     <td class="px-3 py-1.5 text-left text-emerald-700" dir="ltr">{{ l.bonus ? money(l.bonus) : '—' }}</td>
                                     <td class="px-3 py-1.5 text-left text-red-600" dir="ltr">{{ l.absence_deduction ? money(l.absence_deduction) : '—' }}</td>
                                     <td class="px-3 py-1.5 text-left text-red-600" dir="ltr">{{ l.advance_deduction ? money(l.advance_deduction) : '—' }}</td>
+                                    <td class="px-3 py-1.5 text-left text-red-600" dir="ltr">{{ l.other_deduction ? money(l.other_deduction) : '—' }}</td>
                                     <td class="px-3 py-1.5 text-left font-extrabold text-slate-900" dir="ltr">{{ money(l.net) }}</td>
                                 </tr>
                             </tbody>

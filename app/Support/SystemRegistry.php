@@ -156,6 +156,7 @@ class SystemRegistry
                 'leaves' => ['label' => 'الإجازات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'advances' => ['label' => 'السلف والخصومات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'bonuses' => ['label' => 'المكافآت', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'allowances' => ['label' => 'البدلات الظرفية', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'payroll' => ['label' => 'مسيّر الرواتب', 'actions' => ['view', 'create', 'edit', 'approve', 'export']],
             ],
         ],

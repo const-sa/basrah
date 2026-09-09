@@ -3,12 +3,14 @@
 namespace App\Support;
 
 use App\Models\Account;
+use App\Models\Allowance;
 use App\Models\Bonus;
 use App\Models\Booking;
 use App\Models\City;
 use App\Models\Client;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
+use App\Models\Deduction;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeGroup;
@@ -78,6 +80,8 @@ class Archive
         'employees' => ['model' => Employee::class, 'label' => 'ملف موظف', 'group' => 'الموارد البشرية'],
         'employee-groups' => ['model' => EmployeeGroup::class, 'label' => 'مجموعة موظفين', 'group' => 'الموارد البشرية'],
         'bonuses' => ['model' => Bonus::class, 'label' => 'مكافأة', 'group' => 'الموارد البشرية'],
+        'deductions' => ['model' => Deduction::class, 'label' => 'خصم', 'group' => 'الموارد البشرية'],
+        'allowances' => ['model' => Allowance::class, 'label' => 'بدل ظرفي', 'group' => 'الموارد البشرية'],
 
         'clients' => ['model' => Client::class, 'label' => 'عميل', 'group' => 'العملاء والموردون'],
         'suppliers' => ['model' => Supplier::class, 'label' => 'مورّد', 'group' => 'العملاء والموردون'],

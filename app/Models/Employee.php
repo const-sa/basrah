@@ -97,6 +97,16 @@ class Employee extends Model
         return $this->hasMany(Bonus::class);
     }
 
+    public function deductions(): HasMany
+    {
+        return $this->hasMany(Deduction::class);
+    }
+
+    public function allowances(): HasMany
+    {
+        return $this->hasMany(Allowance::class);
+    }
+
     public function payrollLines(): HasMany
     {
         return $this->hasMany(PayrollLine::class);

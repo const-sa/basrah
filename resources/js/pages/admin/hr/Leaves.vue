@@ -22,11 +22,23 @@ interface Bonus {
     amount: number; reason: string | null; granted_on: string;
     status: string; status_label: string; payroll_number: string | null;
 }
+interface Deduction {
+    id: number; employee_name: string | null; employee_id: number;
+    amount: number; reason: string | null; deducted_on: string;
+    status: string; status_label: string; payroll_number: string | null;
+}
+interface AllowanceGrant {
+    id: number; employee_name: string | null; employee_id: number;
+    amount: number; reason: string | null; granted_on: string;
+    status: string; status_label: string; payroll_number: string | null;
+}
 
 defineProps<{
     leaves: { data: Leave[]; links: { url: string | null; label: string; active: boolean }[] };
     advances: Advance[];
     bonuses: Bonus[];
+    deductions: Deduction[];
+    allowances: AllowanceGrant[];
     filters: Record<string, string | null>;
     employees: { id: number; name: string }[];
     leaveTypes: { key: string; label: string }[];
@@ -41,22 +53,40 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 2 }).format(n ?? 0);
 
-const tab = ref<'leaves' | 'advances' | 'bonuses'>('leaves');
+const tab = ref<'leaves' | 'advances' | 'deductions' | 'allowances' | 'bonuses'>('leaves');
 
 const leaveForm = useForm({ employee_id: null as number | null, type: 'annual', starts_on: '', ends_on: '', reason: '' });
 const advanceForm = useForm({ employee_id: null as number | null, amount: 0, installments: 1, granted_on: new Date().toISOString().slice(0, 10), notes: '' });
+const deductionForm = useForm({ employee_id: null as number | null, amount: 0, reason: '', deducted_on: new Date().toISOString().slice(0, 10), notes: '' });
+const allowanceForm = useForm({ employee_id: null as number | null, amount: 0, reason: '', granted_on: new Date().toISOString().slice(0, 10), notes: '' });
 const bonusForm = useForm({ employee_id: null as number | null, amount: 0, reason: '', granted_on: new Date().toISOString().slice(0, 10), notes: '' });
 
 const showLeave = ref(false);
 const showAdvance = ref(false);
+const showDeduction = ref(false);
+const showAllowance = ref(false);
 const showBonus = ref(false);
 
 const submitLeave = () => leaveForm.post('/admin/hr/leaves', { preserveScroll: true, onSuccess: () => (showLeave.value = false) });
 const submitAdvance = () => advanceForm.post('/admin/hr/advances', { preserveScroll: true, onSuccess: () => (showAdvance.value = false) });
+const submitDeduction = () => deductionForm.post('/admin/hr/deductions', { preserveScroll: true, onSuccess: () => (showDeduction.value = false) });
+const submitAllowance = () => allowanceForm.post('/admin/hr/allowances', { preserveScroll: true, onSuccess: () => (showAllowance.value = false) });
 const submitBonus = () => bonusForm.post('/admin/hr/bonuses', { preserveScroll: true, onSuccess: () => (showBonus.value = false) });
 
 const decide = (l: Leave, status: string) => router.patch(`/admin/hr/leaves/${l.id}/decide`, { status }, { preserveScroll: true });
 const approveAdvance = (a: Advance) => router.patch(`/admin/hr/advances/${a.id}/approve`, {}, { preserveScroll: true });
+const approveDeduction = (d: Deduction) => router.patch(`/admin/hr/deductions/${d.id}/approve`, {}, { preserveScroll: true });
+const destroyDeduction = (d: Deduction) => {
+    if (confirm(`حذف خصم ${d.employee_name ?? ''} بمبلغ ${money(d.amount)}؟`)) {
+        router.delete(`/admin/hr/deductions/${d.id}`, { preserveScroll: true });
+    }
+};
+const approveAllowance = (a: AllowanceGrant) => router.patch(`/admin/hr/allowances/${a.id}/approve`, {}, { preserveScroll: true });
+const destroyAllowance = (a: AllowanceGrant) => {
+    if (confirm(`حذف بدل ${a.employee_name ?? ''} بمبلغ ${money(a.amount)}؟`)) {
+        router.delete(`/admin/hr/allowances/${a.id}`, { preserveScroll: true });
+    }
+};
 const approveBonus = (b: Bonus) => router.patch(`/admin/hr/bonuses/${b.id}/approve`, {}, { preserveScroll: true });
 const destroyBonus = (b: Bonus) => {
     if (confirm(`حذف مكافأة ${b.employee_name ?? ''} بمبلغ ${money(b.amount)}؟`)) {
@@ -68,11 +98,15 @@ const destroyBonus = (b: Bonus) => {
 const openCreate = () => {
     if (tab.value === 'leaves') showLeave.value = true;
     else if (tab.value === 'advances') showAdvance.value = true;
+    else if (tab.value === 'deductions') showDeduction.value = true;
+    else if (tab.value === 'allowances') showAllowance.value = true;
     else showBonus.value = true;
 };
 
-const createPerm = () => ({ leaves: 'leaves.create', advances: 'advances.create', bonuses: 'bonuses.create' })[tab.value];
-const createLabel = () => ({ leaves: 'إجازة جديدة', advances: 'سلفة جديدة', bonuses: 'مكافأة جديدة' })[tab.value];
+const createPerm = () =>
+    ({ leaves: 'leaves.create', advances: 'advances.create', deductions: 'advances.create', allowances: 'allowances.create', bonuses: 'bonuses.create' })[tab.value];
+const createLabel = () =>
+    ({ leaves: 'إجازة جديدة', advances: 'سلفة جديدة', deductions: 'خصم جديد', allowances: 'بدل جديد', bonuses: 'مكافأة جديدة' })[tab.value];
 
 const statusClass = (s: string) =>
     ({ pending: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700', rejected: 'bg-red-100 text-red-700', paid: 'bg-sky-100 text-sky-700', settled: 'bg-slate-200 text-slate-600', cancelled: 'bg-slate-200 text-slate-600' })[s] ??
@@ -97,6 +131,8 @@ const statusClass = (s: string) =>
             <div class="flex gap-1.5">
                 <button type="button" @click="tab = 'leaves'" class="rounded-xl px-4 py-2 text-sm font-bold transition" :class="tab === 'leaves' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'">الإجازات</button>
                 <button type="button" @click="tab = 'advances'" class="rounded-xl px-4 py-2 text-sm font-bold transition" :class="tab === 'advances' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'">السلف</button>
+                <button type="button" @click="tab = 'deductions'" class="rounded-xl px-4 py-2 text-sm font-bold transition" :class="tab === 'deductions' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'">الخصومات</button>
+                <button type="button" @click="tab = 'allowances'" class="rounded-xl px-4 py-2 text-sm font-bold transition" :class="tab === 'allowances' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'">البدلات</button>
                 <button type="button" @click="tab = 'bonuses'" class="rounded-xl px-4 py-2 text-sm font-bold transition" :class="tab === 'bonuses' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'">المكافآت</button>
                 <button
                     v-if="can(createPerm())" type="button"
@@ -170,6 +206,76 @@ const statusClass = (s: string) =>
                             </td>
                         </tr>
                         <tr v-if="!advances.length"><td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">لا سلف</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- الخصومات -->
+            <div v-if="tab === 'deductions'" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">السبب</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">تاريخ الخصم</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المسيّر</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="d in deductions" :key="d.id" class="border-t border-slate-100 hover:bg-slate-50">
+                            <td class="px-4 py-3 font-bold text-slate-800">{{ d.employee_name }}</td>
+                            <td class="px-4 py-3 text-left font-extrabold text-red-600" dir="ltr">{{ money(d.amount) }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-600">{{ d.reason ?? '—' }}</td>
+                            <td class="px-4 py-3 text-center text-xs text-slate-600" dir="ltr">{{ d.deducted_on }}</td>
+                            <td class="px-4 py-3 text-center text-xs text-slate-500" dir="ltr">{{ d.payroll_number ?? '—' }}</td>
+                            <td class="px-4 py-3 text-center"><span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="statusClass(d.status)">{{ d.status_label }}</span></td>
+                            <td class="px-4 py-3">
+                                <div class="flex justify-center gap-1">
+                                    <button v-if="can('advances.approve') && d.status === 'pending'" type="button" @click="approveDeduction(d)" class="rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-600">اعتماد</button>
+                                    <button v-if="can('advances.delete') && d.status !== 'paid'" type="button" @click="destroyDeduction(d)" title="حذف" class="rounded-lg bg-red-500 p-1.5 text-white hover:bg-red-600"><Trash2 class="h-3.5 w-3.5" /></button>
+                                    <span v-if="d.status === 'paid'" class="text-[11px] text-slate-400">استُقطعت</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="!deductions.length"><td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">لا خصومات</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- البدلات الظرفية -->
+            <div v-if="tab === 'allowances'" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الموظف</th>
+                            <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                            <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">السبب</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">تاريخ المنح</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المسيّر</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
+                            <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="a in allowances" :key="a.id" class="border-t border-slate-100 hover:bg-slate-50">
+                            <td class="px-4 py-3 font-bold text-slate-800">{{ a.employee_name }}</td>
+                            <td class="px-4 py-3 text-left font-extrabold text-emerald-700" dir="ltr">{{ money(a.amount) }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-600">{{ a.reason ?? '—' }}</td>
+                            <td class="px-4 py-3 text-center text-xs text-slate-600" dir="ltr">{{ a.granted_on }}</td>
+                            <td class="px-4 py-3 text-center text-xs text-slate-500" dir="ltr">{{ a.payroll_number ?? '—' }}</td>
+                            <td class="px-4 py-3 text-center"><span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="statusClass(a.status)">{{ a.status_label }}</span></td>
+                            <td class="px-4 py-3">
+                                <div class="flex justify-center gap-1">
+                                    <button v-if="can('allowances.approve') && a.status === 'pending'" type="button" @click="approveAllowance(a)" class="rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-600">اعتماد</button>
+                                    <button v-if="can('allowances.delete') && a.status !== 'paid'" type="button" @click="destroyAllowance(a)" title="حذف" class="rounded-lg bg-red-500 p-1.5 text-white hover:bg-red-600"><Trash2 class="h-3.5 w-3.5" /></button>
+                                    <span v-if="a.status === 'paid'" class="text-[11px] text-slate-400">صُرف</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="!allowances.length"><td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">لا بدلات</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -262,6 +368,70 @@ const statusClass = (s: string) =>
                     </p>
                     <input v-model="advanceForm.granted_on" type="date" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                     <button type="submit" :disabled="advanceForm.processing" class="w-full rounded-md bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60">حفظ</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- خصم -->
+        <div v-if="showDeduction" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="showDeduction = false">
+            <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+                <div class="mb-3 flex items-center justify-between">
+                    <h2 class="text-lg font-extrabold text-slate-900">خصم جديد</h2>
+                    <button type="button" @click="showDeduction = false" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
+                </div>
+                <form @submit.prevent="submitDeduction" class="space-y-3">
+                    <select v-model="deductionForm.employee_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        <option :value="null">— اختر الموظف —</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.name }}</option>
+                    </select>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
+                        <input v-model.number="deductionForm.amount" type="number" min="1" step="0.01" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">السبب — يظهر في سجل المسيّر</label>
+                        <input v-model="deductionForm.reason" type="text" maxlength="255" placeholder="مثال: مخالفة تأخير" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">تاريخ الخصم — يحدد الشهر الذي يُستقطع فيه</label>
+                        <input v-model="deductionForm.deducted_on" type="date" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+                    <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                        الخصم لا يُستقطع من الراتب حتى يُعتمد، ويُقفل تلقائيًا عند اعتماد مسيّر شهره فلا يُستقطع مرتين.
+                    </p>
+                    <button type="submit" :disabled="deductionForm.processing" class="w-full rounded-md bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60">حفظ</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- بدل ظرفي -->
+        <div v-if="showAllowance" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="showAllowance = false">
+            <div class="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+                <div class="mb-3 flex items-center justify-between">
+                    <h2 class="text-lg font-extrabold text-slate-900">بدل جديد</h2>
+                    <button type="button" @click="showAllowance = false" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
+                </div>
+                <form @submit.prevent="submitAllowance" class="space-y-3">
+                    <select v-model="allowanceForm.employee_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        <option :value="null">— اختر الموظف —</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.name }}</option>
+                    </select>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">المبلغ</label>
+                        <input v-model.number="allowanceForm.amount" type="number" min="1" step="0.01" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">السبب — يظهر في سجل المسيّر</label>
+                        <input v-model="allowanceForm.reason" type="text" maxlength="255" placeholder="مثال: بدل انتداب" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[11px] font-bold text-slate-600">تاريخ المنح — يحدد الشهر الذي يُصرف فيه</label>
+                        <input v-model="allowanceForm.granted_on" type="date" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+                    <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                        البدل لا يدخل المسيّر حتى يُعتمد، ويُقفل تلقائيًا عند اعتماد مسيّر شهره فلا يُصرف مرتين.
+                    </p>
+                    <button type="submit" :disabled="allowanceForm.processing" class="w-full rounded-md bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60">حفظ</button>
                 </form>
             </div>
         </div>
