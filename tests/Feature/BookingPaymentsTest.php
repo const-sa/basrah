@@ -70,6 +70,67 @@ class BookingPaymentsTest extends TestCase
         $this->assertSame(650.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
     }
 
+    public function test_each_payment_has_its_own_bond_with_its_own_amount(): void
+    {
+        $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'),
+            'amount' => 500, 'paid_on' => '2026-11-01', 'notify' => false,
+        ]);
+        $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
+            'type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'),
+            'amount' => 300, 'paid_on' => '2026-11-05', 'notify' => false,
+        ]);
+
+        $payments = $this->booking->payments()->orderBy('id')->get();
+
+        $this->actingAs($this->owner)
+            ->get("/admin/bookings/{$this->booking->id}/payments/{$payments[0]->id}/bond")
+            ->assertInertia(fn ($page) => $page->where('bond.amount', 500));
+
+        $this->actingAs($this->owner)
+            ->get("/admin/bookings/{$this->booking->id}/payments/{$payments[1]->id}/bond")
+            ->assertInertia(fn ($page) => $page->where('bond.amount', 300));
+    }
+
+    public function test_a_payment_from_another_booking_cannot_be_opened_as_this_bookings_bond(): void
+    {
+        $otherBooking = app(BookingService::class)->create([
+            'unit_id' => Unit::where('code', 'HALL-01')->value('id'),
+            'scope' => 'whole',
+            'booking_date' => '2026-12-20',
+            'period' => 'full_day',
+            'status' => 'deposit_paid',
+        ]);
+
+        $this->actingAs($this->owner)->post("/admin/bookings/{$otherBooking->id}/payments", [
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'),
+            'amount' => 500, 'paid_on' => '2026-11-01', 'notify' => false,
+        ]);
+
+        $otherPayment = $otherBooking->payments()->first();
+
+        $this->actingAs($this->owner)
+            ->get("/admin/bookings/{$this->booking->id}/payments/{$otherPayment->id}/bond")
+            ->assertNotFound();
+    }
+
+    public function test_a_payment_receipt_can_be_sent_on_whatsapp_on_its_own(): void
+    {
+        $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
+            'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'),
+            'amount' => 500, 'paid_on' => '2026-11-01', 'notify' => false,
+        ]);
+
+        $payment = $this->booking->payments()->first();
+
+        $this->actingAs($this->owner)
+            ->post("/admin/bookings/{$this->booking->id}/payments/{$payment->id}/send")
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, WhatsappMessage::where('purpose', 'receipt')
+            ->where('related_type', $payment::class)->where('related_id', $payment->id)->count());
+    }
+
     public function test_payment_can_notify_the_client_on_whatsapp(): void
     {
         $this->actingAs($this->owner)

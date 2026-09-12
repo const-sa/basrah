@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { statusBarClass, statusDotClass } from '@/lib/bookingStatus';
+import { toHijri } from '@/lib/hijri';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { CalendarDays, ChevronLeft, ChevronRight, List } from 'lucide-vue-next';
@@ -52,6 +53,10 @@ const monthLabel = computed(() => {
     const [y, m] = props.month.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('ar-SA-u-nu-latn', { month: 'long', year: 'numeric' });
 });
+
+const monthHijri = computed(() => toHijri(`${props.month}-01`));
+
+const hijriDay = (date: string) => toHijri(date).replace(/\s*\d+\s*هـ$/, '');
 
 /**
  * صفوف التقويم: صف للوحدة كاملة، وصف لكل قسم تحتها.
@@ -111,7 +116,10 @@ const hovered = ref<CalBooking | null>(null);
             <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div class="flex items-center gap-2">
                     <button type="button" @click="shiftMonth(-1)" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"><ChevronRight class="h-4 w-4" /></button>
-                    <span class="min-w-[10rem] text-center text-sm font-extrabold text-slate-800">{{ monthLabel }}</span>
+                    <span class="min-w-[10rem] text-center">
+                        <span class="block text-sm font-extrabold text-slate-800">{{ monthLabel }}</span>
+                        <span class="block text-xs font-bold text-slate-500">{{ monthHijri }}</span>
+                    </span>
                     <button type="button" @click="shiftMonth(1)" class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"><ChevronLeft class="h-4 w-4" /></button>
                 </div>
 
@@ -148,6 +156,7 @@ const hovered = ref<CalBooking | null>(null);
                                 >
                                     <div class="text-[10px] font-bold text-[#1e3a8a]">{{ d.weekday }}</div>
                                     <div class="text-xs font-extrabold text-[#1e3a8a]">{{ d.day }}</div>
+                                    <div class="text-[9px] font-bold text-slate-400">{{ hijriDay(d.date) }}</div>
                                 </th>
                             </tr>
                         </thead>

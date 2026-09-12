@@ -4,7 +4,7 @@ import PageShortcuts from '@/components/PageShortcuts.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, Eye, MessageCircle, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
+import { CheckCircle2, ClipboardList, Eye, MessageCircle, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -16,6 +16,9 @@ interface Contract {
     /** ما قُبض وما بقي — لعقود المسابح وحدها، وإلا null. */
     paid_amount: string | null; remaining_amount: string | null;
     sent_at: string | null; created_at: string;
+    // عقد الخدمات الإضافية على نفس الحجز — سجل القاعات وحده يحمله، وغيابه
+    // يعني أن العميل لم يطلب خدمات إضافية على هذا الحجز.
+    services_contract: { id: number; number: string; status_label: string } | null;
 }
 
 interface QuotationOption {
@@ -340,6 +343,14 @@ const statusClass = (s: string) =>
                                     <!-- كل الإجراءات من مكوّن واحد: الحجم واللون
                                          يأتيان منه فلا يختلف زرٌّ عن جاره في الخلية -->
                                     <div class="flex items-center justify-center gap-1.5">
+                                        <!-- عقد الخدمات الإضافية على نفس الحجز — يظهر إن طلبه العميل، وإلا فارغة. -->
+                                        <TableActionButton
+                                            v-if="c.services_contract"
+                                            variant="warning"
+                                            :icon="ClipboardList"
+                                            :title="`عقد الخدمات الإضافية ${c.services_contract.number} — ${c.services_contract.status_label}`"
+                                            :href="`/admin/contracts/${c.services_contract.id}`"
+                                        />
                                         <TableActionButton variant="view" :icon="Eye" title="عرض" :href="`/admin/contracts/${c.id}`" />
                                         <!-- A draft is still ours to correct; once sent it is the client's paper. -->
                                         <TableActionButton

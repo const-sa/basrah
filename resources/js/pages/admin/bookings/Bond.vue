@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
-import { ArrowRight, Printer } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ArrowRight, MessageCircle, Printer } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
     bond: {
         booking_id: number;
+        // فارغ في سند الحجز العام — موجود في سند دفعة بعينها.
+        payment_id: number | null;
         reference: string;
+        receipt_number: string;
         unit_name: string | null;
         unit_code: string | null;
         unit_logo_url: string | null;
@@ -85,6 +88,21 @@ const paidFor = computed(() => {
 });
 
 const print = () => window.print();
+
+const sending = ref(false);
+
+const sendWhatsapp = () => {
+    if (!props.bond.payment_id || !props.bond.client_mobile) return;
+
+    if (!confirm(`إرسال هذا السند على واتساب ${props.bond.client_mobile}؟`)) return;
+
+    sending.value = true;
+    router.post(
+        `/admin/bookings/${props.bond.booking_id}/payments/${props.bond.payment_id}/send`,
+        {},
+        { preserveScroll: true, onFinish: () => (sending.value = false) },
+    );
+};
 </script>
 
 <template>
@@ -100,6 +118,15 @@ const print = () => window.print();
                     </p>
                 </div>
                 <div class="flex gap-2">
+                    <button
+                        v-if="bond.payment_id && bond.client_mobile"
+                        type="button"
+                        :disabled="sending"
+                        @click="sendWhatsapp"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                        <MessageCircle class="h-4 w-4" /> إرسال واتساب
+                    </button>
                     <button type="button" @click="print" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700">
                         <Printer class="h-4 w-4" /> طباعة
                     </button>
@@ -161,7 +188,7 @@ const print = () => window.print();
                         <div class="text-center">
                             <div class="inline-block border-b-2 border-black px-3 pb-0.5 text-2xl font-extrabold tracking-[0.3em]">سند قبض</div>
                             <div class="mt-1 text-sm font-bold italic" dir="ltr">Receipt Voucher</div>
-                            <div class="mt-1 text-xs font-bold" dir="ltr">No. {{ bond.reference }}</div>
+                            <div class="mt-1 text-xs font-bold" dir="ltr">No. {{ bond.receipt_number }}</div>
                         </div>
 
                         <div class="space-y-1.5 text-sm font-extrabold">

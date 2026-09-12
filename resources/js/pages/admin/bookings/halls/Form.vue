@@ -39,6 +39,7 @@ interface ExistingBooking {
     last_day_date: string;
     status: string;
     discount_amount: number;
+    deposit_amount: number;
     /** Is this booking invoiced with tax? Stored with it, and asked again on every edit. */
     is_taxable: boolean;
     guests_count: number | null;
@@ -140,6 +141,8 @@ const form = useForm({
     // الحجز الجديد «مدفوع العربون» — وهي حالة كل حجز حتى يكتمل مبلغه.
     status: props.booking?.status ?? 'deposit_paid',
     discount_amount: props.booking?.discount_amount ?? 0,
+    // مقترحٌ من التسعيرة حتى يعدّله الموظف لما اتفق عليه فعلًا مع العميل.
+    deposit_amount: props.booking?.deposit_amount ?? 0,
     // With tax unless told otherwise, which is the common case; an edit opens
     // on whatever the booking was written with.
     is_taxable: props.booking?.is_taxable ?? true,
@@ -353,11 +356,31 @@ const blocked = computed(() => quote.value !== null && !quote.value.availability
 const suggestedDeposit = computed(() => quote.value?.pricing.deposit_amount ?? 0);
 const suggestedTotal = computed(() => quote.value?.pricing.total_amount ?? 0);
 
+/**
+ * العربون المطلوب يتبع اقتراح التسعيرة تلقائيًا حتى يكتبه الموظف بنفسه —
+ * فحينها هو ما اتُّفق عليه فعلًا مع العميل، لا ما تحسبه القاعدة.
+ * التعديل يفتح على العربون المحفوظ أصلًا فلا يُطاح به بإعادة تسعير عابرة.
+ */
+const depositDirty = ref(isEdit.value);
+
+watch(suggestedDeposit, (v) => {
+    if (!depositDirty.value) form.deposit_amount = v;
+});
+
+const onDepositInput = () => {
+    depositDirty.value = true;
+};
+
+const resetDeposit = () => {
+    form.deposit_amount = suggestedDeposit.value;
+    depositDirty.value = false;
+};
+
 /** حالة السداد المختارة — تُشتق من المبلغ حتى لا يتناقض الزر مع الحقل. */
 const payChoice = computed(() => {
     if (form.payment_amount <= 0) return 'none';
     if (form.payment_amount >= suggestedTotal.value && suggestedTotal.value > 0) return 'full';
-    if (form.payment_amount === suggestedDeposit.value) return 'deposit';
+    if (form.payment_amount === form.deposit_amount) return 'deposit';
 
     return 'custom';
 });
@@ -369,7 +392,7 @@ const setPayChoice = (choice: 'none' | 'deposit' | 'full') => {
         return;
     }
 
-    form.payment_amount = choice === 'deposit' ? suggestedDeposit.value : suggestedTotal.value;
+    form.payment_amount = choice === 'deposit' ? form.deposit_amount : suggestedTotal.value;
     form.payment_type = choice === 'deposit' ? 'deposit' : 'payment';
 };
 
@@ -799,9 +822,21 @@ const eventBadge = (color: string) =>
                                 <span class="font-extrabold text-slate-900">{{ quote.pricing.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                 <span class="font-extrabold text-emerald-700">{{ money(quote.pricing.total_amount) }}</span>
                             </div>
-                            <div class="flex justify-between text-lg text-amber-800">
-                                <span class="font-bold">العربون المطلوب</span>
-                                <span class="font-extrabold">{{ money(quote.pricing.deposit_amount) }}</span>
+                            <div class="border-t border-slate-200 pt-2.5">
+                                <div class="flex items-center justify-between gap-3 text-lg text-amber-800">
+                                    <span class="font-bold">العربون المطلوب</span>
+                                    <input
+                                        v-model.number="form.deposit_amount"
+                                        @input="onDepositInput"
+                                        type="number" min="0" step="0.01" dir="ltr"
+                                        class="w-32 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-end text-base font-extrabold text-amber-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                                    />
+                                </div>
+                                <p v-if="form.errors.deposit_amount" class="mt-1 text-xs text-red-600">{{ form.errors.deposit_amount }}</p>
+                                <p v-if="depositDirty && form.deposit_amount !== suggestedDeposit" class="mt-1 text-xs font-bold text-amber-700">
+                                    المقترح من التسعيرة {{ money(suggestedDeposit) }} —
+                                    <button type="button" @click="resetDeposit" class="underline hover:text-amber-900">استعادته</button>
+                                </p>
                             </div>
                         </div>
                     </div>

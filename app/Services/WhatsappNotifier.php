@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\SendWhatsappMessage;
 use App\Models\Booking;
+use App\Models\BookingPayment;
 use App\Models\Contract;
 use App\Models\NotificationTemplate;
 use App\Models\Setting;
@@ -141,6 +142,34 @@ class WhatsappNotifier
             ]));
 
         return $this->send($booking->client?->mobile, $body, 'payment', $booking, $userId);
+    }
+
+    /**
+     * إرسال سند دفعة بعينها — كل سند على حدته، بمبلغ تلك الدفعة هي لا
+     * بإجمالي ما قُبض على الحجز، حتى لا يظن العميل أن ما يصله كشفٌ تراكمي.
+     */
+    public function paymentReceipt(BookingPayment $payment, ?int $userId = null): ?WhatsappMessage
+    {
+        $payment->loadMissing(['booking.unit', 'booking.client', 'paymentMethod']);
+        $booking = $payment->booking;
+
+        $body = $this->fromTemplate('receipt', $booking, [
+            'amount' => number_format((float) $payment->amount, 2),
+            'method' => $payment->methodLabel(),
+            'payment_type' => BookingPayment::TYPES[$payment->type] ?? $payment->type,
+        ]) ?? implode("\n", array_filter([
+            'مرحبًا '.($booking?->client?->name ?? '').'،',
+            'سند قبض '.(BookingPayment::TYPES[$payment->type] ?? $payment->type).' على الحجز '.($booking?->reference ?? '—').'.',
+            'المبلغ: '.number_format((float) $payment->amount, 2),
+            'التاريخ: '.$payment->paid_on->toDateString(),
+            'الطريقة: '.$payment->methodLabel(),
+            $booking && $booking->remainingAmount() > 0
+                ? 'المتبقي: '.number_format($booking->remainingAmount(), 2)
+                : 'اكتمل السداد.',
+            'شكرًا لتعاملكم معنا.',
+        ]));
+
+        return $this->send($booking?->client?->mobile, $body, 'receipt', $payment, $userId);
     }
 
     /**

@@ -418,6 +418,9 @@ class HallBookingsController extends BaseBookingsController
             'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // العربون المطلوب مقترحٌ من التسعيرة، والموظف يعدّله لما اتفق
+            // عليه فعلًا مع العميل.
+            'deposit_amount' => ['nullable', 'numeric', 'min:0'],
             // With tax or without it — a question about this booking: a hall let
             // to an exempt body is invoiced without tax while the same hall is let
             // with it to anyone else.

@@ -170,30 +170,55 @@ class ContractsController extends Controller
                     ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%{$term}%")),
             ));
 
+        $contracts = (clone $query)->latest('id')->paginate(20)->withQueryString();
+
+        // The services list beside the rental pad — only the halls' register
+        // pairs two papers under one booking. A booking without one means the
+        // client never asked for extra services, and the cell is left empty
+        // rather than offered a button to draw one from here.
+        $servicesByBooking = $hallsOnly
+            ? Contract::query()
+                ->whereIn('booking_id', $contracts->getCollection()->pluck('booking_id')->filter()->all())
+                ->where('data->form', HallServicesContractTemplate::FORM)
+                ->get(['id', 'number', 'status', 'booking_id'])
+                ->keyBy('booking_id')
+            : collect();
+
         return Inertia::render('admin/contracts/Index', [
-            'contracts' => (clone $query)->latest('id')->paginate(20)->withQueryString()
-                ->through(fn (Contract $c) => [
-                    'id' => $c->id,
-                    'number' => $c->number,
-                    'status' => $c->status,
-                    'status_label' => $c->statusLabel(),
-                    'client_name' => $c->client?->name,
-                    'client_mobile' => $c->client?->mobile,
-                    'from_quotation' => $c->fromQuotation(),
-                    'subject' => $c->subject(),
-                    'quotation_number' => $c->quotation?->number ?? ($c->data['quotation_number'] ?? null),
-                    'booking_reference' => $c->booking?->reference,
-                    'unit_name' => $c->booking?->unit?->name,
-                    'booking_date' => $c->booking?->booking_date?->toDateString(),
-                    'total_amount' => $c->data['total_amount'] ?? null,
-                    // ما قُبض على العقد وما بقي — من دفتر السندات لا من اللقطة.
-                    'paid_amount' => $c->takesReceipts() ? number_format($c->paidAmount(), 2) : null,
-                    'remaining_amount' => $c->takesReceipts() && $c->remainingAmount() !== null
-                        ? number_format($c->remainingAmount(), 2)
-                        : null,
-                    'sent_at' => $c->sent_at?->format('Y-m-d H:i'),
-                    'created_at' => $c->created_at->toDateString(),
-                ]),
+            'contracts' => $contracts
+                ->through(function (Contract $c) use ($hallsOnly, $servicesByBooking) {
+                    $services = $hallsOnly && ! $c->isHallServicesForm() && $c->booking_id
+                        ? $servicesByBooking->get($c->booking_id)
+                        : null;
+
+                    return [
+                        'id' => $c->id,
+                        'number' => $c->number,
+                        'status' => $c->status,
+                        'status_label' => $c->statusLabel(),
+                        'client_name' => $c->client?->name,
+                        'client_mobile' => $c->client?->mobile,
+                        'from_quotation' => $c->fromQuotation(),
+                        'subject' => $c->subject(),
+                        'quotation_number' => $c->quotation?->number ?? ($c->data['quotation_number'] ?? null),
+                        'booking_reference' => $c->booking?->reference,
+                        'unit_name' => $c->booking?->unit?->name,
+                        'booking_date' => $c->booking?->booking_date?->toDateString(),
+                        'total_amount' => $c->data['total_amount'] ?? null,
+                        // ما قُبض على العقد وما بقي — من دفتر السندات لا من اللقطة.
+                        'paid_amount' => $c->takesReceipts() ? number_format($c->paidAmount(), 2) : null,
+                        'remaining_amount' => $c->takesReceipts() && $c->remainingAmount() !== null
+                            ? number_format($c->remainingAmount(), 2)
+                            : null,
+                        'sent_at' => $c->sent_at?->format('Y-m-d H:i'),
+                        'created_at' => $c->created_at->toDateString(),
+                        'services_contract' => $services ? [
+                            'id' => $services->id,
+                            'number' => $services->number,
+                            'status_label' => $services->statusLabel(),
+                        ] : null,
+                    ];
+                }),
             'scope' => $scope,
             'can' => $this->activityAbilities($request, 'contracts', ActivityPermission::ofScope($scope), self::ACTIONS),
             // The register is headed by whoever its contracts are drawn under —

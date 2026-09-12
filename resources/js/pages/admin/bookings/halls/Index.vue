@@ -19,6 +19,7 @@ import {
     FileSignature,
     FileText,
     Loader2,
+    MessageCircle,
     MoreVertical,
     Paperclip,
     Pencil,
@@ -303,6 +304,21 @@ const openPayments = (b: Booking) => {
     payForm.type = b.is_deposit_settled ? 'payment' : 'deposit';
     payForm.amount = b.is_deposit_settled ? b.remaining_amount : Math.min(b.deposit_amount - b.paid_amount, b.remaining_amount);
     loadPayments(b);
+};
+
+const sendingReceiptId = ref<number | null>(null);
+
+/** إرسال سند دفعة بعينها — كل دفعة سندها الخاص لا كشف الحجز التراكمي. */
+const sendReceipt = (p: Payment) => {
+    if (!payBooking.value?.client?.mobile) return;
+    if (!confirm(`إرسال سند هذه الدفعة على واتساب ${payBooking.value.client.mobile}؟`)) return;
+
+    sendingReceiptId.value = p.id;
+    router.post(
+        `/admin/bookings/${payBooking.value.id}/payments/${p.id}/send`,
+        {},
+        { preserveScroll: true, onFinish: () => (sendingReceiptId.value = null) },
+    );
 };
 
 const submitPayment = () => {
@@ -1423,6 +1439,7 @@ const colorClass = statusChipClass;
                                         <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">التاريخ</th>
                                         <th class="px-2 py-2 text-right font-extrabold text-[#1e3a8a]">الطريقة</th>
                                         <th class="px-2 py-2 text-center font-extrabold text-[#1e3a8a]">الإيصال</th>
+                                        <th class="px-2 py-2 text-center font-extrabold text-[#1e3a8a]">السند</th>
                                         <th class="px-2 py-2 text-left font-extrabold text-[#1e3a8a]">المبلغ</th>
                                     </tr>
                                 </thead>
@@ -1456,6 +1473,28 @@ const colorClass = statusChipClass;
                                                 <Paperclip class="h-3.5 w-3.5" />
                                             </a>
                                             <span v-else class="text-slate-300">—</span>
+                                        </td>
+                                        <td class="px-2 py-2">
+                                            <div v-if="p.signed_amount >= 0" class="flex items-center justify-center gap-2">
+                                                <Link
+                                                    :href="`/admin/bookings/${payBooking.id}/payments/${p.id}/bond`"
+                                                    title="عرض السند"
+                                                    class="inline-flex text-slate-500 hover:text-teal-600"
+                                                >
+                                                    <FileText class="h-3.5 w-3.5" />
+                                                </Link>
+                                                <button
+                                                    v-if="can('whatsapp.send') && payBooking.client?.mobile"
+                                                    type="button"
+                                                    :disabled="sendingReceiptId === p.id"
+                                                    @click="sendReceipt(p)"
+                                                    title="إرسال السند على واتساب"
+                                                    class="inline-flex text-slate-500 hover:text-emerald-600 disabled:opacity-40"
+                                                >
+                                                    <MessageCircle class="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                            <span v-else class="flex justify-center text-slate-300">—</span>
                                         </td>
                                         <td
                                             class="px-2 py-2 text-left font-extrabold"

@@ -191,7 +191,9 @@ class BookingService
                 // tax being zero: the invoice reads it back, and the edit screen
                 // opens on it.
                 'is_taxable' => $taxable,
-                'deposit_amount' => $quote['deposit_amount'],
+                // المقترح من التسعيرة، إلا أن يكون الموظف قد كتب ما اتفق
+                // عليه فعلًا مع العميل.
+                'deposit_amount' => $data['deposit_amount'] ?? $quote['deposit_amount'],
                 'paid_amount' => 0,
                 'guests_count' => $data['guests_count'] ?? null,
                 'notes' => $data['notes'] ?? null,
@@ -274,7 +276,7 @@ class BookingService
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
                 'is_taxable' => $payload['is_taxable'],
-                'deposit_amount' => $quote['deposit_amount'],
+                'deposit_amount' => $data['deposit_amount'] ?? $quote['deposit_amount'],
                 'guests_count' => $data['guests_count'] ?? $booking->guests_count,
                 'notes' => $data['notes'] ?? $booking->notes,
             ]);

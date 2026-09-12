@@ -12,6 +12,7 @@
  * dates are closed and which are partly booked, and never works it out itself.
  */
 import { addDays, addMonths, monthName, startOfMonth, todayString } from '@/lib/dates';
+import { toHijri } from '@/lib/hijri';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -95,12 +96,16 @@ const rangeSet = computed(() => new Set(props.inRange));
 interface Cell {
     date: string;
     day: number;
+    hijriDay: string;
     inMonth: boolean;
     blocked: boolean;
     partial: boolean;
     inRange: boolean;
     disabled: boolean;
 }
+
+/** The Hijri day number alone — the cell is too small for month and year. */
+const hijriDayNumber = (date: string) => toHijri(date).match(/^\d+/)?.[0] ?? '';
 
 const cells = computed<Cell[]>(() => {
     const month = viewMonth.value.slice(0, 7);
@@ -113,6 +118,7 @@ const cells = computed<Cell[]>(() => {
         return {
             date,
             day: Number(date.slice(8)),
+            hijriDay: hijriDayNumber(date),
             inMonth: date.slice(0, 7) === month,
             blocked,
             partial: partialSet.value.has(date),
@@ -121,6 +127,8 @@ const cells = computed<Cell[]>(() => {
         };
     });
 });
+
+const viewMonthHijri = computed(() => toHijri(viewMonth.value));
 
 const cellTitle = (cell: Cell): string => {
     if (cell.blocked) return 'محجوز بالكامل';
@@ -206,7 +214,10 @@ const hasMarks = computed(() => props.blocked.length > 0 || props.partial.length
                 <button type="button" @click="shiftMonth(-1)" class="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800">
                     <ChevronRight class="h-4 w-4" />
                 </button>
-                <div class="text-sm font-extrabold text-slate-800">{{ monthName(viewMonth) }}</div>
+                <div class="text-center">
+                    <div class="text-sm font-extrabold text-slate-800">{{ monthName(viewMonth) }}</div>
+                    <div class="text-[10px] font-bold text-slate-400">{{ viewMonthHijri }}</div>
+                </div>
                 <button type="button" @click="shiftMonth(1)" class="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800">
                     <ChevronLeft class="h-4 w-4" />
                 </button>
@@ -224,7 +235,7 @@ const hasMarks = computed(() => props.blocked.length > 0 || props.partial.length
                     :disabled="cell.disabled"
                     :title="cellTitle(cell)"
                     @click="pick(cell)"
-                    class="relative h-8 rounded-lg text-xs font-bold transition"
+                    class="relative flex h-10 flex-col items-center justify-center gap-0.5 rounded-lg text-xs font-bold transition"
                     :class="[
                         cell.date === modelValue
                             ? 'bg-teal-600 text-white shadow-sm'
@@ -239,10 +250,14 @@ const hasMarks = computed(() => props.blocked.length > 0 || props.partial.length
                         cell.date === today && cell.date !== modelValue ? 'ring-1 ring-inset ring-teal-400' : '',
                     ]"
                 >
-                    {{ cell.day }}
+                    <span class="block leading-none">{{ cell.day }}</span>
+                    <span
+                        class="block text-[8px] font-normal leading-none"
+                        :class="cell.date === modelValue ? 'text-white/80' : 'text-slate-400'"
+                    >{{ cell.hijriDay }}</span>
                     <span
                         v-if="cell.partial && !cell.blocked"
-                        class="absolute inset-x-0 bottom-0.5 mx-auto h-1 w-1 rounded-full"
+                        class="absolute end-1 top-1 h-1 w-1 rounded-full"
                         :class="cell.date === modelValue ? 'bg-white' : 'bg-amber-500'"
                     />
                 </button>
