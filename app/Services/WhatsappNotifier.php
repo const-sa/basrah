@@ -11,6 +11,7 @@ use App\Models\Setting;
 use App\Models\WhatsappMessage;
 use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 /**
  * إرسال رسائل واتساب الخدمية مع تسجيلها (§3.1).
@@ -48,6 +49,17 @@ class WhatsappNotifier
             'related_type' => $related ? $related::class : null,
             'related_id' => $related?->getKey(),
             'sent_by' => $userId,
+        ]);
+
+        // Logged where the message is queued, not only where it is sent: the
+        // gateway is called by the queue worker, so with no worker running
+        // nothing reaches the log and the silence reads as a lost message.
+        Log::channel('whatsapp')->info('WhatsappNotifier ⇢ queued', [
+            'id' => $message->id,
+            'number' => $number,
+            'purpose' => $purpose,
+            'media_url' => $mediaUrl,
+            'queue' => config('queue.default'),
         ]);
 
         SendWhatsappMessage::dispatch($number, $body, $mediaUrl);

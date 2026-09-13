@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Setting;
 use App\Services\WaGateway;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -36,7 +37,17 @@ class SendWhatsappMessage implements ShouldQueue
     {
         $gateway = new WaGateway;
 
+        // Said out loud, not returned silently: an unconfigured gateway is the
+        // commonest reason a "sent" message never arrives, and an empty log
+        // makes it look as though the job never ran at all.
         if (! $gateway->isConfigured()) {
+            Log::channel('whatsapp')->warning('SendWhatsappMessage: البوابة غير مهيّأة — لم تُرسل الرسالة', [
+                'number' => $this->number,
+                'media' => $this->mediaUrl,
+                'wa_enabled' => (bool) Setting::current()->wa_enabled,
+                'has_credentials' => $gateway->hasCredentials(),
+            ]);
+
             return;
         }
 
