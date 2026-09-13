@@ -241,4 +241,74 @@ class ChaletContractTest extends TestCase
             ContractTemplate::where('name', ChaletContractTemplate::NAME)->value('terms'),
         );
     }
+
+    // ── العقد من نموذج الحجز ─────────────────────────────────
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function stayPayload(array $overrides = []): array
+    {
+        $client = Client::create(['name' => 'نزيل العقد', 'mobile' => '0551112223', 'city' => 'الرياض']);
+
+        return [
+            'unit_id' => $this->chaletLetWhole()->id,
+            'client_id' => $client->id,
+            'scope' => 'whole',
+            'booking_date' => '2026-11-05',
+            'check_out_date' => '2026-11-07',
+            ...$overrides,
+        ];
+    }
+
+    public function test_the_saved_booking_opens_on_its_contract(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->stayPayload(['open_contract' => true]))
+            ->assertSessionHasNoErrors();
+
+        $booking = Booking::latest('id')->firstOrFail();
+        $contract = $booking->contracts()->firstOrFail();
+
+        $this->assertTrue($contract->isChaletRentalForm(), 'the paper follows the unit, not the screen');
+        $this->assertSame($booking->client_id, $contract->client_id);
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->stayPayload([
+                'booking_date' => '2026-12-05',
+                'check_out_date' => '2026-12-07',
+                'open_contract' => true,
+            ]))
+            ->assertRedirect('/admin/contracts/'.(Contract::max('id') ?? 0));
+    }
+
+    public function test_without_the_box_the_booking_returns_to_its_register(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->stayPayload())
+            ->assertRedirect('/admin/bookings/chalets');
+
+        // العقد يُولَّد مع الحجز على كل حال — الخيار يفتح صفحته لا يُنشئه.
+        $this->assertSame(1, Booking::latest('id')->firstOrFail()->contracts()->count());
+    }
+
+    /**
+     * The booking is the record; the contract is paper drawn from it. If no
+     * template is active the booking must still be saved — losing it would
+     * make the operator enter the whole stay again for a reason that has
+     * nothing to do with the stay. And the reason is said out loud here,
+     * where the automatic generator only writes it to the log.
+     */
+    public function test_a_missing_template_warns_but_keeps_the_booking(): void
+    {
+        ContractTemplate::query()->update(['is_active' => false, 'is_default' => false]);
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->stayPayload(['open_contract' => true]))
+            ->assertRedirect('/admin/bookings/chalets')
+            ->assertSessionHas('warning');
+
+        $this->assertSame(0, Booking::latest('id')->firstOrFail()->contracts()->count());
+    }
 }

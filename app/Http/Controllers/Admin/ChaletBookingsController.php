@@ -9,6 +9,7 @@ use App\Services\BookingAvailability;
 use App\Services\BookingPricing;
 use App\Services\BookingService;
 use App\Services\ChaletBookingService;
+use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
 use App\Support\BookingPeriod;
 use App\Support\HourlyPeriod;
@@ -39,9 +40,10 @@ class ChaletBookingsController extends BaseBookingsController
         BookingPricing $pricing,
         BookingService $bookings,
         WhatsappNotifier $whatsapp,
+        ContractService $contracts,
         private readonly ChaletBookingService $stays,
     ) {
-        parent::__construct($availability, $pricing, $bookings, $whatsapp);
+        parent::__construct($availability, $pricing, $bookings, $whatsapp, $contracts);
     }
 
     /**
@@ -544,6 +546,9 @@ class ChaletBookingsController extends BaseBookingsController
             ],
             'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
+            // العربون المتَّفق عليه: تقترحه التسعيرة ويكتبه الموظف حين يتفق
+            // على غيره، ولا يتجاوز الإجمالي — ما زاد عليه دفعةٌ لا عربون.
+            'deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             // With tax or without it — a question about this booking: a chalet let

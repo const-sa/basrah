@@ -422,31 +422,63 @@ class ClientsController extends Controller
     }
 
     /**
-     * إضافة سريعة من داخل شاشة الحجز أو الفواتير: الاسم والجوال فقط.
+     * المدن المفعّلة — تقرأها نافذة الإضافة السريعة لتعبئة قائمة المدينة.
+     *
+     * قائمةُ أسماءٍ لا غير: من يضيف عميلًا من شاشة الحجز قد لا يملك شاشة
+     * المدن، فلا تُشترط صلاحيتها لقراءة خياراتٍ يملأ بها حقلًا في نموذجه.
+     */
+    public function cities(): JsonResponse
+    {
+        return response()->json([
+            'cities' => City::where('is_active', true)->orderBy('name')->pluck('name'),
+        ]);
+    }
+
+    /**
+     * إضافة سريعة من داخل شاشة الحجز أو الفواتير — بكامل بيانات العميل.
      *
      * تُعيد العميل بصيغة JSON — لا إعادة توجيه — حتى يُضاف إلى قائمة الاختيار
-     * ويُحدَّد فورًا دون مغادرة النموذج وفقدان ما عُبِّئ فيه.
-     * وبقية الحقول (المدينة، الهوية، البيانات الضريبية) تُستكمل لاحقًا من شاشة العملاء.
+     * ويُحدَّد فورًا دون مغادرة النموذج وفقدان ما عُبِّئ فيه. والحقول هي نفسها
+     * حقول شاشة العملاء: الموظف والنزيل على الهاتف لا يعود إليها مرةً ثانية.
      */
     public function quickStore(Request $request): JsonResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'mobile' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
             // نشاط الشاشة التي أُضيف منها: العميل يُقيَّد في سجلّها لا في سجلٍّ
             // يبحث عنه الموظف بعد حين. وهو نفسه قسم قالب الترحيب.
             'type' => ['nullable', Rule::in(ClientType::keys())],
+            'national_id' => ['nullable', 'string', 'max:50'],
+            'is_taxable' => ['boolean'],
+            'tax_number' => ['nullable', 'required_if:is_taxable,true', 'string', 'max:100'],
+            'tax_address' => ['nullable', 'string', 'max:500'],
+            'is_active' => ['boolean'],
+        ], [
+            'tax_number.required_if' => 'الرقم الضريبي مطلوب للعميل الضريبي',
         ]);
 
         $type = ClientType::normalize($data['type'] ?? null);
 
         $this->authorizeActivity($request, 'clients', 'create', ActivityPermission::fromClientType($type));
 
+        $taxable = $data['is_taxable'] ?? false;
+
         $client = (new Client)->fill([
             'name' => $data['name'],
             'mobile' => $data['mobile'] ?? null,
+            'email' => $data['email'] ?? null,
+            'city' => $data['city'] ?? null,
             'type' => $type,
-            'is_active' => true,
+            'national_id' => $data['national_id'] ?? null,
+            'is_taxable' => $taxable,
+            // الرقمان الضريبيان لا يُحفظان لعميلٍ غير ضريبي، كما في شاشة العملاء.
+            'tax_number' => $taxable ? ($data['tax_number'] ?? null) : null,
+            'tax_address' => $taxable ? ($data['tax_address'] ?? null) : null,
+            // الملاحظات تُحرَّر من ملف العميل وحده، كما في شاشة العملاء.
+            'is_active' => $data['is_active'] ?? true,
         ]);
 
         $client->save();

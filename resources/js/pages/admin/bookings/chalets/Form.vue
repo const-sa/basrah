@@ -8,8 +8,9 @@ import { csrfToken } from '@/lib/csrf';
 import { addDays, daysBetween, formatTime12, startOfMonth, todayString } from '@/lib/dates';
 import { toHijri, weekdayName } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
+import { usePermissions } from '@/composables/usePermissions';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, CheckCircle2, FileText, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string; is_active: boolean }
@@ -51,6 +52,8 @@ interface ExistingBooking {
     discount_amount: number;
     /** Is this booking invoiced with tax? Stored with it, and asked again on every edit. */
     is_taxable: boolean;
+    /** العربون المتَّفق عليه على هذا الحجز — تفتح عليه شاشة التعديل. */
+    deposit_amount: number;
     /** The deposit agreed on this booking, and what is still held of it. */
     security_deposit_amount: number;
     security_held: number;
@@ -159,6 +162,8 @@ const form = useForm({
     hourly_amount: props.booking?.period === HOURLY ? props.booking.base_amount : 0,
     // الإقامة الجديدة «مدفوع العربون» — وهي حالة كل حجز حتى يكتمل مبلغه.
     status: props.booking?.status ?? 'deposit_paid',
+    // العربون المطلوب على هذه الإقامة — يتبع التسعيرة حتى يكتبه الموظف.
+    deposit_amount: props.booking?.deposit_amount ?? 0,
     addons: { ...(props.booking?.addons ?? {}) } as Record<number, number>,
     discount_amount: props.booking?.discount_amount ?? 0,
     // With tax unless told otherwise, which is the common case; an edit opens
@@ -181,7 +186,16 @@ const form = useForm({
     payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
     payment_paid_on: today,
     payment_notify: true,
+
+    // العقد يُولَّد مع الحجز نفسه؛ وهذا الخيار يفتح صفحته بعد الحفظ بدل أن
+    // يُحفظ الحجز ثم يُفتح سجل العقود ويُبحث فيه عن رقمه.
+    open_contract: true,
 });
+
+const { canActivity } = usePermissions();
+
+/** العقد ورقة النشاط: تُفتح صفحته لمن يملك قراءتها على الشاليهات. */
+const maySeeContract = computed(() => canActivity('contracts', 'view', 'chalets'));
 
 const selectedUnit = computed(() => props.units.find((u) => u.id === form.unit_id) ?? null);
 
@@ -709,24 +723,73 @@ const statusOptions = computed(() =>
 
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
 const suggestedTotal = computed(() => pricing.value?.total_amount ?? 0);
+const suggestedDeposit = computed(() => pricing.value?.deposit_amount ?? 0);
 
+/**
+ * العربون المطلوب يتبع اقتراح التسعيرة حتى يكتبه الموظف بنفسه — فحينها هو ما
+ * اتُّفق عليه فعلًا مع النزيل لا ما تحسبه القاعدة. والتعديل يفتح على العربون
+ * المحفوظ فلا تُطيح به إعادةُ تسعيرٍ عابرة.
+ */
+const depositDirty = ref(isEdit.value);
+
+watch(suggestedDeposit, (v) => {
+    if (!depositDirty.value) form.deposit_amount = v;
+});
+
+const onDepositInput = () => {
+    depositDirty.value = true;
+};
+
+const resetDeposit = () => {
+    form.deposit_amount = suggestedDeposit.value;
+    depositDirty.value = false;
+};
+
+/** حالة السداد المختارة — تُشتق من المبلغ حتى لا يتناقض الزر مع الحقل. */
 const payChoice = computed(() => {
     if (form.payment_amount <= 0) return 'none';
     if (form.payment_amount >= suggestedTotal.value && suggestedTotal.value > 0) return 'full';
+    if (form.payment_amount === form.deposit_amount) return 'deposit';
 
     return 'custom';
 });
 
-const setPayChoice = (choice: 'none' | 'full') => {
+const setPayChoice = (choice: 'none' | 'deposit' | 'full') => {
     if (choice === 'none') {
         form.payment_amount = 0;
 
         return;
     }
 
-    form.payment_amount = suggestedTotal.value;
-    form.payment_type = 'payment';
+    form.payment_amount = choice === 'deposit' ? form.deposit_amount : suggestedTotal.value;
 };
+
+/**
+ * هل يُقفل المقبوض المبلغ كله؟ عليه يُبنى نوع الدفعة المرسَل.
+ *
+ * النوع لا يُثبَّت عند ضغط الزرّ: الموظف يضغط «مسدَّد كامل» ثم يصحّح المبلغ
+ * فيصير ما قبضه عربونًا، والقيد يجب أن يقول ما جرى فعلًا — «عربون» في وصف
+ * القيد لا «دفعة». لذلك يُشتق النوع من المبلغ لحظة الإرسال.
+ */
+const isFullSettlement = computed(
+    () => suggestedTotal.value > 0 && form.payment_amount >= suggestedTotal.value,
+);
+
+/**
+ * اختيار الحالة «مدفوع العربون» يفتح خانة القبض على العربون المطلوب.
+ *
+ * الحالة إقرارٌ بأن عربونًا قُبض، فلا تُترك الشاشة تحفظ حجزًا «مدفوع العربون»
+ * بلا دفعة خلفه ولا قيدٍ في الدفاتر. ومن أراد حفظه بلا قبض يضغط «غير مسدَّد»
+ * — الحارس هنا يفتح الخانة لا يفرض المبلغ.
+ */
+watch(
+    () => form.status,
+    (status) => {
+        if (isEdit.value || status !== 'deposit_paid' || form.payment_amount > 0) return;
+
+        setPayChoice('deposit');
+    },
+);
 
 /**
  * Errors whose field is on screen right now. Anything else is listed in the
@@ -735,7 +798,7 @@ const setPayChoice = (choice: 'none' | 'full') => {
  */
 const inlineErrorKeys = computed(() => [
     'unit_id', 'client_id', 'booking_date', 'period', 'days_count',
-    'availability', 'payment_amount', 'discount_amount', 'is_taxable', 'notes',
+    'availability', 'payment_amount', 'deposit_amount', 'discount_amount', 'is_taxable', 'notes',
     'security_deposit_amount', 'start_time', 'end_time', 'hourly_amount',
     ...(isStay.value ? ['check_out_date'] : []),
 ]);
@@ -759,6 +822,8 @@ const submit = () => {
         ...data,
         check_out_date: isStay.value ? data.check_out_date : null,
         days_count: isStay.value || isHourly.value ? null : days.value,
+        // ما دون الإجمالي عربون، وما أقفله سداد — والدفاتر تفرّق بينهما.
+        payment_type: isFullSettlement.value ? 'payment' : 'deposit',
     }));
 
     isEdit.value
@@ -1136,9 +1201,21 @@ const submit = () => {
                                 <span class="font-extrabold text-slate-700">{{ pricing.is_taxable ? 'الإجمالي شامل الضريبة' : 'الإجمالي' }}</span>
                                 <span class="font-extrabold text-teal-600">{{ money(pricing.total_amount) }}</span>
                             </div>
-                            <div class="flex justify-between text-amber-700">
-                                <span class="font-bold">العربون المطلوب</span>
-                                <span class="font-extrabold">{{ money(pricing.deposit_amount) }}</span>
+                            <div class="border-t border-slate-100 pt-1.5">
+                                <div class="flex items-center justify-between gap-2 text-amber-700">
+                                    <span class="font-bold">العربون المطلوب</span>
+                                    <input
+                                        v-model.number="form.deposit_amount"
+                                        @input="onDepositInput"
+                                        type="number" min="0" step="0.01" dir="ltr"
+                                        class="w-28 rounded-lg border border-amber-300 bg-white px-2 py-1 text-end text-sm font-extrabold text-amber-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                                    />
+                                </div>
+                                <p v-if="form.errors.deposit_amount" class="mt-1 text-[11px] text-red-500">{{ form.errors.deposit_amount }}</p>
+                                <p v-if="depositDirty && form.deposit_amount !== suggestedDeposit" class="mt-1 text-[11px] font-bold text-amber-700">
+                                    المقترح من التسعيرة {{ money(suggestedDeposit) }} —
+                                    <button type="button" @click="resetDeposit" class="underline hover:text-amber-900">استعادته</button>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -1149,11 +1226,15 @@ const submit = () => {
                             <Wallet class="h-4 w-4 text-slate-400" /> السداد
                         </h3>
 
-                        <div class="grid grid-cols-2 gap-1">
+                        <div class="grid grid-cols-3 gap-1">
                             <button type="button" @click="setPayChoice('none')"
                                 class="rounded-lg py-1.5 text-[11px] font-bold transition"
                                 :class="payChoice === 'none' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
                             >غير مسدَّد</button>
+                            <button type="button" @click="setPayChoice('deposit')"
+                                class="rounded-lg py-1.5 text-[11px] font-bold transition"
+                                :class="payChoice === 'deposit' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                            >عربون</button>
                             <button type="button" @click="setPayChoice('full')"
                                 class="rounded-lg py-1.5 text-[11px] font-bold transition"
                                 :class="payChoice === 'full' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
@@ -1162,9 +1243,17 @@ const submit = () => {
 
                         <div v-if="form.payment_amount > 0" class="mt-2.5 space-y-2.5">
                             <div>
-                                <label class="mb-1 block text-xs font-extrabold text-slate-800">المبلغ المقبوض</label>
+                                <label class="mb-1 block text-xs font-extrabold text-slate-800">
+                                    {{ isFullSettlement ? 'المبلغ المقبوض' : 'العربون المقبوض' }}
+                                </label>
                                 <input v-model.number="form.payment_amount" type="number" min="0" step="0.01" class="w-full rounded-lg border border-slate-400 px-2.5 py-2 text-sm font-bold" />
                                 <p v-if="form.errors.payment_amount" class="mt-1 text-[11px] text-red-500">{{ form.errors.payment_amount }}</p>
+                                <!-- ما يصير إليه المبلغ في الدفاتر — يُقال هنا لا يُترك للحدس. -->
+                                <p class="mt-1 text-[11px] font-semibold text-slate-600">
+                                    {{ isFullSettlement
+                                        ? 'يُقيَّد سدادًا للحجز: من الصندوق/البنك إلى إيرادٍ غير مكتسب، ويُعترف بالإيراد عند إقفال الحجز مسدَّدًا.'
+                                        : 'يُقيَّد عربونًا: من الصندوق/البنك إلى إيرادٍ غير مكتسب — التزامٌ على المنشأة حتى يكتمل المبلغ.' }}
+                                </p>
                             </div>
 
                             <div class="grid grid-cols-2 gap-2">
@@ -1194,6 +1283,28 @@ const submit = () => {
                         <p v-else class="mt-2 text-[11px] font-semibold text-slate-600">
                             تُحفظ الإقامة بلا دفعة، ويبقى المبلغ كاملًا على النزيل.
                         </p>
+                    </div>
+
+                    <!-- العقد — يُولَّد مع حفظ الحجز بدل لفّةٍ على سجل العقود -->
+                    <div v-if="!isEdit && maySeeContract" class="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+                        <h3 class="mb-1.5 flex items-center gap-1.5 text-base font-extrabold text-slate-900">
+                            <FileText class="h-4 w-4 text-slate-400" /> العقد
+                        </h3>
+
+                        <p class="mb-2.5 text-[11px] font-semibold leading-relaxed text-slate-600">
+                            يُولَّد عقد هذه الإقامة تلقائيًا مع حفظها، على نموذج الشاليهات المعتمد وببيانات الحجز:
+                            النزيل والشاليه والتواريخ والمبلغ والعربون والتأمين.
+                        </p>
+
+                        <label class="flex cursor-pointer items-start gap-2">
+                            <input type="checkbox" v-model="form.open_contract" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600" />
+                            <span class="text-xs font-bold text-slate-800">
+                                فتح العقد بعد الحفظ
+                                <span class="mt-0.5 block text-[11px] font-semibold text-slate-600">
+                                    تُفتح صفحته مباشرة للطباعة أو الإرسال، بلا مرورٍ على سجل العقود بحثًا عن رقم الحجز.
+                                </span>
+                            </span>
+                        </label>
                     </div>
 
                     <!--

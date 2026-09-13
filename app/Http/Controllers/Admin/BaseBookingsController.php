@@ -6,13 +6,17 @@ use App\Http\Controllers\Concerns\StatesFilters;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Client;
+use App\Models\Contract;
 use App\Models\PaymentMethod;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingAvailability;
 use App\Services\BookingPricing;
 use App\Services\BookingService;
+use App\Services\ContractService;
 use App\Services\WhatsappNotifier;
+use App\Support\ActivityPermission;
+use App\Support\ActivitySegment;
 use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,6 +26,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 /**
  * ما تشترك فيه شاشتا حجوزات القاعات وحجوزات الشاليهات.
@@ -39,6 +44,7 @@ abstract class BaseBookingsController extends Controller
         protected readonly BookingPricing $pricing,
         protected readonly BookingService $bookings,
         protected readonly WhatsappNotifier $whatsapp,
+        protected readonly ContractService $contracts,
     ) {}
 
     /**
@@ -173,6 +179,8 @@ abstract class BaseBookingsController extends Controller
             'payment_paid_on' => ['nullable', 'date'],
             'payment_notify' => ['boolean'],
             'security_collected' => ['boolean'],
+            // فتح عقد الحجز بعد حفظه — راجع contractAfterSave().
+            'open_contract' => ['boolean'],
         ]);
 
         $amount = round((float) ($payment['payment_amount'] ?? 0), 2);
@@ -219,17 +227,82 @@ abstract class BaseBookingsController extends Controller
 
         $security = $booking->securityHeld() > 0 ? '، والتأمين مقبوض' : '';
 
-        if ($amount <= 0) {
-            return $back()->with('success', "تم إنشاء الحجز {$booking->reference} — غير مسدَّد{$security}");
-        }
+        // العقد قبل رسالة النجاح: نصّها يقول رقمه، ووجهة العودة تصير صفحته.
+        $contract = $request->boolean('open_contract')
+            ? $this->contractAfterSave($booking, $request)
+            : null;
 
-        if ($request->boolean('payment_notify')) {
+        $paper = $contract instanceof Contract ? "، والعقد {$contract->number} جاهز" : '';
+
+        $redirect = $contract instanceof Contract && $this->maySeeContract($booking, $request)
+            ? fn (): RedirectResponse => redirect()->route('contracts.show', $contract)
+            : $back;
+
+        if ($amount > 0 && $request->boolean('payment_notify')) {
             $this->whatsapp->paymentReceived($booking, $amount, $request->user()?->id);
         }
 
-        $state = $booking->isFullyPaid() ? 'مسدَّد بالكامل' : 'مسدَّد جزئيًا';
+        $state = match (true) {
+            $amount <= 0 => 'غير مسدَّد',
+            $booking->isFullyPaid() => 'مسدَّد بالكامل',
+            default => 'مسدَّد جزئيًا',
+        };
 
-        return $back()->with('success', "تم إنشاء الحجز {$booking->reference} — {$state}{$security}");
+        $done = $redirect()->with('success', "تم إنشاء الحجز {$booking->reference} — {$state}{$security}{$paper}");
+
+        // تعذّر التوليد لا يُبطل الحجز — يُحفظ ويُقال للموظف لماذا لا عقد معه.
+        return is_string($contract) ? $done->with('warning', $contract) : $done;
+    }
+
+    /**
+     * عقد الحجز المحفوظ — يُفتح على الموظف بدل أن يبحث عنه.
+     *
+     * الطريق القديم كان لفّةً كاملة: يُحفظ الحجز، ثم يُفتح سجل العقود، ثم
+     * يُبحث فيه عن رقم الحجز. والعقد يُولَّد أصلًا مع الحجز في BookingObserver،
+     * لكن أحدًا لم يكن يقول ذلك — فالموظف يظن أن عليه توليده بنفسه.
+     *
+     * وإن لم يجده فالمولّد التلقائي أخفق (لا قالب فعّال غالبًا)، وإخفاقه
+     * هناك يُسجَّل في السجلّات وحدها. فتُعاد المحاولة هنا لأن الطالب حاضر
+     * يُقال له السبب.
+     *
+     * يعود بالعقد عند النجاح، وبنصّ سببٍ حين يتعذّر — والحجز محفوظ في
+     * الحالين: من حجز ثم عجز عن طباعة عقده يطبعه بعد إصلاح السبب، ومن ضاع
+     * حجزه لأجل العقد يبدأ من أوله.
+     */
+    private function contractAfterSave(Booking $booking, Request $request): Contract|string|null
+    {
+        // المولّد التلقائي يعمل بعد اعتماد المعاملة، فالعقد موجود هنا إن نجح.
+        $contract = $booking->contracts()->latest('id')->first();
+
+        if ($contract) {
+            return $contract;
+        }
+
+        if (! ActivityPermission::allows($request->user(), 'contracts', 'create', $this->contractActivity($booking))) {
+            return 'الحجز محفوظ بلا عقد — ولا صلاحية لديك لتوليده.';
+        }
+
+        try {
+            return $this->contracts->generate($booking, null, $request->user()?->id);
+        } catch (RuntimeException $e) {
+            return "الحجز محفوظ — لكن تعذّر توليد العقد: {$e->getMessage()}";
+        }
+    }
+
+    /** نشاط العقد هو نشاط الوحدة المكتوب عليها. */
+    private function contractActivity(Booking $booking): ?string
+    {
+        return match ($booking->unit?->type) {
+            'hall' => ActivitySegment::HALLS,
+            'chalet' => ActivitySegment::CHALETS,
+            default => null,
+        };
+    }
+
+    /** هل تُفتح له صفحة العقد؟ وإلا عاد إلى سجلّه برسالةٍ فيها رقمه. */
+    private function maySeeContract(Booking $booking, Request $request): bool
+    {
+        return ActivityPermission::allows($request->user(), 'contracts', 'view', $this->contractActivity($booking));
     }
 
     /**

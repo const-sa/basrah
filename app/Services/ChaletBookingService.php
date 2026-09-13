@@ -98,7 +98,7 @@ class ChaletBookingService
                 // its tax being zero: the invoice reads it back, and the edit
                 // screen opens on it.
                 'is_taxable' => (bool) ($data['is_taxable'] ?? true),
-                'deposit_amount' => $quote['deposit_amount'],
+                'deposit_amount' => $this->agreedDeposit($data, (float) $quote['deposit_amount'], (float) $quote['total_amount']),
                 // The security deposit is the chalet's usual one unless the
                 // form said otherwise. It is stored beside the total, never
                 // inside it: it is held, not charged.
@@ -175,7 +175,11 @@ class ChaletBookingService
                 'discount_amount' => $quote['discount_amount'],
                 'total_amount' => $quote['total_amount'],
                 'is_taxable' => $taxable,
-                'deposit_amount' => $quote['deposit_amount'],
+                // كالتأمين: المتَّفق عليه يبقى ما لم يُغيَّر، فلا تُطيح إعادةُ
+                // التسعير بعربونٍ اتُّفق عليه لمجرّد تحريك تاريخ.
+                'deposit_amount' => array_key_exists('deposit_amount', $data) && $data['deposit_amount'] !== null
+                    ? $this->agreedDeposit($data, (float) $quote['deposit_amount'], (float) $quote['total_amount'])
+                    : (float) $booking->deposit_amount,
                 // An edit keeps what was agreed unless it is being changed:
                 // falling back to the chalet's usual amount here would undo a
                 // waiver every time the dates were touched.
@@ -215,6 +219,25 @@ class ChaletBookingService
             'end' => $data['end_time'] ?? $booking?->ends_at->format('H:i'),
             'amount' => (float) ($data['hourly_amount'] ?? $booking?->base_amount ?? 0),
         ];
+    }
+
+    /**
+     * العربون المتَّفق عليه — اقتراح التسعيرة ما لم يكتب الموظف غيره.
+     *
+     * العربون رقمٌ يُتَّفق عليه مع النزيل لا قاعدةٌ تُفرض: قد يُقبل أقلّ ممّا
+     * تحسبه القاعدة وقد يُطلب أكثر. والصفر اتفاقٌ أيضًا — لذلك يُفحص المفتاح
+     * ولا يُدمج بـ ??. ولا يتجاوز العربون إجمالي الحجز: ما زاد عليه سدادٌ
+     * كامل لا عربون، والدفاتر تفرّق بينهما.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function agreedDeposit(array $data, float $suggested, float $total): float
+    {
+        $deposit = array_key_exists('deposit_amount', $data) && $data['deposit_amount'] !== null
+            ? round((float) $data['deposit_amount'], 2)
+            : $suggested;
+
+        return min(max($deposit, 0.0), round($total, 2));
     }
 
     /**

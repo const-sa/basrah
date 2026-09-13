@@ -495,6 +495,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::post('clients', [ClientsController::class, 'store'])->name('clients.store');
     // إضافة سريعة من شاشات الحجز — قبل مسارات {client} كي لا تُفسَّر "quick" معرّفًا
     Route::post('clients/quick', [ClientsController::class, 'quickStore'])->name('clients.quick');
+    // خيارات المدينة لنافذة الإضافة السريعة — قائمة أسماءٍ لا شاشة مدن.
+    Route::get('clients/cities', [ClientsController::class, 'cities'])->name('clients.cities');
     // ملف العميل — بعد المسارات الثابتة كي لا تُفسَّر «export» معرّفًا
     Route::get('clients/{client}', [ClientsController::class, 'show'])->name('clients.show');
     Route::put('clients/{client}', [ClientsController::class, 'update'])->name('clients.update');
