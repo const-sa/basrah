@@ -2,14 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Models\Account;
+use App\Models\Booking;
+use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
+use App\Models\JournalEntry;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingService;
 use App\Services\ContractPdf;
+use App\Services\Accounting\Ledger;
 use App\Services\ContractService;
 use App\Support\HallRentalContractTemplate;
 use Database\Seeders\AccountsSeeder;
@@ -162,5 +167,80 @@ class HallRentalContractTest extends TestCase
         // A booking draws its contract as it is created; otherwise one is made.
         return $booking->contracts()->first()
             ?? app(ContractService::class)->generate($booking->fresh());
+    }
+
+    // ── العقد والعربون من نموذج الحجز ────────────────────────
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function bookingPayload(array $overrides = []): array
+    {
+        return [
+            'unit_id' => $this->hall()->id,
+            'client_id' => Client::create(['name' => 'صاحب المناسبة', 'mobile' => '0554443332'])->id,
+            'scope' => 'whole',
+            'booking_date' => '2026-11-12',
+            'period' => 'full_day',
+            'guests_count' => 150,
+            ...$overrides,
+        ];
+    }
+
+    public function test_the_saved_hall_booking_opens_on_its_contract(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->bookingPayload(['open_contract' => true]))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect('/admin/contracts/'.(Contract::max('id') ?? 0));
+
+        $contract = Booking::latest('id')->firstOrFail()->contracts()->firstOrFail();
+
+        $this->assertTrue($contract->isHallRentalForm(), 'the paper follows the unit, not the screen');
+    }
+
+    public function test_without_the_box_the_booking_returns_to_its_register(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->bookingPayload())
+            ->assertRedirect('/admin/bookings/halls');
+
+        // العقد يُولَّد مع الحجز على كل حال — الخيار يفتح صفحته لا يُنشئه.
+        $this->assertSame(1, Booking::latest('id')->firstOrFail()->contracts()->count());
+    }
+
+    /**
+     * العربون المقبوض عند الحجز يُقيَّد عربونًا لا دفعةً: القيدان يقصدان
+     * الحسابين نفسيهما، لكن وصف القيد ونوع الدفعة هما ما يقرأه المحاسب.
+     */
+    public function test_a_deposit_taken_at_booking_is_filed_as_a_deposit(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->bookingPayload([
+                'payment_amount' => 500,
+                'payment_type' => 'deposit',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $booking = Booking::latest('id')->firstOrFail();
+        $payment = $booking->payments()->firstOrFail();
+
+        $this->assertSame('deposit', $payment->type);
+        $this->assertEqualsWithDelta(500, (float) $payment->amount, 0.01);
+        $this->assertEqualsWithDelta(500, (float) $booking->fresh()->paid_amount, 0.01);
+
+        // العربون التزام لا إيراد: يُرحَّل إلى الإيراد غير المكتسب حتى الإقفال.
+        $entry = JournalEntry::where('reference_type', BookingPayment::class)
+            ->where('reference_id', $payment->id)
+            ->firstOrFail();
+
+        $this->assertStringContainsString('عربون', $entry->description);
+        $this->assertEqualsWithDelta(
+            500,
+            (float) Account::where('code', Ledger::UNEARNED_REVENUE)->firstOrFail()->balance(),
+            0.01,
+            'the deposit is credited to unearned revenue, not to booking revenue',
+        );
     }
 }

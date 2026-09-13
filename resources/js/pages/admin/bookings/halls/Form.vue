@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
@@ -8,7 +9,7 @@ import { toHijri, weekdayName } from '@/lib/hijri';
 import { todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, Info, Loader2, PartyPopper, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Info, Loader2, PartyPopper, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -156,7 +157,16 @@ const form = useForm({
     payment_method_id: props.meta.payment_methods[0]?.id ?? null as number | null,
     payment_paid_on: today,
     payment_notify: true,
+
+    // العقد يُولَّد مع الحجز نفسه؛ وهذا الخيار يفتح صفحته بعد الحفظ بدل أن
+    // يُحفظ الحجز ثم يُفتح سجل العقود ويُبحث فيه عن رقمه.
+    open_contract: true,
 });
+
+const { canActivity } = usePermissions();
+
+/** العقد ورقة النشاط: تُفتح صفحته لمن يملك قراءتها على القاعات. */
+const maySeeContract = computed(() => canActivity('contracts', 'view', 'halls'));
 
 /**
  * الحالات التي يجوز ضبطها من هذه الشاشة.
@@ -393,12 +403,41 @@ const setPayChoice = (choice: 'none' | 'deposit' | 'full') => {
     }
 
     form.payment_amount = choice === 'deposit' ? form.deposit_amount : suggestedTotal.value;
-    form.payment_type = choice === 'deposit' ? 'deposit' : 'payment';
 };
+
+/**
+ * هل يُقفل المقبوض المبلغ كله؟ عليه يُبنى نوع الدفعة المرسَل.
+ *
+ * النوع لا يُثبَّت عند ضغط الزرّ: الموظف يضغط «مسدَّد كامل» ثم يصحّح المبلغ
+ * فيصير ما قبضه عربونًا، والقيد يجب أن يقول ما جرى فعلًا — «عربون» في وصف
+ * القيد لا «دفعة». لذلك يُشتق النوع من المبلغ لحظة الإرسال.
+ */
+const isFullSettlement = computed(
+    () => suggestedTotal.value > 0 && form.payment_amount >= suggestedTotal.value,
+);
+
+/**
+ * اختيار الحالة «مدفوع العربون» يفتح خانة القبض على العربون المطلوب.
+ *
+ * الحالة إقرارٌ بأن عربونًا قُبض، فلا تُترك الشاشة تحفظ حجزًا «مدفوع العربون»
+ * بلا دفعة خلفه ولا قيدٍ في الدفاتر. ومن أراد حفظه بلا قبض يضغط «غير مسدَّد»
+ * — الحارس هنا يفتح الخانة لا يفرض المبلغ.
+ */
+watch(
+    () => form.status,
+    (status) => {
+        if (isEdit.value || status !== 'deposit_paid' || form.payment_amount > 0) return;
+
+        setPayChoice('deposit');
+    },
+);
 
 const submit = () => {
     // الحقل قد يُترك فارغًا أو بقيمة خارج الحد — يُرسل مشذَّبًا كما حُسب وعُرض.
     form.days_count = daysCount.value;
+
+    // ما دون الإجمالي عربون، وما أقفله سداد — والدفاتر تفرّق بينهما.
+    form.payment_type = isFullSettlement.value ? 'payment' : 'deposit';
 
     isEdit.value
         ? form.put(`/admin/bookings/halls/${props.booking?.id}`)
@@ -864,9 +903,17 @@ const eventBadge = (color: string) =>
 
                         <div v-if="form.payment_amount > 0" class="mt-3.5 space-y-3">
                             <div>
-                                <label class="mb-1 block text-sm font-bold text-slate-800">المبلغ المقبوض</label>
+                                <label class="mb-1 block text-sm font-bold text-slate-800">
+                                    {{ isFullSettlement ? 'المبلغ المقبوض' : 'العربون المقبوض' }}
+                                </label>
                                 <input v-model.number="form.payment_amount" type="number" min="0" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-lg font-bold" />
                                 <p v-if="form.errors.payment_amount" class="mt-1 text-sm text-red-700">{{ form.errors.payment_amount }}</p>
+                                <!-- ما يصير إليه المبلغ في الدفاتر — يُقال هنا لا يُترك للحدس. -->
+                                <p class="mt-1 text-[13px] font-medium text-slate-700">
+                                    {{ isFullSettlement
+                                        ? 'يُقيَّد سدادًا للحجز: من الصندوق/البنك إلى إيرادٍ غير مكتسب، ويُعترف بالإيراد عند إقفال الحجز مسدَّدًا.'
+                                        : 'يُقيَّد عربونًا: من الصندوق/البنك إلى إيرادٍ غير مكتسب — التزامٌ على المنشأة حتى يكتمل المبلغ.' }}
+                                </p>
                             </div>
 
                             <div class="grid grid-cols-2 gap-2">
@@ -896,6 +943,28 @@ const eventBadge = (color: string) =>
                         <p v-else class="mt-3 text-sm font-medium leading-relaxed text-slate-700">
                             يُحفظ الحجز بلا دفعة، ويبقى المبلغ كاملًا على العميل.
                         </p>
+                    </div>
+
+                    <!-- العقد — يُولَّد مع حفظ الحجز بدل لفّةٍ على سجل العقود -->
+                    <div v-if="!isEdit && maySeeContract" class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
+                        <h3 class="mb-1.5 flex items-center gap-2 text-lg font-extrabold text-slate-900">
+                            <FileText class="h-5 w-5 text-slate-600" /> العقد
+                        </h3>
+
+                        <p class="mb-3 text-sm font-medium leading-relaxed text-slate-700">
+                            يُولَّد عقد هذا الحجز تلقائيًا مع حفظه، على نموذج إيجار القاعات المعتمد وببيانات الحجز:
+                            العميل والقاعة والمناسبة والتاريخ والمبلغ والعربون.
+                        </p>
+
+                        <label class="flex cursor-pointer items-start gap-2">
+                            <input type="checkbox" v-model="form.open_contract" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-700" />
+                            <span class="text-sm font-bold text-slate-900">
+                                فتح العقد بعد الحفظ
+                                <span class="mt-0.5 block text-[13px] font-medium text-slate-700">
+                                    تُفتح صفحته مباشرة للطباعة أو الإرسال، بلا مرورٍ على سجل العقود بحثًا عن رقم الحجز.
+                                </span>
+                            </span>
+                        </label>
                     </div>
 
                     <p v-if="form.errors.availability" class="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ form.errors.availability }}</p>
