@@ -24,6 +24,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasColumn('units', 'period_hours')) {
+            return;
+        }
+
         Schema::table('units', function (Blueprint $table) {
             $table->json('period_hours')->nullable()->after('security_deposit');
         });
@@ -31,6 +35,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasColumn('units', 'period_hours')) {
+            return;
+        }
+
         Schema::table('units', function (Blueprint $table) {
             $table->dropColumn('period_hours');
         });
