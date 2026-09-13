@@ -29,6 +29,12 @@ class AccountsSeeder extends Seeder
         [Ledger::RECEIVABLES, 'ذمم العملاء', 'asset', false, '1200'],
         ['1300', 'المخزون', 'asset', true, '1000'],
         [Ledger::INVENTORY, 'مخزون البضاعة', 'asset', false, '1300'],
+        ['1400', 'الأصول الثابتة', 'asset', true, '1000'],
+        [Ledger::FIXED_ASSETS, 'الأصول الثابتة بالتكلفة', 'asset', false, '1400'],
+        // مجمع الإهلاك حساب مقابل (contra-asset) — رصيده سالب دائمًا لأن
+        // balance() تحسبه بمعادلة الأصول نفسها (مدين−دائن)، وهذا مقصود:
+        // يُطرح من تكلفة الأصول في الميزانية لا يُجمع إليها.
+        [Ledger::ACCUMULATED_DEPRECIATION, 'مجمع الإهلاك', 'asset', false, '1400'],
 
         ['2000', 'الالتزامات', 'liability', true, null],
         ['2100', 'الدائنون', 'liability', true, '2000'],
@@ -60,6 +66,8 @@ class AccountsSeeder extends Seeder
         [Ledger::SALARIES_EXPENSE, 'الرواتب والأجور', 'expense', false, '5200'],
         ['5300', 'مصروفات عمومية', 'expense', true, '5000'],
         [Ledger::GENERAL_EXPENSE, 'مصروفات متنوعة', 'expense', false, '5300'],
+        ['5400', 'الإهلاك', 'expense', true, '5000'],
+        [Ledger::DEPRECIATION_EXPENSE, 'مصروف الإهلاك', 'expense', false, '5400'],
         // بنود المصروف كما نصّ عليها البند التاسع من العرض المعتمد. الكهرباء
         // والمياه فُصلتا لأن العرض يعدّهما بندين، ولأن ترشيد أحدهما لا يُقاس
         // ما داما في حسابٍ واحد.

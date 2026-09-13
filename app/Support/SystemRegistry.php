@@ -142,6 +142,8 @@ class SystemRegistry
                 'receivables' => ['label' => 'ذمم العملاء والموردين', 'actions' => ['view', 'create', 'edit', 'export']],
                 'cost_centers' => ['label' => 'مراكز التكلفة', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'fin_reports' => ['label' => 'التقارير المالية', 'actions' => ['view', 'export']],
+                'fixed_assets' => ['label' => 'الأصول الثابتة والإهلاك', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'bank_reconciliation' => ['label' => 'التسوية البنكية', 'actions' => ['view', 'create', 'edit', 'delete']],
             ],
             'shared' => ['suppliers'],
         ],

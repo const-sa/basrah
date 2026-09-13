@@ -4,15 +4,22 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\Booking;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Models\Purchase;
+use App\Models\Sale;
+use App\Support\Vat;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * التقارير المالية: ميزان المراجعة، قائمة الدخل، الميزانية، ربحية الوحدات.
+ * التقارير المالية: ميزان المراجعة، قائمة الدخل، الميزانية، ربحية الوحدات،
+ * والإقرار الضريبي.
  */
 class FinancialReportsController extends Controller
 {
@@ -27,7 +34,37 @@ class FinancialReportsController extends Controller
             'incomeStatement' => $this->incomeStatement($from, $to),
             'balanceSheet' => $this->balanceSheet($to),
             'unitProfitability' => $this->unitProfitability($from, $to),
+            'vatReturn' => $this->vatReturn($from, $to),
         ]);
+    }
+
+    /**
+     * تصدير تفصيل الإقرار الضريبي الشهري لنفس الفترة المعروضة.
+     */
+    public function exportVatReturn(Request $request): StreamedResponse
+    {
+        $from = $request->string('from')->toString() ?: now()->startOfYear()->toDateString();
+        $to = $request->string('to')->toString() ?: now()->toDateString();
+
+        $vat = $this->vatReturn($from, $to);
+        $filename = 'vat-return-'.$from.'-to-'.$to.'.csv';
+
+        return response()->streamDownload(function () use ($vat) {
+            $out = fopen('php://output', 'w');
+
+            // BOM حتى يفتح إكسل العربية بترميزها الصحيح بدل رموز مبهمة.
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, ['الشهر', 'مبيعات خاضعة', 'ضريبة مخرجات', 'مشتريات خاضعة', 'ضريبة مدخلات', 'صافي المستحق']);
+
+            foreach ($vat['months'] as $row) {
+                fputcsv($out, [$row['month'], $row['output_net'], $row['output_tax'], $row['input_net'], $row['input_tax'], $row['net_due']]);
+            }
+
+            fputcsv($out, ['الإجمالي', $vat['output']['taxable_amount'], $vat['output']['tax'], $vat['input']['taxable_amount'], $vat['input']['tax'], $vat['net_due']]);
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     /**
@@ -186,6 +223,110 @@ class FinancialReportsController extends Controller
                 ];
             })
             ->sortByDesc('profit')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * تقرير الإقرار الضريبي: مبيعات وحجوزات خاضعة (ضريبة مخرجات) مقابل
+     * مشتريات خاضعة (ضريبة مدخلات)، وصافي الضريبة المستحقة.
+     *
+     * يُبنى من المستندات المصدر لا من الدفاتر: لا حساب "ضريبة مستحقة" في
+     * شجرة الحسابات اليوم، والمشتريات لا تُرحَّل للدفاتر أصلًا (انظر
+     * PurchaseController) — فقراءة القيود هنا تُسقط المشتريات كلها.
+     *
+     * @return array{
+     *     rate: float,
+     *     output: array{taxable_amount: float, tax: float},
+     *     input: array{taxable_amount: float, tax: float},
+     *     net_due: float,
+     *     months: list<array<string, mixed>>,
+     * }
+     */
+    private function vatReturn(string $from, string $to): array
+    {
+        $months = $this->vatMonthly($from, $to);
+
+        $outputNet = round((float) collect($months)->sum('output_net'), 2);
+        $outputTax = round((float) collect($months)->sum('output_tax'), 2);
+        $inputNet = round((float) collect($months)->sum('input_net'), 2);
+        $inputTax = round((float) collect($months)->sum('input_tax'), 2);
+
+        return [
+            'rate' => Vat::rate(),
+            'output' => ['taxable_amount' => $outputNet, 'tax' => $outputTax],
+            'input' => ['taxable_amount' => $inputNet, 'tax' => $inputTax],
+            'net_due' => round($outputTax - $inputTax, 2),
+            'months' => $months,
+        ];
+    }
+
+    /**
+     * تفصيل الضريبة شهرًا بشهر — أساس بطاقتَي الإجمالي في vatReturn().
+     *
+     * التجميع بالشهر يجري في PHP لا بدالة قاعدة بيانات (DATE_FORMAT وما
+     * شابهها ليست محمولة بين محركات قواعد البيانات)، على نمط باقي هذا
+     * الملف الذي يُحمّل صفوفًا محدودة ثم يحسب عليها.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function vatMonthly(string $from, string $to): array
+    {
+        $range = ["{$from} 00:00:00", "{$to} 23:59:59"];
+
+        $sales = Sale::query()
+            ->where('is_taxable', true)
+            ->whereBetween('created_at', $range)
+            ->get(['type', 'created_at', 'subtotal', 'tax_amount'])
+            ->groupBy(fn (Sale $s) => $s->created_at->format('Y-m'))
+            ->map(fn (Collection $rows) => [
+                'net' => round((float) $rows->sum(fn (Sale $s) => $s->isReturn() ? -$s->subtotal : $s->subtotal), 2),
+                'tax' => round((float) $rows->sum(fn (Sale $s) => $s->isReturn() ? -$s->tax_amount : $s->tax_amount), 2),
+            ]);
+
+        $bookings = Booking::query()
+            ->where('is_taxable', true)
+            ->where('status', '!=', 'cancelled')
+            ->whereBetween('created_at', $range)
+            ->get(['created_at', 'base_amount', 'package_amount', 'event_fee_amount', 'addons_amount', 'discount_amount', 'total_amount'])
+            ->groupBy(fn (Booking $b) => $b->created_at->format('Y-m'))
+            ->map(fn (Collection $rows) => [
+                'net' => round((float) $rows->sum(fn (Booking $b) => $b->netAmount()), 2),
+                'tax' => round((float) $rows->sum(fn (Booking $b) => $b->taxAmount()), 2),
+            ]);
+
+        $purchases = Purchase::query()
+            ->where('is_taxable', true)
+            ->whereBetween('created_at', $range)
+            ->get(['created_at', 'subtotal', 'tax_amount'])
+            ->groupBy(fn (Purchase $p) => $p->created_at->format('Y-m'))
+            ->map(fn (Collection $rows) => [
+                'net' => round((float) $rows->sum('subtotal'), 2),
+                'tax' => round((float) $rows->sum('tax_amount'), 2),
+            ]);
+
+        return collect()
+            ->merge($sales->keys())
+            ->merge($bookings->keys())
+            ->merge($purchases->keys())
+            ->unique()
+            ->sort()
+            ->values()
+            ->map(function (string $month) use ($sales, $bookings, $purchases) {
+                $outputNet = round((float) ($sales[$month]['net'] ?? 0) + (float) ($bookings[$month]['net'] ?? 0), 2);
+                $outputTax = round((float) ($sales[$month]['tax'] ?? 0) + (float) ($bookings[$month]['tax'] ?? 0), 2);
+                $inputNet = round((float) ($purchases[$month]['net'] ?? 0), 2);
+                $inputTax = round((float) ($purchases[$month]['tax'] ?? 0), 2);
+
+                return [
+                    'month' => $month,
+                    'output_net' => $outputNet,
+                    'output_tax' => $outputTax,
+                    'input_net' => $inputNet,
+                    'input_tax' => $inputTax,
+                    'net_due' => round($outputTax - $inputTax, 2),
+                ];
+            })
             ->values()
             ->all();
     }

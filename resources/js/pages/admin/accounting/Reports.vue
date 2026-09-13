@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { StatPill } from '@/components/data-table';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { AlertTriangle, CheckCircle2 } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, Download } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 interface Row { code: string; name: string; type?: string; type_label?: string; debit?: number; credit?: number; balance?: number; amount?: number }
 interface UnitProfit { id: number; code: string; name: string; unit_type: string | null; revenue: number; expense: number; profit: number; margin: number }
+interface VatMonth { month: string; output_net: number; output_tax: number; input_net: number; input_tax: number; net_due: number }
 
 const props = defineProps<{
     filters: { from: string; to: string };
@@ -18,6 +20,13 @@ const props = defineProps<{
         retained_earnings: number; balanced: boolean;
     };
     unitProfitability: UnitProfit[];
+    vatReturn: {
+        rate: number;
+        output: { taxable_amount: number; tax: number };
+        input: { taxable_amount: number; tax: number };
+        net_due: number;
+        months: VatMonth[];
+    };
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -30,14 +39,20 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumF
 const filters = ref({ ...props.filters });
 const apply = () => router.get('/admin/accounting/reports', filters.value, { preserveState: true, replace: true });
 
-const tab = ref<'profitability' | 'income' | 'trial' | 'balance'>('profitability');
+const tab = ref<'profitability' | 'income' | 'trial' | 'balance' | 'vat'>('profitability');
 
 const tabs = [
     { key: 'profitability', label: 'ربحية الوحدات' },
     { key: 'income', label: 'قائمة الدخل' },
     { key: 'trial', label: 'ميزان المراجعة' },
     { key: 'balance', label: 'الميزانية' },
+    { key: 'vat', label: 'الإقرار الضريبي' },
 ] as const;
+
+const exportVat = () => {
+    const params = new URLSearchParams({ from: filters.value.from, to: filters.value.to });
+    window.location.href = `/admin/accounting/reports/vat/export?${params.toString()}`;
+};
 </script>
 
 <template>
@@ -225,6 +240,62 @@ const tabs = [
                                 <tr class="bg-amber-50 font-extrabold">
                                     <td class="px-4 py-2 text-amber-800">الإجمالي</td>
                                     <td class="px-4 py-2 text-left text-amber-800" dir="ltr">{{ money(balanceSheet.total_liabilities + balanceSheet.total_equity) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- الإقرار الضريبي -->
+            <div v-if="tab === 'vat'" class="space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <p class="text-xs font-medium text-slate-500" dir="ltr">نسبة الضريبة: {{ vatReturn.rate }}%</p>
+                    <button type="button" @click="exportVat" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                        <Download class="h-4 w-4" /> تصدير CSV
+                    </button>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <StatPill label="ضريبة المخرجات (مبيعات)" :value="money(vatReturn.output.tax)" variant="success" />
+                    <StatPill label="ضريبة المدخلات (مشتريات)" :value="money(vatReturn.input.tax)" variant="warning" />
+                    <StatPill label="صافي الضريبة المستحقة" :value="money(vatReturn.net_due)" :variant="vatReturn.net_due >= 0 ? 'danger' : 'success'" />
+                </div>
+
+                <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div class="border-b border-slate-100 px-4 py-3">
+                        <h2 class="font-extrabold text-slate-800">التفصيل الشهري</h2>
+                        <p class="text-xs font-medium text-slate-500">من المستندات مباشرة (مبيعات، حجوزات، مشتريات) — لا من القيود</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">الشهر</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">مبيعات خاضعة</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">ضريبة مخرجات</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">مشتريات خاضعة</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">ضريبة مدخلات</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">صافي المستحق</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="m in vatReturn.months" :key="m.month" class="border-t border-slate-100">
+                                    <td class="px-4 py-2.5 font-bold text-slate-700" dir="ltr">{{ m.month }}</td>
+                                    <td class="px-4 py-2.5 text-left" dir="ltr">{{ money(m.output_net) }}</td>
+                                    <td class="px-4 py-2.5 text-left font-bold text-emerald-700" dir="ltr">{{ money(m.output_tax) }}</td>
+                                    <td class="px-4 py-2.5 text-left" dir="ltr">{{ money(m.input_net) }}</td>
+                                    <td class="px-4 py-2.5 text-left font-bold text-amber-700" dir="ltr">{{ money(m.input_tax) }}</td>
+                                    <td class="px-4 py-2.5 text-left font-extrabold text-slate-900" dir="ltr">{{ money(m.net_due) }}</td>
+                                </tr>
+                                <tr v-if="!vatReturn.months.length"><td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">لا بيانات في هذه الفترة</td></tr>
+                                <tr class="border-t-2 border-slate-300 bg-slate-50 font-extrabold">
+                                    <td class="px-4 py-2.5 text-slate-800">الإجمالي</td>
+                                    <td class="px-4 py-2.5 text-left text-slate-900" dir="ltr">{{ money(vatReturn.output.taxable_amount) }}</td>
+                                    <td class="px-4 py-2.5 text-left text-slate-900" dir="ltr">{{ money(vatReturn.output.tax) }}</td>
+                                    <td class="px-4 py-2.5 text-left text-slate-900" dir="ltr">{{ money(vatReturn.input.taxable_amount) }}</td>
+                                    <td class="px-4 py-2.5 text-left text-slate-900" dir="ltr">{{ money(vatReturn.input.tax) }}</td>
+                                    <td class="px-4 py-2.5 text-left text-slate-900" dir="ltr">{{ money(vatReturn.net_due) }}</td>
                                 </tr>
                             </tbody>
                         </table>

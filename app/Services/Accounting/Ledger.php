@@ -34,6 +34,12 @@ class Ledger
 
     public const SALARIES_PAYABLE = '2310';
 
+    public const FIXED_ASSETS = '1410';
+
+    public const ACCUMULATED_DEPRECIATION = '1420';
+
+    public const DEPRECIATION_EXPENSE = '5410';
+
     /**
      * Security deposits held against damage. Deliberately not UNEARNED_REVENUE:
      * that account holds money on its way to becoming revenue, and this money

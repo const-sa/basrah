@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AddonsController;
 use App\Http\Controllers\Admin\ArchiveController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupsController;
+use App\Http\Controllers\Admin\BankReconciliationController;
 use App\Http\Controllers\Admin\BookingsController;
 use App\Http\Controllers\Admin\BookingTimesController;
 use App\Http\Controllers\Admin\ChaletBookingsController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Admin\EventTypesController;
 use App\Http\Controllers\Admin\ExpensesController;
 use App\Http\Controllers\Admin\FacilitiesController;
 use App\Http\Controllers\Admin\FinancialReportsController;
+use App\Http\Controllers\Admin\FixedAssetsController;
 use App\Http\Controllers\Admin\GeneralSettingsController;
 use App\Http\Controllers\Admin\HallBookingsController;
 use App\Http\Controllers\Admin\HallCalendarController;
@@ -38,6 +40,7 @@ use App\Http\Controllers\Admin\PosController;
 use App\Http\Controllers\Admin\PricingController;
 use App\Http\Controllers\Admin\PurchaseController;
 use App\Http\Controllers\Admin\QuotationController;
+use App\Http\Controllers\Admin\ReceivablesController;
 use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\RevenuesController;
 use App\Http\Controllers\Admin\RolesController;
@@ -363,6 +366,26 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('accounting/vouchers/{voucher}/post', [AccountingController::class, 'postVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.post');
         Route::post('accounting/vouchers/{voucher}/cancel', [AccountingController::class, 'cancelVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.cancel');
 
+        // ذمم العملاء — كشف حساب موحَّد فوق الحجوزات والمبيعات والعقود والسندات
+        Route::get('accounting/receivables', [ReceivablesController::class, 'index'])->middleware('perm:receivables.view')->name('receivables.index');
+        Route::get('accounting/receivables/{client}', [ReceivablesController::class, 'show'])->middleware('perm:receivables.view')->name('receivables.show');
+        Route::get('accounting/receivables/{client}/export', [ReceivablesController::class, 'export'])->middleware('perm:receivables.export')->name('receivables.export');
+
+        // الأصول الثابتة والإهلاك
+        Route::get('accounting/fixed-assets', [FixedAssetsController::class, 'index'])->middleware('perm:fixed_assets.view')->name('fixed_assets.index');
+        Route::post('accounting/fixed-assets', [FixedAssetsController::class, 'store'])->middleware('perm:fixed_assets.create')->name('fixed_assets.store');
+        Route::put('accounting/fixed-assets/{fixedAsset}', [FixedAssetsController::class, 'update'])->middleware('perm:fixed_assets.edit')->name('fixed_assets.update');
+        Route::delete('accounting/fixed-assets/{fixedAsset}', [FixedAssetsController::class, 'destroy'])->middleware('perm:fixed_assets.delete')->name('fixed_assets.destroy');
+        Route::post('accounting/fixed-assets/{fixedAsset}/dispose', [FixedAssetsController::class, 'dispose'])->middleware('perm:fixed_assets.edit')->name('fixed_assets.dispose');
+        Route::post('accounting/fixed-assets/post-depreciation', [FixedAssetsController::class, 'postDepreciation'])->middleware('perm:fixed_assets.approve')->name('fixed_assets.post_depreciation');
+
+        // التسوية البنكية
+        Route::get('accounting/bank-reconciliation', [BankReconciliationController::class, 'index'])->middleware('perm:bank_reconciliation.view')->name('bank_reconciliation.index');
+        Route::post('accounting/bank-reconciliation/import', [BankReconciliationController::class, 'import'])->middleware('perm:bank_reconciliation.create')->name('bank_reconciliation.import');
+        Route::post('accounting/bank-reconciliation/lines/{bankStatementLine}/match', [BankReconciliationController::class, 'match'])->middleware('perm:bank_reconciliation.edit')->name('bank_reconciliation.match');
+        Route::post('accounting/bank-reconciliation/lines/{bankStatementLine}/unmatch', [BankReconciliationController::class, 'unmatch'])->middleware('perm:bank_reconciliation.edit')->name('bank_reconciliation.unmatch');
+        Route::delete('accounting/bank-reconciliation/imports/{bankStatementImport}', [BankReconciliationController::class, 'destroyImport'])->middleware('perm:bank_reconciliation.delete')->name('bank_reconciliation.destroy_import');
+
         // الإيرادات — قراءة الدفاتر من جهة الدخل، موزّعة على القاعات
         // والشاليهات والمسابح
         Route::get('accounting/revenues', [RevenuesController::class, 'index'])->middleware('perm:revenues.view')->name('revenues.index');
@@ -391,6 +414,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::delete('accounting/expense-categories/{category}', [ExpensesController::class, 'destroyCategory'])->name('expense_categories.destroy');
 
         Route::get('accounting/reports', [FinancialReportsController::class, 'index'])->middleware('perm:fin_reports.view')->name('fin_reports.index');
+        Route::get('accounting/reports/vat/export', [FinancialReportsController::class, 'exportVatReturn'])->middleware('perm:fin_reports.export')->name('fin_reports.vat_export');
     });
 
     /*

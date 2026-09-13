@@ -58,6 +58,7 @@ class AuditLog extends Model
         ExpenseCategory::class => 'نوع مصروف',
         JournalEntry::class => 'قيد محاسبي',
         Account::class => 'حساب',
+        FixedAsset::class => 'أصل ثابت',
         Sale::class => 'فاتورة بيع',
         Item::class => 'صنف',
         Employee::class => 'ملف موظف',

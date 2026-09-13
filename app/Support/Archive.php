@@ -18,6 +18,7 @@ use App\Models\EventType;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Facility;
+use App\Models\FixedAsset;
 use App\Models\Item;
 use App\Models\MeasureUnit;
 use App\Models\NotificationTemplate;
@@ -76,6 +77,7 @@ class Archive
         'expense-categories' => ['model' => ExpenseCategory::class, 'label' => 'نوع مصروف', 'group' => 'المحاسبة'],
         'accounts' => ['model' => Account::class, 'label' => 'حساب', 'group' => 'المحاسبة'],
         'payment-methods' => ['model' => PaymentMethod::class, 'label' => 'طريقة دفع', 'group' => 'المحاسبة'],
+        'fixed-assets' => ['model' => FixedAsset::class, 'label' => 'أصل ثابت', 'group' => 'المحاسبة'],
 
         'employees' => ['model' => Employee::class, 'label' => 'ملف موظف', 'group' => 'الموارد البشرية'],
         'employee-groups' => ['model' => EmployeeGroup::class, 'label' => 'مجموعة موظفين', 'group' => 'الموارد البشرية'],
