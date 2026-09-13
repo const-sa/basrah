@@ -421,6 +421,8 @@ class HallBookingsController extends BaseBookingsController
             // العربون المطلوب مقترحٌ من التسعيرة، والموظف يعدّله لما اتفق
             // عليه فعلًا مع العميل.
             'deposit_amount' => ['nullable', 'numeric', 'min:0'],
+            // Held, not charged: it is never measured against the total.
+            'security_deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             // With tax or without it — a question about this booking: a hall let
             // to an exempt body is invoiced without tax while the same hall is let
             // with it to anyone else.

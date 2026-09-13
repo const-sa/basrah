@@ -194,6 +194,9 @@ class BookingService
                 // المقترح من التسعيرة، إلا أن يكون الموظف قد كتب ما اتفق
                 // عليه فعلًا مع العميل.
                 'deposit_amount' => $data['deposit_amount'] ?? $quote['deposit_amount'],
+                // Held against damage, never part of the price: it starts from
+                // the hall's usual amount and stays outside the total.
+                'security_deposit_amount' => $this->agreedSecurityDeposit($data, $unit->securityDeposit()),
                 'paid_amount' => 0,
                 'guests_count' => $data['guests_count'] ?? null,
                 'notes' => $data['notes'] ?? null,
@@ -277,6 +280,9 @@ class BookingService
                 'total_amount' => $quote['total_amount'],
                 'is_taxable' => $payload['is_taxable'],
                 'deposit_amount' => $data['deposit_amount'] ?? $quote['deposit_amount'],
+                // An edit keeps what was agreed: falling back to the hall's
+                // usual amount would undo a waiver on every date change.
+                'security_deposit_amount' => $this->agreedSecurityDeposit($data, (float) $booking->security_deposit_amount),
                 'guests_count' => $data['guests_count'] ?? $booking->guests_count,
                 'notes' => $data['notes'] ?? $booking->notes,
             ]);

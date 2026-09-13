@@ -6,6 +6,7 @@ use App\Models\Setting;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
 
 /**
  * بوابة إرسال رسائل واتساب عبر مكتبة c-wts.com.
@@ -80,18 +81,19 @@ class WaGateway
         $normalized = static::normalizeNumber($number);
 
         if ($normalized === null) {
-            return ['ok' => false, 'code' => 'invalid_number', 'error' => 'رقم الجوال غير صالح'];
+            return $this->invalidNumber('send', $number);
         }
+
+        $payload = ['number' => $normalized, 'message' => $message];
+
+        $this->logRequest('send', $payload);
 
         $response = Http::acceptJson()
             ->timeout(30)
             ->asForm()
-            ->post("{$this->baseUrl}/api/send?".http_build_query($this->credentials()), [
-                'number' => $normalized,
-                'message' => $message,
-            ]);
+            ->post("{$this->baseUrl}/api/send?".http_build_query($this->credentials()), $payload);
 
-        return $this->normalize($response);
+        return $this->logResponse('send', $normalized, $this->normalize($response), $response);
     }
 
     /** إرسال وسائط عبر رابط مباشر. */
@@ -100,17 +102,19 @@ class WaGateway
         $normalized = static::normalizeNumber($number);
 
         if ($normalized === null) {
-            return ['ok' => false, 'code' => 'invalid_number', 'error' => 'رقم الجوال غير صالح'];
+            return $this->invalidNumber('send-media', $number);
         }
 
         $payload = array_merge(['number' => $normalized, 'media_url' => $mediaUrl], array_filter($options, fn ($v) => $v !== null));
+
+        $this->logRequest('send-media', $payload);
 
         $response = Http::acceptJson()
             ->timeout(30)
             ->asForm()
             ->post("{$this->baseUrl}/api/send-media?".http_build_query($this->credentials()), $payload);
 
-        return $this->normalize($response);
+        return $this->logResponse('send-media', $normalized, $this->normalize($response), $response);
     }
 
     /**
@@ -168,13 +172,67 @@ class WaGateway
         ];
     }
 
+    /** The WhatsApp channel, or the default one when it is not configured. */
+    private function log(): LoggerInterface
+    {
+        return Log::channel(config('logging.channels.whatsapp') ? 'whatsapp' : config('logging.default'));
+    }
+
+    /**
+     * The outgoing request — body and all.
+     *
+     * The text is logged whole: when a client says the message read wrong,
+     * the answer is what we actually sent, not its length. Credentials never
+     * enter the log; they are in the query string, and stay there.
+     */
+    private function logRequest(string $endpoint, array $payload): void
+    {
+        $this->log()->info('WaGateway → '.$endpoint, [
+            'number' => $payload['number'] ?? null,
+            'message' => $payload['message'] ?? ($payload['caption'] ?? null),
+            'media_url' => $payload['media_url'] ?? null,
+        ]);
+    }
+
+    /**
+     * The gateway's reply, kept whole and raw.
+     *
+     * A refusal arrives as a 200 with «ok: false» just as often as an HTTP
+     * error, so the body is logged either way — a failure line that says only
+     * "failed" cannot be taken to the provider.
+     */
+    private function logResponse(string $endpoint, string $number, array $result, Response $response): array
+    {
+        $context = [
+            'number' => $number,
+            'http_status' => $response->status(),
+            'body' => $response->body(),
+        ];
+
+        if ($result['ok'] ?? false) {
+            $this->log()->info('WaGateway ← '.$endpoint.' ok', $context);
+        } else {
+            $this->log()->warning('WaGateway ← '.$endpoint.' failed', $context);
+        }
+
+        return $result;
+    }
+
+    /** A number the gateway would reject — logged, never sent. */
+    private function invalidNumber(string $endpoint, string $number): array
+    {
+        $this->log()->warning('WaGateway ✗ '.$endpoint.' invalid number', ['number' => $number]);
+
+        return ['ok' => false, 'code' => 'invalid_number', 'error' => 'رقم الجوال غير صالح'];
+    }
+
     /** توحيد شكل الاستجابة إلى مصفوفة تحوي على الأقل ok/status. */
     private function normalize(Response $response): array
     {
         $data = $response->json();
 
         if (! is_array($data)) {
-            Log::warning('WaGateway: استجابة غير متوقعة', ['status' => $response->status(), 'body' => $response->body()]);
+            $this->log()->warning('WaGateway: استجابة غير متوقعة', ['status' => $response->status(), 'body' => $response->body()]);
 
             return [
                 'ok' => false,

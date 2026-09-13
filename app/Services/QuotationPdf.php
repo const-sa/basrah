@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Quotation;
 use App\Models\Setting;
+use App\Services\Concerns\ResolvesPublicFiles;
 use Illuminate\Support\Facades\View;
 use Mpdf\Mpdf;
 use Mpdf\MpdfException;
@@ -15,6 +16,8 @@ use RuntimeException;
  */
 class QuotationPdf
 {
+    use ResolvesPublicFiles;
+
     public function __construct(private readonly ZatcaQr $zatcaQr) {}
 
     /**
@@ -92,26 +95,4 @@ class QuotationPdf
         ];
     }
 
-    /**
-     * Local path to the image on disk, if exists — otherwise null.
-     */
-    private function localPath(?string $path): ?string
-    {
-        if (blank($path)) {
-            return null;
-        }
-
-        $relative = ltrim(str_replace('\\', '/', $path), '/');
-
-        foreach ([public_path($relative), storage_path('app/public/'.$relative)] as $candidate) {
-            if (is_file($candidate)) {
-                return $candidate;
-            }
-        }
-
-        $stripped = preg_replace('#^storage/#', '', $relative) ?? $relative;
-        $candidate = storage_path('app/public/'.$stripped);
-
-        return is_file($candidate) ? $candidate : null;
-    }
 }

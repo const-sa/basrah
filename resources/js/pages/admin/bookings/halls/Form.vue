@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ClientQuickAdd from '@/components/ClientQuickAdd.vue';
+import HijriDateInput from '@/components/HijriDateInput.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVat } from '@/composables/useVat';
@@ -9,7 +10,7 @@ import { toHijri, weekdayName } from '@/lib/hijri';
 import { todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Info, Loader2, PartyPopper, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Info, Loader2, PartyPopper, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -17,6 +18,8 @@ interface UnitOption {
     id: number; name: string; code: string; type: string;
     bookable_mode: 'whole' | 'sections' | 'both';
     privacy_mode: 'open' | 'exclusive';
+    /** The refundable deposit normally taken on this hall — 0 means none. */
+    security_deposit: number;
     /** ساعات فترات هذه القاعة سارية المفعول — ساعتها إن كُتبت، وإلا ساعة الإعدادات. */
     hours: Record<string, { start: string; end: string }>;
     sections: SectionOption[];
@@ -41,6 +44,9 @@ interface ExistingBooking {
     status: string;
     discount_amount: number;
     deposit_amount: number;
+    /** The deposit agreed on this booking, and what is still held of it. */
+    security_deposit_amount: number;
+    security_held: number;
     /** Is this booking invoiced with tax? Stored with it, and asked again on every edit. */
     is_taxable: boolean;
     guests_count: number | null;
@@ -127,6 +133,10 @@ const quoteError = ref<string | null>(null);
 const pre = props.prefill ?? {};
 const preSections = pre.section_ids ?? [];
 
+// A hall arriving from the calendar seeds its own deposit: the watcher below
+// is asleep during the first fill.
+const preUnit = props.units.find((u) => u.id === pre.unit_id) ?? null;
+
 const form = useForm({
     unit_id: props.booking?.unit.id ?? pre.unit_id ?? null as number | null,
     client_id: props.booking?.client?.id ?? null as number | null,
@@ -149,6 +159,11 @@ const form = useForm({
     is_taxable: props.booking?.is_taxable ?? true,
     guests_count: props.booking?.guests_count ?? null as number | null,
     notes: props.booking?.notes ?? '',
+
+    // Held against damage, wholly outside the price: a new booking starts from
+    // the hall's usual amount, an existing one keeps what was agreed.
+    security_deposit_amount: props.booking?.security_deposit_amount ?? preUnit?.security_deposit ?? 0,
+    security_collected: true,
 
     // السداد عند الحجز — صفر يعني حجزًا غير مسدَّد
     payment_amount: 0,
@@ -280,6 +295,9 @@ watch(() => form.unit_id, () => {
     form.section_ids = [];
     form.scope = canBookWhole.value ? 'whole' : 'sections';
 
+    // Each hall has its own deposit, so switching brings that one across.
+    form.security_deposit_amount = selectedUnit.value?.security_deposit ?? 0;
+
     if (form.event_type_id && !availableEventTypes.value.some((t) => t.id === form.event_type_id)) {
         form.event_type_id = null;
     }
@@ -361,6 +379,15 @@ watch(
 onMounted(refreshQuote);
 
 const blocked = computed(() => quote.value !== null && !quote.value.availability.ok);
+
+// ── The security deposit: held, not charged ─────────────────
+
+/** What this hall usually asks for — the figure the field starts from. */
+const unitSecurityDeposit = computed(() => selectedUnit.value?.security_deposit ?? 0);
+
+const securityChanged = computed(() =>
+    unitSecurityDeposit.value > 0 && Number(form.security_deposit_amount) !== unitSecurityDeposit.value,
+);
 
 // ── السداد عند إنشاء الحجز ──────────────────────────────────
 const suggestedDeposit = computed(() => quote.value?.pricing.deposit_amount ?? 0);
@@ -626,7 +653,7 @@ const eventBadge = (color: string) =>
                                     <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-xs font-extrabold text-white">5</span>
                                     تاريخ البداية
                                 </label>
-                                <input v-model="form.booking_date" type="date" :min="minDate" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px] font-bold" />
+                                <HijriDateInput v-model="form.booking_date" :min="minDate" />
                                 <p v-if="form.errors.booking_date" class="mt-1 text-sm text-red-700">{{ form.errors.booking_date }}</p>
                             </div>
 
@@ -648,30 +675,34 @@ const eventBadge = (color: string) =>
 
                             <div>
                                 <label class="mb-1 block text-[15px] font-bold text-slate-900">تاريخ النهاية</label>
-                                <input :value="lastDate" type="date" readonly class="w-full cursor-not-allowed rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-[15px] font-bold text-slate-800" />
+                                <div class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                    <span class="block text-[15px] font-extrabold leading-tight text-slate-700">{{ hijriLastDate || '—' }}</span>
+                                    <span class="mt-0.5 block text-[11px] font-bold leading-none text-slate-500" dir="ltr">{{ lastDate }}</span>
+                                </div>
                                 <p class="mt-1 text-[13px] font-medium text-slate-700">يُحسب من البداية وعدد الأيام</p>
                             </div>
                         </div>
 
-                        <!-- التاريخ كما يُقرأ للعميل: ميلادي وهجري واسم اليوم -->
-                        <div class="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3.5">
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <div class="text-[15px] font-extrabold text-emerald-900">{{ daysCount > 1 ? 'أول يوم' : 'يوم المناسبة' }}</div>
-                                    <div class="mt-1 text-xl font-extrabold text-slate-900" dir="ltr">{{ form.booking_date || '—' }}</div>
-                                    <div class="mt-0.5 text-lg font-extrabold text-emerald-800">{{ hijriDate }}</div>
-                                    <div class="text-lg font-bold text-slate-800">{{ dayName }}</div>
+                        <!-- The date as it is read to the client: Hijri leads, and
+                             the stored Gregorian trails it on the same line. -->
+                        <div class="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                            <div class="flex flex-wrap items-baseline gap-x-5 gap-y-1.5">
+                                <div class="flex items-baseline gap-2">
+                                    <span class="text-[11px] font-extrabold text-emerald-700">{{ daysCount > 1 ? 'أول يوم' : 'يوم المناسبة' }}</span>
+                                    <span class="text-[15px] font-extrabold text-slate-900">{{ hijriDate || '—' }}</span>
+                                    <span class="text-[11px] font-bold text-slate-500" dir="ltr">{{ form.booking_date || '—' }}</span>
+                                    <span class="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">{{ dayName }}</span>
                                 </div>
-                                <div v-if="daysCount > 1" class="sm:border-e sm:border-emerald-300 sm:pe-3">
-                                    <div class="text-[15px] font-extrabold text-emerald-900">آخر يوم</div>
-                                    <div class="mt-1 text-xl font-extrabold text-slate-900" dir="ltr">{{ lastDate }}</div>
-                                    <div class="mt-0.5 text-lg font-extrabold text-emerald-800">{{ hijriLastDate }}</div>
-                                    <div class="text-lg font-bold text-slate-800">{{ lastDayName }}</div>
+                                <div v-if="daysCount > 1" class="flex items-baseline gap-2">
+                                    <span class="text-[11px] font-extrabold text-emerald-700">آخر يوم</span>
+                                    <span class="text-[15px] font-extrabold text-slate-900">{{ hijriLastDate }}</span>
+                                    <span class="text-[11px] font-bold text-slate-500" dir="ltr">{{ lastDate }}</span>
+                                    <span class="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">{{ lastDayName }}</span>
                                 </div>
                             </div>
 
-                            <p v-if="daysCount > 1" class="mt-3 flex items-start gap-2 border-t border-emerald-300 pt-2.5 text-[15px] font-bold text-emerald-900">
-                                <Info class="mt-0.5 h-4 w-4 shrink-0" />
+                            <p v-if="daysCount > 1" class="mt-1.5 flex items-start gap-1.5 border-t border-emerald-200 pt-1.5 text-[12px] font-bold text-emerald-900">
+                                <Info class="mt-px h-3.5 w-3.5 shrink-0" />
                                 المناسبة {{ daysLabel }} — تُقفل القاعة في أيامها كلها بنفس الفترة، وتُسعَّر كل يوم بيومه.
                             </p>
                         </div>
@@ -943,6 +974,48 @@ const eventBadge = (color: string) =>
                         <p v-else class="mt-3 text-sm font-medium leading-relaxed text-slate-700">
                             يُحفظ الحجز بلا دفعة، ويبقى المبلغ كاملًا على العميل.
                         </p>
+                    </div>
+
+                    <!-- Its own card, away from the price: money held, not taken,
+                         and sitting beside the total invites adding the two. -->
+                    <div v-if="selectedUnit" class="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
+                        <h3 class="mb-1.5 flex items-center gap-2 text-lg font-extrabold text-slate-900">
+                            <ShieldCheck class="h-5 w-5 text-indigo-500" /> التأمين
+                        </h3>
+                        <p class="mb-3 text-sm font-medium leading-relaxed text-slate-700">
+                            ضمانٌ للتلفيات يُعاد بعد المناسبة — خارج الإجمالي وخارج المتبقي على العميل.
+                        </p>
+
+                        <label class="mb-1 block text-sm font-bold text-slate-800">المبلغ</label>
+                        <input
+                            v-model.number="form.security_deposit_amount"
+                            type="number" min="0" step="0.01" dir="ltr"
+                            class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-lg font-bold focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        />
+                        <p v-if="form.errors.security_deposit_amount" class="mt-1 text-sm text-red-700">{{ form.errors.security_deposit_amount }}</p>
+
+                        <p v-if="securityChanged" class="mt-1.5 text-[13px] font-bold text-amber-700">
+                            المعتاد لهذه القاعة {{ money(unitSecurityDeposit) }} —
+                            <button type="button" @click="form.security_deposit_amount = unitSecurityDeposit" class="underline hover:text-amber-900">استعادته</button>
+                        </p>
+
+                        <template v-if="!isEdit">
+                            <label v-if="form.security_deposit_amount > 0" class="mt-3 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-900">
+                                <input type="checkbox" v-model="form.security_collected" class="h-4 w-4 rounded border-slate-300 text-indigo-600" />
+                                قُبض التأمين الآن
+                            </label>
+                            <p v-if="form.security_deposit_amount > 0 && !form.security_collected" class="mt-1.5 text-[13px] font-bold text-amber-700">
+                                يُثبَت المبلغ في الحجز ويبقى غير مقبوض حتى يُستلم من لوحة الدفعات.
+                            </p>
+                        </template>
+
+                        <div v-else class="mt-3 space-y-1.5">
+                            <div class="flex justify-between rounded-lg bg-indigo-50 px-3 py-2.5 text-[15px]">
+                                <span class="font-bold text-indigo-800">المحتجز الآن</span>
+                                <span class="font-extrabold text-indigo-900">{{ money(booking?.security_held ?? 0) }}</span>
+                            </div>
+                            <p class="text-[13px] font-medium text-slate-700">قبض التأمين ورده يتمّان من لوحة الدفعات في السجل.</p>
+                        </div>
                     </div>
 
                     <!-- العقد — يُولَّد مع حفظ الحجز بدل لفّةٍ على سجل العقود -->

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Contract;
 use App\Models\Setting;
+use App\Services\Concerns\ResolvesPublicFiles;
 use App\Support\BookingPeriod;
 use App\Support\StayPeriod;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +27,8 @@ use RuntimeException;
  */
 class ContractPdf
 {
+    use ResolvesPublicFiles;
+
     /** مجلد حفظ العقود على القرص العام. */
     public const DISK = 'public';
 
@@ -202,28 +205,4 @@ class ContractPdf
         ];
     }
 
-    /**
-     * مسار الصورة على القرص إن وُجدت فعلًا — وإلا null فيتجاهلها القالب.
-     */
-    private function localPath(?string $path): ?string
-    {
-        if (blank($path)) {
-            return null;
-        }
-
-        $relative = ltrim(str_replace('\\', '/', $path), '/');
-
-        // المسارات مخزَّنة تارةً كـ«storage/logos/x.png» وتارةً كـ«logos/x.png»
-        // حسب موضع الرفع، فيُجرَّب الاثنان بدل افتراض صيغة واحدة.
-        foreach ([public_path($relative), storage_path('app/public/'.$relative)] as $candidate) {
-            if (is_file($candidate)) {
-                return $candidate;
-            }
-        }
-
-        $stripped = preg_replace('#^storage/#', '', $relative) ?? $relative;
-        $candidate = storage_path('app/public/'.$stripped);
-
-        return is_file($candidate) ? $candidate : null;
-    }
 }

@@ -265,7 +265,7 @@ const sendingReceiptId = ref<number | null>(null);
 /** إرسال سند دفعة بعينها — كل دفعة سندها الخاص لا كشف الحجز التراكمي. */
 const sendReceipt = (p: Payment) => {
     if (!payBooking.value?.client?.mobile) return;
-    if (!confirm(`إرسال سند هذه الدفعة على واتساب ${payBooking.value.client.mobile}؟`)) return;
+    if (!confirm(`إرسال سند هذه الدفعة (PDF) على واتساب ${payBooking.value.client.mobile}؟`)) return;
 
     sendingReceiptId.value = p.id;
     router.post(
@@ -1106,23 +1106,29 @@ const generateContract = (b: Booking) => {
                                             <span v-else class="text-slate-300">—</span>
                                         </td>
                                         <td class="px-2 py-2">
-                                            <div v-if="p.signed_amount >= 0" class="flex items-center justify-center gap-2">
+                                            <div v-if="p.signed_amount >= 0" class="flex items-center justify-center gap-1.5">
                                                 <Link
                                                     :href="`/admin/bookings/${payBooking.id}/payments/${p.id}/bond`"
                                                     title="عرض السند"
-                                                    class="inline-flex text-slate-500 hover:text-teal-600"
+                                                    class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:border-teal-300 hover:text-teal-700"
                                                 >
-                                                    <FileText class="h-3.5 w-3.5" />
+                                                    <FileText class="h-3.5 w-3.5" /> عرض
                                                 </Link>
+                                                <!--
+                                                    A labelled button, not a grey icon: a faint icon reads
+                                                    as no feature at all. With no mobile on file it stays
+                                                    visible but disabled, saying why.
+                                                -->
                                                 <button
-                                                    v-if="can('whatsapp.send') && payBooking.client?.mobile"
+                                                    v-if="can('whatsapp.send')"
                                                     type="button"
-                                                    :disabled="sendingReceiptId === p.id"
+                                                    :disabled="sendingReceiptId === p.id || !payBooking.client?.mobile"
                                                     @click="sendReceipt(p)"
-                                                    title="إرسال السند على واتساب"
-                                                    class="inline-flex text-slate-500 hover:text-emerald-600 disabled:opacity-40"
+                                                    :title="payBooking.client?.mobile ? 'إرسال السند (PDF) على واتساب' : 'لا يوجد رقم جوال للعميل — أضِفه في بطاقة العميل'"
+                                                    class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                                                 >
                                                     <MessageCircle class="h-3.5 w-3.5" />
+                                                    {{ sendingReceiptId === p.id ? 'جارٍ…' : 'واتساب' }}
                                                 </button>
                                             </div>
                                             <span v-else class="flex justify-center text-slate-300">—</span>

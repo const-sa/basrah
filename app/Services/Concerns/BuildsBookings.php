@@ -42,6 +42,19 @@ trait BuildsBookings
     }
 
     /**
+     * The agreed security deposit: the form's number, else the fallback.
+     * A zero from the form is an agreement too, so the key is tested for.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function agreedSecurityDeposit(array $data, float $fallback): float
+    {
+        return array_key_exists('security_deposit_amount', $data) && $data['security_deposit_amount'] !== null
+            ? round((float) $data['security_deposit_amount'], 2)
+            : round($fallback, 2);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $lines
      */
     protected function syncSections(Booking $booking, string $scope, array $lines): void

@@ -37,6 +37,8 @@ class SecurityDepositTest extends TestCase
 
     private Unit $chalet;
 
+    private Unit $hall;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -58,6 +60,11 @@ class SecurityDepositTest extends TestCase
         // with rooms is let by the room (Unit::allowsWholeBooking).
         $this->chalet = $this->chaletLetWhole();
         $this->chalet->update(['security_deposit' => 500]);
+
+        // A hall takes one too: the contract has always demanded it at the
+        // door, so the screen must be able to write it down.
+        $this->hall = Unit::where('type', 'hall')->firstOrFail();
+        $this->hall->update(['security_deposit' => 300]);
     }
 
     /**
@@ -353,6 +360,84 @@ class SecurityDepositTest extends TestCase
                 'payment_method_id' => $this->paymentMethodId(),
             ]))
             ->assertSessionHasErrors('payment_type');
+    }
+
+    // ── The hall takes it on the same terms ──────────────────
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function hallPayload(array $extra = []): array
+    {
+        return [
+            'unit_id' => $this->hall->id,
+            'client_id' => Client::first()?->id,
+            'scope' => 'whole',
+            'booking_date' => '2027-02-10',
+            'period' => 'full_day',
+            ...$extra,
+        ];
+    }
+
+    public function test_a_new_hall_booking_takes_the_hall_usual_amount(): void
+    {
+        $this->actingAs($this->owner)->post('/admin/bookings/halls', $this->hallPayload())->assertRedirect();
+
+        $this->assertEqualsWithDelta(300, (float) Booking::latest('id')->firstOrFail()->security_deposit_amount, 0.01);
+    }
+
+    public function test_the_hall_form_may_waive_the_deposit(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->hallPayload(['security_deposit_amount' => 0]))
+            ->assertRedirect();
+
+        $this->assertSame(0.0, (float) Booking::latest('id')->firstOrFail()->security_deposit_amount);
+    }
+
+    public function test_editing_a_hall_booking_does_not_reset_a_waived_deposit(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->hallPayload(['security_deposit_amount' => 0]))
+            ->assertRedirect();
+
+        $booking = Booking::latest('id')->firstOrFail();
+
+        $this->actingAs($this->owner)
+            ->put("/admin/bookings/halls/{$booking->id}", $this->hallPayload(['booking_date' => '2027-02-11']))
+            ->assertRedirect();
+
+        $this->assertSame(0.0, (float) $booking->fresh()->security_deposit_amount);
+    }
+
+    public function test_a_hall_deposit_is_collected_without_counting_as_payment(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->hallPayload([
+                'security_collected' => true,
+                'payment_method_id' => $this->paymentMethodId(),
+            ]))
+            ->assertRedirect();
+
+        $booking = Booking::latest('id')->firstOrFail();
+
+        $this->assertEqualsWithDelta(300, $booking->securityHeld(), 0.01);
+        $this->assertSame(0.0, (float) $booking->paid_amount);
+        $this->assertEqualsWithDelta((float) $booking->total_amount, $booking->remainingAmount(), 0.01);
+    }
+
+    public function test_the_hall_booking_form_offers_the_unit_amount(): void
+    {
+        $ids = Unit::where('type', 'hall')->where('is_active', true)
+            ->orderBy('sort_order')->pluck('id')->all();
+
+        $this->actingAs($this->owner)
+            ->get('/admin/bookings/halls/create')
+            ->assertInertia(fn ($page) => $page->where(
+                'units.'.(int) array_search($this->hall->id, $ids, true).'.security_deposit',
+                300,
+            ));
     }
 
     private function bookingWithDeposit(): Booking

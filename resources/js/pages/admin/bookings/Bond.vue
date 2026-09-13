@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -8,7 +9,7 @@ import { computed, ref, watch } from 'vue';
 const props = defineProps<{
     bond: {
         booking_id: number;
-        // فارغ في سند الحجز العام — موجود في سند دفعة بعينها.
+        // Null on the booking-wide voucher; set on a single payment's.
         payment_id: number | null;
         reference: string;
         receipt_number: string;
@@ -33,6 +34,8 @@ const props = defineProps<{
         event_name: string | null;
         booking_date: string;
         schedule_label: string;
+        // The «وذلك قيمة» line — built server-side so screen and PDF match.
+        paid_for: string;
         created_by: string | null;
         back_url: string;
     };
@@ -77,24 +80,30 @@ const phones = computed(() =>
         .filter((p, i, all) => all.indexOf(p) === i),
 );
 
-/** ما قُبض المبلغ مقابله — سطر «وذلك قيمة» في الدفتر المطبوع. */
-const paidFor = computed(() => {
-    const what = props.bond.event_name
-        ? `مناسبة ${props.bond.event_name}`
-        : `حجز ${props.bond.unit_name ?? ''}`.trim();
-    const kind = props.bond.payment_type_label ? ` (${props.bond.payment_type_label})` : '';
-
-    return `${what}${kind} بتاريخ ${props.bond.booking_date} — ${props.bond.schedule_label}`;
-});
-
 const print = () => window.print();
+
+const { can } = usePermissions();
 
 const sending = ref(false);
 
+/**
+ * Why sending is blocked, in words the clerk sees.
+ *
+ * Said out loud rather than hiding the button: a missing button reads as a
+ * missing feature, so the clerk asks for it instead of adding the number.
+ */
+const sendBlockedBecause = computed(() => {
+    if (!props.bond.payment_id) return 'يُرسل سند كل دفعة على حدتها — افتحه من سجل الدفعات.';
+    if (!props.bond.client_mobile) return 'لا يوجد رقم جوال للعميل — أضِفه في بطاقة العميل ليُرسل السند.';
+
+    return null;
+});
+
+/** Sent as a PDF the server builds from this same sheet's data. */
 const sendWhatsapp = () => {
     if (!props.bond.payment_id || !props.bond.client_mobile) return;
 
-    if (!confirm(`إرسال هذا السند على واتساب ${props.bond.client_mobile}؟`)) return;
+    if (!confirm(`إرسال هذا السند (PDF) على واتساب ${props.bond.client_mobile}؟`)) return;
 
     sending.value = true;
     router.post(
@@ -116,16 +125,20 @@ const sendWhatsapp = () => {
                     <p class="mt-1 text-sm font-medium text-slate-600">
                         حجز <span dir="ltr">{{ bond.reference }}</span> · {{ bond.client_name ?? 'بلا عميل' }}
                     </p>
+                    <p v-if="can('whatsapp.send') && sendBlockedBecause" class="mt-1 text-xs font-bold text-amber-700">
+                        {{ sendBlockedBecause }}
+                    </p>
                 </div>
                 <div class="flex gap-2">
                     <button
-                        v-if="bond.payment_id && bond.client_mobile"
+                        v-if="can('whatsapp.send')"
                         type="button"
-                        :disabled="sending"
+                        :disabled="sending || !!sendBlockedBecause"
+                        :title="sendBlockedBecause ?? 'إرسال السند (PDF) على واتساب العميل'"
                         @click="sendWhatsapp"
-                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-emerald-600"
                     >
-                        <MessageCircle class="h-4 w-4" /> إرسال واتساب
+                        <MessageCircle class="h-4 w-4" /> {{ sending ? 'جارٍ الإرسال…' : 'إرسال السند واتساب' }}
                     </button>
                     <button type="button" @click="print" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700">
                         <Printer class="h-4 w-4" /> طباعة
@@ -238,7 +251,7 @@ const sendWhatsapp = () => {
 
                         <div class="flex items-end gap-2">
                             <span class="shrink-0 font-extrabold">وذلك قيمة</span>
-                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">{{ paidFor }}</span>
+                            <span class="flex-1 border-b border-dotted border-black pb-0.5 text-center font-bold">{{ bond.paid_for }}</span>
                             <span class="shrink-0 font-bold italic" dir="ltr">For</span>
                         </div>
 

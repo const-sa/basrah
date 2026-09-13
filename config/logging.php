@@ -73,6 +73,17 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // WhatsApp traffic on its own file: asking the gateway why a message
+        // never arrived means reading requests and replies in order, not
+        // fishing them out of everything else the app logged that day.
+        'whatsapp' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/whatsapp.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('WA_LOG_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

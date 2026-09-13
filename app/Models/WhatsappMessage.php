@@ -24,6 +24,7 @@ class WhatsappMessage extends Model
         'contract' => 'عقد',
         'invoice' => 'فاتورة',
         'payment' => 'إشعار سداد',
+        'receipt' => 'سند قبض',
         'cancellation' => 'إشعار إلغاء',
         'welcome' => 'ترحيب',
         'other' => 'أخرى',

@@ -2,14 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendWhatsappMessage;
 use App\Models\Account;
 use App\Models\Booking;
+use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\User;
 use App\Models\WhatsappMessage;
 use App\Services\Accounting\Ledger;
+use App\Services\BondPdf;
 use App\Services\BookingService;
 use Database\Seeders\AccountsSeeder;
 use Database\Seeders\BookingSetupSeeder;
@@ -129,6 +132,47 @@ class BookingPaymentsTest extends TestCase
 
         $this->assertSame(1, WhatsappMessage::where('purpose', 'receipt')
             ->where('related_type', $payment::class)->where('related_id', $payment->id)->count());
+    }
+
+    public function test_the_sent_receipt_carries_the_bond_itself_as_a_pdf(): void
+    {
+        Storage::fake('public');
+
+        $payment = $this->recordPayment();
+
+        $this->actingAs($this->owner)
+            ->post("/admin/bookings/{$this->booking->id}/payments/{$payment->id}/send")
+            ->assertSessionHas('success');
+
+        Storage::disk('public')->assertExists('bonds/'.app(BondPdf::class)->filename($payment));
+
+        // The gateway sends text and file in one request, so the queued job
+        // must carry the link — a caption alone is not the voucher.
+        Queue::assertPushed(
+            SendWhatsappMessage::class,
+            fn (SendWhatsappMessage $job) => is_string($job->mediaUrl) && str_contains($job->mediaUrl, 'bonds/'),
+        );
+    }
+
+    public function test_the_bond_pdf_fits_on_a_single_sheet(): void
+    {
+        $bytes = app(BondPdf::class)->render($this->recordPayment());
+
+        $this->assertStringStartsWith('%PDF', $bytes);
+        // A receipt is one sheet; a second page means a row wrapped.
+        $this->assertStringContainsString('/Count 1', $bytes);
+    }
+
+    public function test_a_bond_is_not_sent_when_the_client_has_no_mobile(): void
+    {
+        $payment = $this->recordPayment();
+        $this->booking->client->update(['mobile' => null]);
+
+        $this->actingAs($this->owner)
+            ->post("/admin/bookings/{$this->booking->id}/payments/{$payment->id}/send")
+            ->assertSessionHas('warning');
+
+        $this->assertSame(0, WhatsappMessage::where('purpose', 'receipt')->count());
     }
 
     public function test_payment_can_notify_the_client_on_whatsapp(): void
@@ -380,7 +424,7 @@ class BookingPaymentsTest extends TestCase
     }
 
     /** دفعة بسيطة بلا مرفق — نقطة البدء لاختبارات الإرفاق من الفاتورة. */
-    private function recordPayment(): \App\Models\BookingPayment
+    private function recordPayment(): BookingPayment
     {
         $this->actingAs($this->owner)->post("/admin/bookings/{$this->booking->id}/payments", [
             'type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'),

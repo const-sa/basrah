@@ -145,21 +145,28 @@ class WhatsappNotifier
     }
 
     /**
-     * إرسال سند دفعة بعينها — كل سند على حدته، بمبلغ تلك الدفعة هي لا
-     * بإجمالي ما قُبض على الحجز، حتى لا يظن العميل أن ما يصله كشفٌ تراكمي.
+     * One payment's voucher — attached as a PDF when a link is passed.
+     *
+     * The message never promises an attachment it does not carry: without a
+     * link it reads as notice of payment, with one as the voucher itself.
      */
-    public function paymentReceipt(BookingPayment $payment, ?int $userId = null): ?WhatsappMessage
-    {
+    public function paymentReceipt(
+        BookingPayment $payment,
+        ?int $userId = null,
+        ?string $pdfUrl = null,
+    ): ?WhatsappMessage {
         $payment->loadMissing(['booking.unit', 'booking.client', 'paymentMethod']);
         $booking = $payment->booking;
+
+        $typeLabel = BookingPayment::TYPES[$payment->type] ?? $payment->type;
 
         $body = $this->fromTemplate('receipt', $booking, [
             'amount' => number_format((float) $payment->amount, 2),
             'method' => $payment->methodLabel(),
-            'payment_type' => BookingPayment::TYPES[$payment->type] ?? $payment->type,
+            'payment_type' => $typeLabel,
         ]) ?? implode("\n", array_filter([
             'مرحبًا '.($booking?->client?->name ?? '').'،',
-            'سند قبض '.(BookingPayment::TYPES[$payment->type] ?? $payment->type).' على الحجز '.($booking?->reference ?? '—').'.',
+            ($pdfUrl ? 'مرفق سند قبض ' : 'سند قبض ').$typeLabel.' على الحجز '.($booking?->reference ?? '—').'.',
             'المبلغ: '.number_format((float) $payment->amount, 2),
             'التاريخ: '.$payment->paid_on->toDateString(),
             'الطريقة: '.$payment->methodLabel(),
@@ -169,7 +176,7 @@ class WhatsappNotifier
             'شكرًا لتعاملكم معنا.',
         ]));
 
-        return $this->send($booking?->client?->mobile, $body, 'receipt', $payment, $userId);
+        return $this->send($booking?->client?->mobile, $body, 'receipt', $payment, $userId, $pdfUrl);
     }
 
     /**

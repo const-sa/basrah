@@ -7,11 +7,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Setting;
+use App\Services\BondPdf;
 use App\Services\BookingService;
 use App\Services\WhatsappNotifier;
 use App\Services\ZatcaQr;
-use App\Support\Hijri;
-use App\Support\Tafqeet;
+use App\Support\BondPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 /**
  * الإجراءات المشتركة بين حجز القاعة وحجز الشاليه.
@@ -59,6 +60,7 @@ class BookingsController extends Controller
     public function __construct(
         private readonly BookingService $bookings,
         private readonly WhatsappNotifier $whatsapp,
+        private readonly BondPdf $bondPdf,
     ) {}
 
     /**
@@ -293,55 +295,9 @@ class BookingsController extends Controller
 
         $this->authorizeUnit($request, $booking->unit_id);
 
-        $booking->load(['unit:id,name,code,type,logo_path', 'client:id,name,mobile', 'eventType:id,name', 'creator:id,name']);
-
-        // السند يُحرَّر على المقبوض فعلًا لا على إجمالي الحجز: العميل يستلم
-        // إيصالًا بما دفعه، والمتبقي يُذكر تحته بيانًا لا مطالبةً في السند.
-        $paid = round((float) $booking->paid_amount, 2);
-        $lastPayment = $booking->payments()
-            ->with('paymentMethod:id,code,name,deposits_to')
-            ->where('type', '!=', 'refund')
-            ->latest('paid_on')->latest('id')->first();
-
-        $issuedOn = $lastPayment?->paid_on?->toDateString()
-            ?? $booking->created_at?->format('Y-m-d');
-
         return Inertia::render('admin/bookings/Bond', [
-            'bond' => [
-                'booking_id' => $booking->id,
-                'payment_id' => null,
-                'reference' => $booking->reference,
-                'receipt_number' => $booking->reference,
-                'unit_name' => $booking->unit?->name,
-                'unit_code' => $booking->unit?->code,
-                'unit_logo_url' => $booking->unit?->logoUrl(),
-                'unit_type' => $booking->unit?->type,
-                // تاريخ السند تاريخ قبض المبلغ لا تاريخ إنشاء الحجز: الإيصال يشهد
-                // على واقعة الاستلام. وبلا دفعة يبقى تاريخ الحجز مرجعًا للورقة.
-                'issued_on' => $issuedOn,
-                'issued_on_hijri' => Hijri::short($issuedOn),
-                'client_name' => $booking->client?->name,
-                'client_mobile' => $booking->client?->mobile,
-                ...$this->moneyBreakdown($paid),
-                'total_amount' => (float) $booking->total_amount,
-                'remaining_amount' => $booking->remainingAmount(),
-                'method_label' => $lastPayment?->methodLabel() ?? 'لا يوجد',
-                // مربّعا «نقدًا» و«شيك/حوالة» يُعلّمان من مقصد الطريقة لا من
-                // اسمها: طريقة يُضيفها المستخدم تأخذ مكانها بلا تعديل هنا.
-                'method_kind' => $lastPayment?->paymentMethod?->deposits_to,
-                'payment_reference' => $lastPayment?->reference,
-                'payment_type_label' => $lastPayment
-                    ? (BookingPayment::TYPES[$lastPayment->type] ?? $lastPayment->type)
-                    : null,
-                'event_name' => $booking->eventType?->name,
-                'booking_date' => $booking->booking_date->toDateString(),
-                'schedule_label' => $booking->scheduleLabel(),
-                'created_by' => $booking->creator?->name,
-                'back_url' => $booking->unit?->type === 'chalet'
-                    ? '/admin/bookings/chalets'
-                    : '/admin/bookings/halls',
-            ],
-            'issuer' => $this->issuerPayload(Setting::current()),
+            'bond' => BondPayload::forBooking($booking),
+            'issuer' => BondPayload::issuer(),
         ]);
     }
 
@@ -358,47 +314,21 @@ class BookingsController extends Controller
 
         abort_unless($payment->booking_id === $booking->id, 404);
 
-        $booking->load(['unit:id,name,code,type,logo_path', 'client:id,name,mobile', 'eventType:id,name', 'creator:id,name']);
-        $payment->loadMissing('paymentMethod:id,code,name,deposits_to');
-
-        $amount = round((float) $payment->amount, 2);
-        $issuedOn = $payment->paid_on->toDateString();
+        // The payment already has its loaded booking — no second query.
+        $payment->setRelation('booking', $booking);
 
         return Inertia::render('admin/bookings/Bond', [
-            'bond' => [
-                'booking_id' => $booking->id,
-                'payment_id' => $payment->id,
-                'reference' => $booking->reference,
-                'receipt_number' => $booking->reference.'-'.$payment->id,
-                'unit_name' => $booking->unit?->name,
-                'unit_code' => $booking->unit?->code,
-                'unit_logo_url' => $booking->unit?->logoUrl(),
-                'unit_type' => $booking->unit?->type,
-                'issued_on' => $issuedOn,
-                'issued_on_hijri' => Hijri::short($issuedOn),
-                'client_name' => $booking->client?->name,
-                'client_mobile' => $booking->client?->mobile,
-                ...$this->moneyBreakdown($amount),
-                'total_amount' => (float) $booking->total_amount,
-                'remaining_amount' => $booking->remainingAmount(),
-                'method_label' => $payment->methodLabel(),
-                'method_kind' => $payment->paymentMethod?->deposits_to,
-                'payment_reference' => $payment->reference,
-                'payment_type_label' => BookingPayment::TYPES[$payment->type] ?? $payment->type,
-                'event_name' => $booking->eventType?->name,
-                'booking_date' => $booking->booking_date->toDateString(),
-                'schedule_label' => $booking->scheduleLabel(),
-                'created_by' => $booking->creator?->name,
-                'back_url' => $booking->unit?->type === 'chalet'
-                    ? '/admin/bookings/chalets'
-                    : '/admin/bookings/halls',
-            ],
-            'issuer' => $this->issuerPayload(Setting::current()),
+            'bond' => BondPayload::forPayment($payment),
+            'issuer' => BondPayload::issuer(),
         ]);
     }
 
     /**
-     * إرسال سند دفعة بعينها على واتساب العميل.
+     * Send one payment's voucher to the client — the file itself, not a
+     * description of it.
+     *
+     * A failed render still notifies: the client hears the money was taken,
+     * and the clerk is told the voucher went unattached.
      */
     public function sendPaymentReceipt(Request $request, Booking $booking, BookingPayment $payment): RedirectResponse
     {
@@ -412,47 +342,23 @@ class BookingsController extends Controller
             return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
         }
 
-        $this->whatsapp->paymentReceipt($payment, $request->user()?->id);
+        // The payment already has its loaded booking — no second query.
+        $payment->setRelation('booking', $booking);
 
-        return back()->with('success', 'تم إرسال السند على واتساب العميل');
-    }
+        $pdfUrl = null;
+        $failure = null;
 
-    /**
-     * فروق الريال عن الهللة كما تُطبع في خانتَي رأس السند، ومبلغه كتابةً.
-     *
-     * التقريب قبل الفصل وإلا خرجت 0.999 هللة تسعةً وتسعين.
-     *
-     * @return array{amount: float, amount_riyals: int, amount_halalas: int, amount_words: string}
-     */
-    private function moneyBreakdown(float $amount): array
-    {
-        return [
-            'amount' => $amount,
-            'amount_riyals' => (int) floor($amount),
-            'amount_halalas' => (int) round(($amount - floor($amount)) * 100),
-            'amount_words' => Tafqeet::money($amount),
-        ];
-    }
+        try {
+            $pdfUrl = $this->bondPdf->publicUrl($this->bondPdf->store($payment));
+        } catch (RuntimeException $e) {
+            $failure = $e->getMessage();
+        }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function issuerPayload(Setting $settings): array
-    {
-        return [
-            'business_name' => $settings->business_name ?: config('app.name'),
-            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
-            'phone' => $settings->phone,
-            'whatsapp' => $settings->whatsapp,
-            'email' => $settings->email,
-            'address' => $settings->address,
-            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
-            'manager_name' => $settings->manager_name,
-            'manager_signature_url' => $settings->manager_signature_path
-                ? asset($settings->manager_signature_path)
-                : null,
-            'stamp_url' => $settings->stamp_path ? asset($settings->stamp_path) : null,
-        ];
+        $this->whatsapp->paymentReceipt($payment, $request->user()?->id, $pdfUrl);
+
+        return $failure
+            ? back()->with('warning', 'أُرسل إشعار السداد نصًّا — '.$failure)
+            : back()->with('success', 'تم إرسال السند (PDF) على واتساب العميل');
     }
 
     /**

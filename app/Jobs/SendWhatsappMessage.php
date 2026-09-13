@@ -47,7 +47,7 @@ class SendWhatsappMessage implements ShouldQueue
             : $gateway->send($this->number, $this->message);
 
         if (! ($result['ok'] ?? false)) {
-            Log::warning('SendWhatsappMessage: تعذّر إرسال رسالة واتساب', [
+            Log::channel('whatsapp')->warning('SendWhatsappMessage: تعذّر إرسال رسالة واتساب', [
                 'number' => $this->number,
                 'media' => $this->mediaUrl,
                 'error' => $result['error'] ?? null,

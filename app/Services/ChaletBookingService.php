@@ -102,7 +102,7 @@ class ChaletBookingService
                 // The security deposit is the chalet's usual one unless the
                 // form said otherwise. It is stored beside the total, never
                 // inside it: it is held, not charged.
-                'security_deposit_amount' => $this->securityDeposit($unit, $data),
+                'security_deposit_amount' => $this->agreedSecurityDeposit($data, $unit->securityDeposit()),
                 'paid_amount' => 0,
                 'guests_count' => $data['guests_count'] ?? null,
                 'notes' => $data['notes'] ?? null,
@@ -183,10 +183,7 @@ class ChaletBookingService
                 // An edit keeps what was agreed unless it is being changed:
                 // falling back to the chalet's usual amount here would undo a
                 // waiver every time the dates were touched.
-                'security_deposit_amount' => array_key_exists('security_deposit_amount', $data)
-                    && $data['security_deposit_amount'] !== null
-                        ? round((float) $data['security_deposit_amount'], 2)
-                        : (float) $booking->security_deposit_amount,
+                'security_deposit_amount' => $this->agreedSecurityDeposit($data, (float) $booking->security_deposit_amount),
                 // A cleared count is a change, not an omission: ?? would put
                 // back the number the operator had just deleted.
                 'guests_count' => array_key_exists('guests_count', $data)
@@ -238,23 +235,6 @@ class ChaletBookingService
             : $suggested;
 
         return min(max($deposit, 0.0), round($total, 2));
-    }
-
-    /**
-     * The security deposit this booking asks for.
-     *
-     * The chalet's usual amount is a default, not a rule — a returning guest
-     * may be let off it, and a group taking three chalets is rarely charged
-     * three times over. A number sent from the form therefore wins, including
-     * a zero, which is why the key is tested for rather than coalesced.
-     *
-     * @param  array<string, mixed>  $data
-     */
-    private function securityDeposit(Unit $unit, array $data): float
-    {
-        return array_key_exists('security_deposit_amount', $data) && $data['security_deposit_amount'] !== null
-            ? round((float) $data['security_deposit_amount'], 2)
-            : $unit->securityDeposit();
     }
 
     /**
