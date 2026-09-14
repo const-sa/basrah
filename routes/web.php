@@ -419,6 +419,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('accounting/expenses/{expense}/post', [ExpensesController::class, 'post'])->name('expenses.post');
         Route::post('accounting/expenses/{expense}/cancel', [ExpensesController::class, 'cancel'])->name('expenses.cancel');
         Route::delete('accounting/expenses/{expense}', [ExpensesController::class, 'destroy'])->name('expenses.destroy');
+        // The paper follows the expense, so it is filed after posting too.
+        Route::post('accounting/expenses/{expense}/attachment', [ExpensesController::class, 'storeAttachment'])->name('expenses.attachment.store');
+        Route::delete('accounting/expenses/{expense}/attachment', [ExpensesController::class, 'destroyAttachment'])->name('expenses.attachment.destroy');
 
         // أنواع المصروف — تُدار من الشاشة نفسها لا من شجرة الحسابات
         Route::post('accounting/expense-categories', [ExpensesController::class, 'storeCategory'])->name('expense_categories.store');

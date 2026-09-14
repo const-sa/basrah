@@ -18,6 +18,8 @@ use App\Support\ActivitySegment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,6 +39,22 @@ class ExpensesController extends Controller
 
     /** The actions the expenses screen can offer. */
     private const ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
+
+    /**
+     * Extension and content type together: a paper an accountant opens later
+     * must not be a page or an executable.
+     *
+     * @var list<string>
+     */
+    private const ATTACHMENT_RULES = [
+        'file',
+        'max:5120', // 5MB
+        'mimes:pdf,jpg,jpeg,png,webp',
+        'mimetypes:application/pdf,image/jpeg,image/png,image/webp',
+    ];
+
+    /** Folder for expense papers on the public disk. */
+    private const ATTACHMENT_DIR = 'expense-attachments';
 
     public function __construct(
         private readonly ExpenseService $expenses,
@@ -110,8 +128,14 @@ class ExpensesController extends Controller
             $data['cost_center_id'] ?? null,
         ));
 
+        // Stored after the permission check, not before: a rejected attempt
+        // leaves no orphan file on the disk.
+        if ($request->hasFile('attachment')) {
+            $data['attachment_path'] = $request->file('attachment')->store(self::ATTACHMENT_DIR, 'public');
+        }
+
         $expense = $this->expenses->create(
-            collect($data)->except('post_now')->all(),
+            collect($data)->except(['post_now', 'attachment'])->all(),
             $request->user()?->id,
         );
 
@@ -143,9 +167,60 @@ class ExpensesController extends Controller
             return back()->with('warning', 'المصروف المرحَّل لا يُعدَّل — ألغِه وسجّله من جديد.');
         }
 
-        $expense->update(collect($this->validated($request))->except('post_now')->all());
+        $expense->update(collect($this->validated($request))->except(['post_now', 'attachment'])->all());
+
+        // No file in the request means the filed paper stays as it is.
+        if ($request->hasFile('attachment')) {
+            $this->fileAttachment($expense, $request->file('attachment'));
+        }
 
         return back()->with('success', 'تم تحديث المصروف');
+    }
+
+    /**
+     * A second door for attaching: the supplier's invoice arrives a day after
+     * the expense is booked, and a posted one still accepts its paper.
+     */
+    public function storeAttachment(Request $request, Expense $expense): RedirectResponse
+    {
+        $this->authorizeScope($request, $expense, 'edit');
+
+        if ($expense->status === 'cancelled') {
+            return back()->with('warning', "المصروف {$expense->number} ملغي — لا يقبل مرفقات.");
+        }
+
+        $request->validate([
+            'attachment' => ['required', ...self::ATTACHMENT_RULES],
+        ], $this->attachmentMessages('attachment'));
+
+        $this->fileAttachment($expense, $request->file('attachment'));
+
+        return back()->with('success', 'تم إرفاق المستند بالمصروف');
+    }
+
+    /** A wrong paper is removed so the right one can be filed. */
+    public function destroyAttachment(Request $request, Expense $expense): RedirectResponse
+    {
+        $this->authorizeScope($request, $expense, 'edit');
+
+        if ($expense->attachment_path) {
+            Storage::disk('public')->delete($expense->attachment_path);
+            $expense->update(['attachment_path' => null]);
+        }
+
+        return back()->with('success', 'تم حذف المرفق');
+    }
+
+    /** Save the paper, dropping the one it replaces only once the new one is in. */
+    private function fileAttachment(Expense $expense, UploadedFile $file): void
+    {
+        $previous = $expense->attachment_path;
+
+        $expense->update(['attachment_path' => $file->store(self::ATTACHMENT_DIR, 'public')]);
+
+        if ($previous) {
+            Storage::disk('public')->delete($previous);
+        }
     }
 
     public function post(Request $request, Expense $expense): RedirectResponse
@@ -348,6 +423,7 @@ class ExpensesController extends Controller
             'method_label' => $expense->paymentMethod?->name,
             'reference' => $expense->reference,
             'description' => $expense->description,
+            'attachment_url' => $expense->attachmentUrl(),
             'status' => $expense->status,
             'status_label' => $expense->statusLabel(),
         ];
@@ -410,6 +486,9 @@ class ExpensesController extends Controller
      * The centres the form may offer: the user's own, narrowed further to the
      * pinned activity. A centre absent here cannot be spent on either.
      *
+     * Rooms are left out — they carry the revenue of a booking let room by
+     * room, but no bill arrives addressed to one.
+     *
      * @return list<array<string, mixed>>
      */
     private function costCenters(?User $user, ?string $activity): array
@@ -418,6 +497,9 @@ class ExpensesController extends Controller
 
         return CostCenter::with(['unit:id,name', 'section:id,name,unit_id', 'section.unit:id,name', 'department:id,name'])
             ->where('is_active', true)
+            // Spending is charged to the unit, not to a room inside it: one
+            // electricity bill covers the chalet whole, not قسم الرجال apart.
+            ->whereNull('unit_section_id')
             ->when($allowed !== null, fn ($q) => $q->whereIn('id', $allowed ?? []))
             ->when($activity, fn ($q, string $a) => $q->whereIn('id', $this->segments->centerIds($a)))
             ->get()
@@ -469,13 +551,30 @@ class ExpensesController extends Controller
             'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')->where('is_active', true)],
             'reference' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'attachment' => ['nullable', ...self::ATTACHMENT_RULES],
             'post_now' => ['boolean'],
         ], [
             'expense_category_id.required' => 'اختر نوع المصروف.',
             'expense_category_id.exists' => 'نوع المصروف غير موجود.',
             'cost_center_id.required' => 'اختر الوحدة التي حُمِّل عليها المصروف.',
             'cost_center_id.in' => 'هذه الوحدة خارج نطاق عملك.',
+            ...$this->attachmentMessages('attachment'),
         ]);
+    }
+
+    /**
+     * Rejection messages — the rules are the same in every attach path.
+     *
+     * @return array<string, string>
+     */
+    private function attachmentMessages(string $field): array
+    {
+        return [
+            "{$field}.mimes" => 'نوع الملف غير مسموح. المسموح: PDF أو صورة.',
+            "{$field}.mimetypes" => 'نوع الملف غير مسموح. المسموح: PDF أو صورة.',
+            "{$field}.max" => 'حجم المرفق يتجاوز 5 ميجابايت.',
+            "{$field}.required" => 'اختر ملف المرفق أولًا.',
+        ];
     }
 
     /**

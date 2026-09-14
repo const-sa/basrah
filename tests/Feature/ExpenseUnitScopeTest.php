@@ -11,6 +11,7 @@ use App\Models\PaymentMethod;
 use App\Models\Role;
 use App\Models\Treasury;
 use App\Models\Unit;
+use App\Models\UnitSection;
 use App\Models\User;
 use Database\Seeders\AccountsSeeder;
 use Database\Seeders\DepartmentsSeeder;
@@ -213,6 +214,29 @@ class ExpenseUnitScopeTest extends TestCase
             ->assertInertia(fn ($p) => $p->where(
                 'costCenters',
                 fn ($centers) => collect($centers)->every(fn ($c) => $c['segment'] === 'chalets') && count($centers) > 0,
+            ));
+    }
+
+    /**
+     * الغرفة تحمل إيراد حجزٍ أُجّر غرفةً غرفة، ولا تأتيها فاتورة باسمها.
+     * فالمصروف يُحمَّل على الشاليه كاملًا لا على قسم الرجال وحده.
+     */
+    public function test_the_register_offers_the_units_and_not_the_rooms_inside_them(): void
+    {
+        $chalet = $this->unitOfType('chalet');
+        $section = UnitSection::create([
+            'unit_id' => $chalet->id,
+            'name' => 'قسم الرجال',
+            'is_active' => true,
+        ]);
+
+        $roomCenter = CostCenter::forSection($section);
+
+        $this->actingAs($this->owner)->get('/admin/chalets/expenses')
+            ->assertInertia(fn ($p) => $p->where(
+                'costCenters',
+                fn ($centers) => collect($centers)->doesntContain('id', $roomCenter->id)
+                    && collect($centers)->contains('id', CostCenter::forUnit($chalet)->id),
             ));
     }
 

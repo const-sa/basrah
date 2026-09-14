@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import UploadProgress from '@/components/UploadProgress.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Ban, CheckCircle2, Download, PencilLine, Plus, Power, Receipt, Tags, Trash2, X } from 'lucide-vue-next';
+import { Ban, CheckCircle2, Download, Paperclip, PencilLine, Plus, Power, Receipt, Tags, Trash2, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 interface Expense {
@@ -22,9 +23,12 @@ interface Expense {
     method_label: string | null;
     reference: string | null;
     description: string | null;
+    attachment_url: string | null;
     status: string;
     status_label: string;
 }
+
+const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 
 interface Category {
     id: number;
@@ -55,7 +59,6 @@ const props = defineProps<{
     scoped: boolean;
     can: Record<string, boolean>;
 }>();
-
 
 const may = computed(() => props.can);
 
@@ -117,11 +120,42 @@ const form = useForm({
     payment_method_id: props.methods[0]?.id ?? null,
     reference: '',
     description: '',
+    attachment: null as File | null,
     post_now: true,
 });
 
-// A scoped user is offered no «عام», so the form opens on a unit of theirs.
-const defaultCenter = computed(() => (props.scoped ? (props.costCenters[0]?.id ?? null) : null));
+// PHP reads no multipart PUT, so an edit carrying a file is spoofed over POST.
+form.transform((data) => (editing.value ? { ...data, _method: 'put' } : data));
+
+const attachmentInput = ref<HTMLInputElement | null>(null);
+
+const pickAttachment = (event: Event) => {
+    form.attachment = (event.target as HTMLInputElement).files?.[0] ?? null;
+};
+
+const clearAttachment = () => {
+    form.attachment = null;
+    if (attachmentInput.value) attachmentInput.value.value = '';
+};
+
+// «عام» is offered on the accountant's whole book alone: a scoped user has no
+// business outside their units, and an activity's register holds that
+// activity's spending — a general expense belongs to neither.
+const centerRequired = computed(() => props.scoped || props.activity !== null);
+
+const defaultCenter = computed(() => (centerRequired.value ? (props.costCenters[0]?.id ?? null) : null));
+
+// Rooms left the list, so an expense booked to one before that keeps its own
+// centre as an option — reopening it must not silently move the charge.
+const centerOptions = computed(() => {
+    const current = editing.value;
+
+    if (!current?.cost_center_id || props.costCenters.some((c) => c.id === current.cost_center_id)) {
+        return props.costCenters;
+    }
+
+    return [...props.costCenters, { id: current.cost_center_id, name: current.unit ?? '—', segment: '' }];
+});
 
 // النوع يحمل مركز تكلفته الافتراضي: إيجار قاعةٍ بعينها يقع عليها دائمًا.
 watch(
@@ -142,6 +176,7 @@ const openCreate = () => {
     editing.value = null;
     form.reset();
     form.clearErrors();
+    clearAttachment();
     form.treasury_id = props.treasuries[0]?.id ?? null;
     form.payment_method_id = props.methods[0]?.id ?? null;
     form.cost_center_id = defaultCenter.value;
@@ -162,13 +197,45 @@ const openEdit = (expense: Expense) => {
     form.reference = expense.reference ?? '';
     form.description = expense.description ?? '';
     form.post_now = false;
+    clearAttachment();
     showModal.value = true;
 };
 
 const submit = () => {
-    const done = { preserveScroll: true, onSuccess: () => (showModal.value = false) };
+    const url = editing.value ? `/admin/accounting/expenses/${editing.value.id}` : '/admin/accounting/expenses';
 
-    editing.value ? form.put(`/admin/accounting/expenses/${editing.value.id}`, done) : form.post('/admin/accounting/expenses', done);
+    form.post(url, { preserveScroll: true, forceFormData: true, onSuccess: () => (showModal.value = false) });
+};
+
+/* ---------- المرفق ---------- */
+
+const attachingId = ref<number | null>(null);
+const attachForm = useForm({ attachment: null as File | null });
+
+// Filing straight from the row: the invoice often arrives after the expense.
+const attachFromRow = (expense: Expense, event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    input.value = '';
+    if (!file) return;
+
+    attachingId.value = expense.id;
+    attachForm.attachment = file;
+    attachForm.post(`/admin/accounting/expenses/${expense.id}/attachment`, {
+        preserveScroll: true,
+        forceFormData: true,
+        onFinish: () => {
+            attachForm.reset();
+            attachingId.value = null;
+        },
+    });
+};
+
+const removeAttachment = (expense: Expense) => {
+    if (!confirm(`حذف مرفق المصروف ${expense.number}؟`)) return;
+
+    router.delete(`/admin/accounting/expenses/${expense.id}/attachment`, { preserveScroll: true });
 };
 
 const post = (expense: Expense) => {
@@ -346,6 +413,9 @@ const removeCategory = (category: Category) => {
 
             <!-- الجدول -->
             <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div v-if="attachForm.progress" class="px-4 pt-3">
+                    <UploadProgress :progress="attachForm.progress" label="جارٍ رفع المرفق" />
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
@@ -356,6 +426,7 @@ const removeCategory = (category: Category) => {
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الوصف</th>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الدفع</th>
                                 <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المبلغ</th>
+                                <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">المرفق</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
@@ -377,6 +448,41 @@ const removeCategory = (category: Category) => {
                                     <div class="text-[11px] text-slate-400">{{ e.treasury ?? '—' }}</div>
                                 </td>
                                 <td class="px-4 py-2.5 text-left font-extrabold text-red-700" dir="ltr">{{ money(e.amount) }}</td>
+                                <td class="px-4 py-2.5">
+                                    <div class="flex items-center justify-center gap-1">
+                                        <a
+                                            v-if="e.attachment_url"
+                                            :href="e.attachment_url"
+                                            target="_blank"
+                                            rel="noopener"
+                                            title="فتح المرفق"
+                                            class="inline-flex rounded-lg bg-blue-50 p-1.5 text-blue-600 hover:bg-blue-100"
+                                        >
+                                            <Paperclip class="h-3.5 w-3.5" />
+                                        </a>
+                                        <!-- Attaching stays open after posting; only a cancelled expense refuses. -->
+                                        <label
+                                            v-if="may.edit && e.status !== 'cancelled'"
+                                            :title="e.attachment_url ? 'استبدال المرفق' : 'إرفاق فاتورة أو صورة'"
+                                            class="inline-flex cursor-pointer rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                            :class="{ 'pointer-events-none opacity-50': attachingId === e.id }"
+                                        >
+                                            <Plus v-if="!e.attachment_url" class="h-3.5 w-3.5" />
+                                            <PencilLine v-else class="h-3.5 w-3.5" />
+                                            <input type="file" :accept="ATTACHMENT_ACCEPT" class="hidden" @change="attachFromRow(e, $event)" />
+                                        </label>
+                                        <button
+                                            v-if="e.attachment_url && may.edit"
+                                            type="button"
+                                            @click="removeAttachment(e)"
+                                            title="حذف المرفق"
+                                            class="rounded-lg bg-red-50 p-1.5 text-red-600 hover:bg-red-100"
+                                        >
+                                            <Trash2 class="h-3.5 w-3.5" />
+                                        </button>
+                                        <span v-if="!e.attachment_url && !may.edit" class="text-slate-300">—</span>
+                                    </div>
+                                </td>
                                 <td class="px-4 py-2.5 text-center">
                                     <span class="inline-flex rounded-md px-2 py-0.5 text-[11px] font-bold" :class="statusClass(e.status)">
                                         {{ e.status_label }}
@@ -424,7 +530,7 @@ const removeCategory = (category: Category) => {
                                 </td>
                             </tr>
                             <tr v-if="!expenses.data.length">
-                                <td colspan="8" class="px-4 py-12 text-center text-sm text-slate-500">لا مصروفات في هذه المدة</td>
+                                <td colspan="9" class="px-4 py-12 text-center text-sm text-slate-500">لا مصروفات في هذه المدة</td>
                             </tr>
                         </tbody>
                     </table>
@@ -492,13 +598,10 @@ const removeCategory = (category: Category) => {
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-xs font-bold text-slate-600">
-                            الوحدة أو الفرع{{ scoped ? '' : ' (اختياري)' }}
-                        </label>
+                        <label class="mb-1 block text-xs font-bold text-slate-600"> الوحدة أو الفرع{{ centerRequired ? '' : ' (اختياري)' }} </label>
                         <select v-model="form.cost_center_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                            <!-- A scoped user charges every expense to a unit of theirs, so «عام» is not offered. -->
-                            <option v-if="!scoped" :value="null">مصروف عام</option>
-                            <option v-for="c in costCenters" :key="c.id" :value="c.id">{{ c.name }}</option>
+                            <option v-if="!centerRequired" :value="null">مصروف عام</option>
+                            <option v-for="c in centerOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </select>
                         <p v-if="form.errors.cost_center_id" class="mt-1 text-xs font-bold text-red-600">{{ form.errors.cost_center_id }}</p>
                     </div>
@@ -538,6 +641,38 @@ const removeCategory = (category: Category) => {
                     <div class="sm:col-span-2">
                         <label class="mb-1 block text-xs font-bold text-slate-600">الوصف</label>
                         <textarea v-model="form.description" rows="2" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                    </div>
+
+                    <!-- فاتورة المورّد أو صورة العدّاد: المرجع يُكتب باليد ويُخطئ، والورقة هي ما يُراجَع عليه -->
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-xs font-bold text-slate-600">
+                            المرفق <span class="font-medium text-slate-400">(اختياري)</span>
+                        </label>
+                        <label
+                            class="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-3 py-3 text-sm font-bold text-slate-500 hover:border-blue-300 hover:text-blue-600"
+                        >
+                            <Paperclip class="h-4 w-4" />
+                            إرفاق مرفق
+                            <input ref="attachmentInput" type="file" :accept="ATTACHMENT_ACCEPT" class="hidden" @change="pickAttachment" />
+                        </label>
+
+                        <div
+                            v-if="form.attachment"
+                            class="mt-1.5 flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700"
+                        >
+                            <span class="truncate">{{ form.attachment.name }}</span>
+                            <button type="button" @click="clearAttachment" class="shrink-0 text-red-500 hover:text-red-600">إزالة</button>
+                        </div>
+                        <!-- The paper already filed stays unless a new one takes its place. -->
+                        <p v-else-if="editing?.attachment_url" class="mt-1.5 text-[11px] font-bold text-slate-500">
+                            مرفقٌ محفوظ —
+                            <a :href="editing.attachment_url" target="_blank" rel="noopener" class="text-blue-600 hover:underline">فتحه</a>
+                            . اختيار ملفٍ جديد يستبدله.
+                        </p>
+
+                        <p v-if="form.errors.attachment" class="mt-1 text-xs font-bold text-red-600">{{ form.errors.attachment }}</p>
+                        <p v-else class="mt-1 text-[11px] font-medium text-slate-400">صورة أو PDF حتى 5 ميجابايت.</p>
+                        <UploadProgress :progress="form.progress" />
                     </div>
 
                     <!-- Posting belongs to whoever approves; the rest leave a draft. -->

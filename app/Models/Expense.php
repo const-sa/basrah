@@ -29,7 +29,7 @@ class Expense extends Model
     protected $fillable = [
         'number', 'expense_date', 'expense_category_id', 'amount',
         'cost_center_id', 'treasury_id', 'payment_method_id', 'supplier_id',
-        'reference', 'description', 'status', 'journal_entry_id',
+        'reference', 'description', 'attachment_path', 'status', 'journal_entry_id',
         'created_by', 'posted_by', 'posted_at', 'cancelled_at', 'cancellation_reason',
     ];
 
@@ -76,6 +76,17 @@ class Expense extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Link to the filed paper, if any.
+     *
+     * asset() not Storage::url(): the default disk is private, and the latter
+     * would also pin the host to APP_URL.
+     */
+    public function attachmentUrl(): ?string
+    {
+        return $this->attachment_path ? asset('storage/'.ltrim($this->attachment_path, '/')) : null;
     }
 
     public function isPosted(): bool
