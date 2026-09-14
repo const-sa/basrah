@@ -22,9 +22,11 @@ class FixedAssetsController extends Controller
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
+        $costCenterId = $request->integer('cost_center_id') ?: null;
 
         $assets = FixedAsset::with('costCenter:id,name')
             ->when($status, fn ($q, $s) => $q->where('status', $s))
+            ->when($costCenterId, fn ($q, $id) => $q->where('cost_center_id', $id))
             ->orderByDesc('purchase_date')
             ->paginate(30)
             ->withQueryString()
@@ -47,8 +49,8 @@ class FixedAssetsController extends Controller
 
         return Inertia::render('admin/accounting/FixedAssets', [
             'assets' => $assets,
-            'filters' => ['status' => $status ?: null],
-            'costCenters' => CostCenter::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'filters' => ['status' => $status ?: null, 'cost_center_id' => $costCenterId],
+            'costCenters' => CostCenter::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
             'statuses' => collect(FixedAsset::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
         ]);
     }

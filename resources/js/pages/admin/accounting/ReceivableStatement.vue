@@ -59,7 +59,7 @@ const exportUrl = () => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">كشف حساب — {{ client.name }}</h1>
-                    <p class="mt-1 text-sm font-medium text-slate-600" dir="ltr">{{ client.mobile }}</p>
+                    <p class="mt-1 text-sm font-medium text-slate-600"><span dir="ltr">{{ client.mobile }}</span></p>
                 </div>
                 <button type="button" @click="exportUrl" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
                     <Download class="h-4 w-4" /> تصدير CSV
@@ -99,7 +99,7 @@ const exportUrl = () => {
                                 <td class="px-4 py-2.5 text-left font-extrabold text-slate-700" dir="ltr">{{ money(statement.opening_balance) }}</td>
                             </tr>
                             <tr v-for="(row, i) in statement.rows" :key="i" class="border-t border-slate-100 hover:bg-slate-50">
-                                <td class="px-4 py-3 text-xs text-slate-600" dir="ltr">{{ row.date }}</td>
+                                <td class="px-4 py-3 text-right text-xs text-slate-600"><span dir="ltr">{{ row.date }}</span></td>
                                 <td class="px-4 py-3 font-bold text-slate-700">{{ row.label }}</td>
                                 <td class="px-4 py-3 text-left text-red-600" dir="ltr">{{ row.debit ? money(row.debit) : '—' }}</td>
                                 <td class="px-4 py-3 text-left text-emerald-600" dir="ltr">{{ row.credit ? money(row.credit) : '—' }}</td>
@@ -127,8 +127,8 @@ const exportUrl = () => {
                         </thead>
                         <tbody>
                             <tr v-for="(row, i) in security" :key="i" class="border-t border-slate-100">
-                                <td class="px-4 py-3 text-xs text-slate-600" dir="ltr">{{ row.date }}</td>
-                                <td class="px-4 py-3 text-xs font-bold text-slate-700" dir="ltr">{{ row.booking_reference ?? '—' }}</td>
+                                <td class="px-4 py-3 text-right text-xs text-slate-600"><span dir="ltr">{{ row.date }}</span></td>
+                                <td class="px-4 py-3 text-right text-xs font-bold text-slate-700"><span dir="ltr">{{ row.booking_reference ?? '—' }}</span></td>
                                 <td class="px-4 py-3 text-xs font-bold text-slate-700">{{ row.type_label }}</td>
                                 <td class="px-4 py-3 text-left font-extrabold text-slate-800" dir="ltr">{{ money(row.amount) }}</td>
                             </tr>

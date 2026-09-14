@@ -69,9 +69,9 @@ const apply = () => router.get('/admin/accounting/receivables', { search: search
                         </thead>
                         <tbody>
                             <tr v-for="c in clients.data" :key="c.id" class="border-t border-slate-100 hover:bg-slate-50">
-                                <td class="px-4 py-3">
+                                <td class="px-4 py-3 text-right">
                                     <div class="font-extrabold text-slate-800">{{ c.name }}</div>
-                                    <div class="text-[11px] text-slate-500" dir="ltr">{{ c.mobile }}</div>
+                                    <div class="text-[11px] text-slate-500"><span dir="ltr">{{ c.mobile ?? '—' }}</span></div>
                                 </td>
                                 <td class="px-4 py-3 text-xs font-bold text-slate-600">{{ c.type_label }}</td>
                                 <td class="px-4 py-3 text-left font-extrabold" dir="ltr" :class="c.outstanding > 0 ? 'text-red-600' : 'text-slate-500'">

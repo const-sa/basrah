@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -78,6 +79,12 @@ class Voucher extends Model
     public function paymentMethod(): BelongsTo
     {
         return $this->belongsTo(PaymentMethod::class);
+    }
+
+    /** Supporting documents — transfer slips, supplier invoices. */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(VoucherAttachment::class)->oldest('id');
     }
 
     public function methodLabel(): string

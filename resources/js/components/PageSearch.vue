@@ -3,7 +3,9 @@ import { useLocale } from '@/composables/useLocale';
 import { usePermissions } from '@/composables/usePermissions';
 import { router } from '@inertiajs/vue3';
 import {
+    Armchair,
     Bell,
+    BookUser,
     Boxes,
     Building2,
     CalculatorIcon,
@@ -16,11 +18,13 @@ import {
     FileText,
     History,
     Home,
+    Landmark,
     LayoutDashboard,
     LifeBuoy,
     MapPin,
     Megaphone,
     MessageCircle,
+    PieChart,
     Receipt,
     Search,
     ShieldCheck,
@@ -182,11 +186,39 @@ const allPages = computed<Page[]>(() => [
         keywords: ['revenue', 'إيراد', 'إيرادات', 'دخل', 'قاعات', 'شاليهات', 'مسابح'],
     },
     {
+        href: '/admin/accounting/receivables',
+        icon: BookUser,
+        title: t('nav.receivables'),
+        perm: 'receivables.view',
+        keywords: ['receivables', 'ذمم', 'مديونية', 'كشف حساب', 'عملاء', 'موردين'],
+    },
+    {
+        href: '/admin/accounting/cost-centers',
+        icon: PieChart,
+        title: t('nav.cost_centers'),
+        perm: 'cost_centers.view',
+        keywords: ['cost', 'center', 'مركز', 'مراكز', 'تكلفة', 'ربحية', 'قاعة'],
+    },
+    {
+        href: '/admin/accounting/fixed-assets',
+        icon: Armchair,
+        title: t('nav.fixed_assets'),
+        perm: 'fixed_assets.view',
+        keywords: ['assets', 'أصول', 'أصل ثابت', 'إهلاك', 'أثاث', 'تكييف'],
+    },
+    {
+        href: '/admin/accounting/bank-reconciliation',
+        icon: Landmark,
+        title: t('nav.bank_reconciliation'),
+        perm: 'bank_reconciliation.view',
+        keywords: ['bank', 'تسوية', 'بنك', 'كشف بنكي', 'مطابقة', 'شبكة'],
+    },
+    {
         href: '/admin/accounting/reports',
         icon: FileBarChart2,
         title: t('nav.fin_reports'),
         perm: 'fin_reports.view',
-        keywords: ['financial', 'ميزانية', 'ميزان', 'دخل', 'ربحية'],
+        keywords: ['financial', 'ميزانية', 'ميزان', 'دخل', 'ربحية', 'ضريبة', 'vat'],
     },
 
     // الموارد البشرية

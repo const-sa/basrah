@@ -4,6 +4,8 @@ import { type NavItem } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import {
     Archive as ArchiveIcon,
+    Armchair,
+    BookUser,
     Boxes,
     Building2,
     CalculatorIcon,
@@ -19,6 +21,7 @@ import {
     FileText,
     History,
     Home,
+    Landmark,
     Layers,
     LayoutDashboard,
     LifeBuoy,
@@ -26,6 +29,7 @@ import {
     MessageCircle,
     Package as PackageIcon,
     PartyPopper,
+    PieChart,
     Receipt,
     Ruler,
     ScrollText,
@@ -201,6 +205,10 @@ export function useNavigation() {
                 { title: t('nav.vouchers'), href: '/admin/accounting/vouchers', icon: Receipt, perm: 'vouchers.view' },
                 { title: t('nav.revenues'), href: '/admin/accounting/revenues', icon: TrendingUp, perm: 'revenues.view' },
                 { title: t('nav.expenses'), href: '/admin/accounting/expenses', icon: Receipt, perm: 'expenses.view' },
+                { title: t('nav.receivables'), href: '/admin/accounting/receivables', icon: BookUser, perm: 'receivables.view' },
+                { title: t('nav.cost_centers'), href: '/admin/accounting/cost-centers', icon: PieChart, perm: 'cost_centers.view' },
+                { title: t('nav.fixed_assets'), href: '/admin/accounting/fixed-assets', icon: Armchair, perm: 'fixed_assets.view' },
+                { title: t('nav.bank_reconciliation'), href: '/admin/accounting/bank-reconciliation', icon: Landmark, perm: 'bank_reconciliation.view' },
                 // طريقة الدفع حسابٌ نقديّ أو بنكيّ تُرحَّل إليه السندات، لا خيارَ
                 // إعداداتٍ عامّ، فمكانها مع دفاتر المحاسبة التي تُقيَّد فيها.
                 { title: t('nav.settings_payment_methods'), href: '/admin/settings/payment-methods', icon: CreditCard, perm: 'payment_methods.view' },

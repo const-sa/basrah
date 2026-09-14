@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -15,8 +16,8 @@ interface Asset {
 
 const props = defineProps<{
     assets: { data: Asset[]; links: { url: string | null; label: string; active: boolean }[] };
-    filters: { status: string | null };
-    costCenters: { id: number; name: string }[];
+    filters: { status: string | null; cost_center_id: number | null };
+    costCenters: { id: number; name: string; code: string }[];
     statuses: { key: string; label: string }[];
 }>();
 
@@ -89,10 +90,19 @@ const postDepreciation = () =>
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                <select v-model="filters.status" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm sm:w-64">
-                    <option :value="null">كل الحالات</option>
-                    <option v-for="s in statuses" :key="s.key" :value="s.key">{{ s.label }}</option>
-                </select>
+                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <select v-model="filters.status" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        <option :value="null">كل الحالات</option>
+                        <option v-for="s in statuses" :key="s.key" :value="s.key">{{ s.label }}</option>
+                    </select>
+                    <SearchableSelect
+                        v-model="filters.cost_center_id"
+                        :options="costCenters"
+                        :search-keys="['code']"
+                        placeholder="كل مراكز التكلفة"
+                        @change="apply"
+                    />
+                </div>
             </div>
 
             <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -112,9 +122,10 @@ const postDepreciation = () =>
                         </thead>
                         <tbody>
                             <tr v-for="a in assets.data" :key="a.id" class="border-t border-slate-100 hover:bg-slate-50">
-                                <td class="px-4 py-3">
+                                <td class="px-4 py-3 text-right">
                                     <div class="font-extrabold text-slate-800">{{ a.name }}</div>
-                                    <div class="text-[11px] text-slate-500" dir="ltr">{{ a.code }} — {{ a.category ?? '—' }}</div>
+                                    <!-- dir on the span, not the block, so the code stays under the name -->
+                                    <div class="text-[11px] text-slate-500"><span dir="ltr">{{ a.code }}</span> — {{ a.category ?? '—' }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-xs font-bold text-slate-600">{{ a.cost_center ?? '—' }}</td>
                                 <td class="px-4 py-3 text-left font-bold text-slate-800" dir="ltr">{{ money(a.cost) }}</td>
@@ -171,10 +182,13 @@ const postDepreciation = () =>
                             </div>
                             <div>
                                 <label class="mb-1 block text-sm font-bold text-slate-700">مركز التكلفة</label>
-                                <select v-model="form.cost_center_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
-                                    <option :value="null">—</option>
-                                    <option v-for="c in costCenters" :key="c.id" :value="c.id">{{ c.name }}</option>
-                                </select>
+                                <SearchableSelect
+                                    v-model="form.cost_center_id"
+                                    :options="costCenters"
+                                    :search-keys="['code']"
+                                    placeholder="— اختر المركز —"
+                                />
+                                <p v-if="form.errors.cost_center_id" class="mt-1 text-xs text-red-500">{{ form.errors.cost_center_id }}</p>
                             </div>
                         </div>
 

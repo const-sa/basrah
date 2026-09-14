@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\CitiesController;
 use App\Http\Controllers\Admin\ClientsController;
 use App\Http\Controllers\Admin\ContractsController;
 use App\Http\Controllers\Admin\ContractTemplatesController;
+use App\Http\Controllers\Admin\CostCentersController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DemoAccountsController;
 use App\Http\Controllers\Admin\DepartmentsController;
@@ -366,10 +367,22 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::post('accounting/vouchers/{voucher}/post', [AccountingController::class, 'postVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.post');
         Route::post('accounting/vouchers/{voucher}/cancel', [AccountingController::class, 'cancelVoucher'])->middleware('perm:vouchers.approve')->name('vouchers.cancel');
 
+        // Voucher attachments — the transfer slip follows the entry
+        Route::post('accounting/vouchers/{voucher}/attachments', [AccountingController::class, 'storeVoucherAttachments'])->middleware('perm:vouchers.edit')->name('vouchers.attachments.store');
+        Route::delete('accounting/vouchers/{voucher}/attachments/{attachment}', [AccountingController::class, 'destroyVoucherAttachment'])->middleware('perm:vouchers.edit')->name('vouchers.attachments.destroy');
+
         // ذمم العملاء — كشف حساب موحَّد فوق الحجوزات والمبيعات والعقود والسندات
         Route::get('accounting/receivables', [ReceivablesController::class, 'index'])->middleware('perm:receivables.view')->name('receivables.index');
         Route::get('accounting/receivables/{client}', [ReceivablesController::class, 'show'])->middleware('perm:receivables.view')->name('receivables.show');
         Route::get('accounting/receivables/{client}/export', [ReceivablesController::class, 'export'])->middleware('perm:receivables.export')->name('receivables.export');
+
+        // Cost centres — per-unit profit, and the movements behind each figure
+        Route::get('accounting/cost-centers', [CostCentersController::class, 'index'])->middleware('perm:cost_centers.view')->name('cost_centers.index');
+        Route::post('accounting/cost-centers', [CostCentersController::class, 'store'])->middleware('perm:cost_centers.create')->name('cost_centers.store');
+        Route::get('accounting/cost-centers/{costCenter}', [CostCentersController::class, 'show'])->middleware('perm:cost_centers.view')->name('cost_centers.show');
+        Route::get('accounting/cost-centers/{costCenter}/export', [CostCentersController::class, 'export'])->middleware('perm:cost_centers.export')->name('cost_centers.export');
+        Route::put('accounting/cost-centers/{costCenter}', [CostCentersController::class, 'update'])->middleware('perm:cost_centers.edit')->name('cost_centers.update');
+        Route::delete('accounting/cost-centers/{costCenter}', [CostCentersController::class, 'destroy'])->middleware('perm:cost_centers.delete')->name('cost_centers.destroy');
 
         // الأصول الثابتة والإهلاك
         Route::get('accounting/fixed-assets', [FixedAssetsController::class, 'index'])->middleware('perm:fixed_assets.view')->name('fixed_assets.index');

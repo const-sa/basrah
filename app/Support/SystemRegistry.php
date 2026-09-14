@@ -140,7 +140,7 @@ class SystemRegistry
                 'revenues' => ['label' => 'الإيرادات', 'actions' => ['view', 'export']],
                 'expenses' => ['label' => 'المصروفات (كل الأنشطة)', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'receivables' => ['label' => 'ذمم العملاء والموردين', 'actions' => ['view', 'create', 'edit', 'export']],
-                'cost_centers' => ['label' => 'مراكز التكلفة', 'actions' => ['view', 'create', 'edit', 'delete']],
+                'cost_centers' => ['label' => 'مراكز التكلفة', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],
                 'fin_reports' => ['label' => 'التقارير المالية', 'actions' => ['view', 'export']],
                 'fixed_assets' => ['label' => 'الأصول الثابتة والإهلاك', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
                 'bank_reconciliation' => ['label' => 'التسوية البنكية', 'actions' => ['view', 'create', 'edit', 'delete']],

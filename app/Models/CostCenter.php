@@ -35,6 +35,30 @@ class CostCenter extends Model
     }
 
     /**
+     * The centre the system keeps in step with a unit, section, department, or
+     * the general one. Renaming it is allowed; deleting it is not — the factory
+     * methods above would recreate it on the next posting anyway.
+     */
+    public function isSystem(): bool
+    {
+        return $this->unit_id !== null
+            || $this->unit_section_id !== null
+            || $this->department_id !== null
+            || $this->code === 'CC-GEN';
+    }
+
+    public function typeLabel(): string
+    {
+        return match (true) {
+            $this->unit_id !== null => 'وحدة',
+            $this->unit_section_id !== null => 'قسم داخلي',
+            $this->department_id !== null => 'إدارة',
+            $this->code === 'CC-GEN' => 'عام',
+            default => 'مركز يدوي',
+        };
+    }
+
+    /**
      * إيراد ومصروف وربح المركز خلال فترة، من القيود المرحَّلة فقط.
      *
      * @return array{revenue: float, expense: float, profit: float}
