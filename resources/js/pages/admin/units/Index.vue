@@ -247,6 +247,16 @@ const clearLogo = () => {
 const addSection = () => form.sections.push(emptySection());
 const removeSection = (i: number) => form.sections.splice(i, 1);
 
+// Fields whose errors the form prints beside them; the rest have no place to
+// show, and a refusal nothing says reads as a save that vanished.
+const inlineErrorFields = ['logo', 'code', 'name'];
+
+const errorSummary = computed(() =>
+    Object.entries(form.errors)
+        .filter(([field, message]) => message && !inlineErrorFields.includes(field))
+        .map(([, message]) => message as string),
+);
+
 const submit = () => {
     const opts = {
         preserveScroll: true,
@@ -757,6 +767,14 @@ const destroy = (u: Unit) => {
 
                 <form @submit.prevent="submit" class="flex min-h-0 flex-1 flex-col">
                     <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                        <!-- Server refusals for fields that carry no inline message -->
+                        <div v-if="errorSummary.length" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                            <p class="text-sm font-bold text-red-700">تعذّر حفظ الوحدة</p>
+                            <ul class="mt-1 space-y-0.5 text-xs text-red-600">
+                                <li v-for="(message, i) in errorSummary" :key="i">{{ message }}</li>
+                            </ul>
+                        </div>
+
                         <!-- الشعار + البيانات الأساسية -->
                         <div class="flex flex-wrap gap-4">
                             <div class="shrink-0">
