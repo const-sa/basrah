@@ -8,6 +8,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -52,6 +53,15 @@ class User extends Authenticatable
     public function units(): BelongsToMany
     {
         return $this->belongsToMany(Unit::class)->withTimestamps();
+    }
+
+    /**
+     * The inbox. Overridden to return our own notification rather than the
+     * framework's, so the added columns reach everything that reads it.
+     */
+    public function notifications(): MorphMany
+    {
+        return $this->morphMany(Notification::class, 'notifiable')->latest();
     }
 
     public function isSuperAdmin(): bool

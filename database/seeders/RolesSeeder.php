@@ -36,7 +36,7 @@ class RolesSeeder extends Seeder
                     SystemRegistry::systemPermissionKeys('accounting'),
                     SystemRegistry::systemPermissionKeys('hr'),
                     [
-                        'dashboard.view', 'reports.view', 'reports.export',
+                        'dashboard.view', 'notifications.view', 'reports.view', 'reports.export',
                         'hall_bookings.view', 'chalet_bookings.view',
                         'hall_calendar.view', 'chalet_calendar.view',
                         'halls.view', 'chalets.view',
@@ -55,7 +55,7 @@ class RolesSeeder extends Seeder
                 'name' => 'مشرف وحدة',
                 'description' => 'إدارة حجوزات وعقود الوحدات المسندة إليه فقط',
                 'permissions' => [
-                    'dashboard.view',
+                    'dashboard.view', 'notifications.view',
                     'halls.view', 'chalets.view',
                     'hall_calendar.view', 'chalet_calendar.view',
                     'hall_bookings.view', 'hall_bookings.create', 'hall_bookings.edit',
@@ -83,7 +83,7 @@ class RolesSeeder extends Seeder
                 'name' => 'كاشير',
                 'description' => 'شاشة البيع والمخزون دون أي اطلاع محاسبي',
                 'permissions' => [
-                    'dashboard.view',
+                    'dashboard.view', 'notifications.view',
                     'pos.view', 'pos.create',
                     'items.view',
                     // المجموعات اختصار في شاشة البيع، فالكاشير يراها ولا ينشئها

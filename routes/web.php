@@ -92,8 +92,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // فكرة المشروع (صفحة تعريفية عامة لكل مستخدم مسجّل)
     Route::get('about', fn () => Inertia::render('admin/About'))->name('about.index');
 
-    // الإشعارات
+    // الإشعارات — every route below touches the signed-in user's own rows only.
     Route::get('notifications', [NotificationsController::class, 'index'])->middleware('perm:notifications.view')->name('notifications.index');
+    // The fixed paths first, so neither is read as a notification id.
+    Route::patch('notifications/read-all', [NotificationsController::class, 'markAllRead'])->middleware('perm:notifications.view')->name('notifications.read_all');
+    Route::delete('notifications/clear', [NotificationsController::class, 'clear'])->middleware('perm:notifications.view')->name('notifications.clear');
 
     // مكتبة الإشعارات (قوالب قابلة للإرسال للعملاء)
     Route::get('notifications/library', [NotificationTemplatesController::class, 'index'])->middleware('perm:notifications.view')->name('notifications.library');
@@ -101,6 +104,12 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::put('notifications/library/{template}', [NotificationTemplatesController::class, 'update'])->middleware('perm:notifications.edit')->name('notifications.library.update');
     Route::delete('notifications/library/{template}', [NotificationTemplatesController::class, 'destroy'])->middleware('perm:notifications.delete')->name('notifications.library.destroy');
     Route::post('notifications/library/{template}/send', [NotificationTemplatesController::class, 'send'])->middleware('perm:notifications.send')->name('notifications.library.send');
+
+    // After the library's paths, so "library" is not read as a notification id.
+    // Opening is a GET because it navigates to the record; the read mark is
+    // what opening it means, not a separate act.
+    Route::get('notifications/{notification}/read', [NotificationsController::class, 'read'])->middleware('perm:notifications.view')->name('notifications.read');
+    Route::delete('notifications/{notification}', [NotificationsController::class, 'destroy'])->middleware('perm:notifications.view')->name('notifications.destroy');
 
     /*
     |--------------------------------------------------------------------------

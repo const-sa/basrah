@@ -5,9 +5,13 @@ namespace App\Providers;
 use App\Http\Controllers\Admin\RolesController;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Notifications\Channels\DatabaseChannel;
 use App\Observers\AuditObserver;
+use App\Observers\NotifyObserver;
 use App\Support\ActivitySegment;
 use App\Support\BookingTimes;
+use App\Support\NotificationRegistry;
+use Illuminate\Notifications\Channels\DatabaseChannel as BaseDatabaseChannel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
@@ -29,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
         // The centre → activity map is one query, read on every scoped
         // permission check, so it resolves once per request rather than per call.
         $this->app->scoped(ActivitySegment::class);
+
+        // Our database channel writes the inbox's own columns beside Laravel's.
+        $this->app->bind(BaseDatabaseChannel::class, DatabaseChannel::class);
     }
 
     /**
@@ -48,6 +55,12 @@ class AppServiceProvider extends ServiceProvider
         // النماذج، حتى تبقى قائمة ما يُراقَب مقروءةً في موضع واحد.
         foreach (array_keys(AuditLog::SUBJECTS) as $model) {
             $model::observe(AuditObserver::class);
+        }
+
+        // Notifications: the same principle, a second list — what is recorded
+        // and what is announced are not the same set.
+        foreach (NotificationRegistry::models() as $model) {
+            $model::observe(NotifyObserver::class);
         }
 
         $this->explainArchivedUniqueClashes();
