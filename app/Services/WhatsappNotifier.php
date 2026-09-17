@@ -9,6 +9,8 @@ use App\Models\Contract;
 use App\Models\NotificationTemplate;
 use App\Models\Setting;
 use App\Models\WhatsappMessage;
+use App\Services\Whatsapp\MessageTemplate;
+use App\Services\Whatsapp\PhoneNumber;
 use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +35,8 @@ class WhatsappNotifier
         ?Model $related = null,
         ?int $userId = null,
         ?string $mediaUrl = null,
+        // Meta prices marketing apart from utility, so a campaign is not filed as a notice.
+        string $category = 'utility',
     ): ?WhatsappMessage {
         $number = $this->normalize($number);
 
@@ -43,7 +47,7 @@ class WhatsappNotifier
         $message = WhatsappMessage::create([
             'to_number' => $number,
             'body' => $body,
-            'category' => 'utility',
+            'category' => $category,
             'purpose' => $purpose,
             'status' => 'queued',
             'related_type' => $related ? $related::class : null,
@@ -62,11 +66,8 @@ class WhatsappNotifier
             'queue' => config('queue.default'),
         ]);
 
-        SendWhatsappMessage::dispatch($number, $body, $mediaUrl);
-
-        // البوابة تعمل في الطابور ولا تُرجع نتيجة فورية، فتُعلَّم كمُرسلة
-        // ويُصحَّح الحال عند فشل المهمة نهائيًا.
-        $message->update(['status' => 'sent', 'sent_at' => now()]);
+        // Stays queued until the gateway answers — marking it sent here reads as delivered.
+        SendWhatsappMessage::dispatch($number, $body, $mediaUrl, $message->id);
 
         return $message;
     }
@@ -295,7 +296,7 @@ class WhatsappNotifier
             return null;
         }
 
-        return WaGateway::renderTemplate(
+        return MessageTemplate::render(
             $template->body,
             array_merge($this->variables($booking), $extra),
         );
@@ -324,29 +325,9 @@ class WhatsappNotifier
         ];
     }
 
-    /**
-     * توحيد صيغة الرقم السعودي إلى 9665XXXXXXXX.
-     */
+    /** Null for a number too short to dial, so the send is dropped rather than wasted. */
     private function normalize(?string $number): ?string
     {
-        if (blank($number)) {
-            return null;
-        }
-
-        $digits = preg_replace('/\D+/', '', $number) ?? '';
-
-        if (str_starts_with($digits, '00')) {
-            $digits = substr($digits, 2);
-        }
-
-        if (str_starts_with($digits, '05')) {
-            return '966'.substr($digits, 1);
-        }
-
-        if (str_starts_with($digits, '5') && strlen($digits) === 9) {
-            return '966'.$digits;
-        }
-
-        return $digits ?: null;
+        return PhoneNumber::normalizeOrNull($number, (string) config('whatsapp.country_code', '966'));
     }
 }

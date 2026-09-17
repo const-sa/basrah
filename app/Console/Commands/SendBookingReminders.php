@@ -3,8 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Booking;
-use App\Models\Setting;
 use App\Models\WhatsappMessage;
+use App\Services\Whatsapp\WhatsappManager;
 use App\Services\WhatsappNotifier;
 use Illuminate\Console\Command;
 use Throwable;
@@ -26,11 +26,9 @@ class SendBookingReminders extends Command
 
     public function handle(WhatsappNotifier $whatsapp): int
     {
-        $settings = Setting::current();
-
         // التكامل معطَّل يعني أن الرسائل لن تخرج، وإرسالها إلى الطابور يملأ
         // السجل برسائل لم تصل أحدًا.
-        if (! $settings->wa_enabled) {
+        if (! app(WhatsappManager::class)->isConfigured()) {
             $this->warn('تكامل الواتساب معطَّل — لا تذكيرات.');
 
             return self::SUCCESS;

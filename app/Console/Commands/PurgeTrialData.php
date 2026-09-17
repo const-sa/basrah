@@ -79,7 +79,7 @@ class PurgeTrialData extends Command
         'bank_statement_lines' => ['bank_statement_imports'],
     ];
 
-    /** Uploads that belong to a purged row — all of them sit on the public disk. */
+    /** Uploads of a purged row, on the public disk. Generated PDFs are not here — pdf:prune ages those out. */
     private const FILE_COLUMNS = [
         'booking_payments' => 'attachment_path',
         'expenses' => 'attachment_path',

@@ -2,8 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Setting;
-use App\Services\WaGateway;
+use App\Services\Whatsapp\WhatsappManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -13,10 +12,10 @@ use Psr\Log\LoggerInterface;
 use Tests\TestCase;
 
 /**
- * What the gateway writes to the whatsapp log.
+ * What the gateway driver writes to the whatsapp log.
  *
- * Asking the provider why a message never arrived needs the request and its
- * reply, in order, with the body they actually returned.
+ * Asking the provider why a message never arrived needs the call and its reply,
+ * with the body they actually returned.
  */
 class WhatsappGatewayLogTest extends TestCase
 {
@@ -26,29 +25,24 @@ class WhatsappGatewayLogTest extends TestCase
     {
         parent::setUp();
 
-        Setting::current()->update([
-            'wa_enabled' => true,
-            'wa_instance_id' => 'INSTANCE',
-            'wa_access_token' => 'SECRET-TOKEN',
-        ]);
+        config()->set('whatsapp.driver', 'cwts');
+        config()->set('whatsapp.drivers.cwts.instance_id', 'INSTANCE');
+        config()->set('whatsapp.drivers.cwts.access_token', 'SECRET-TOKEN');
     }
 
-    public function test_a_sent_message_logs_its_request_and_the_gateways_reply(): void
+    public function test_a_sent_message_logs_the_call_and_the_gateways_reply(): void
     {
         Http::fake(['*' => Http::response(['ok' => true, 'message' => 'queued'], 200)]);
 
         $log = $this->spyWhatsappLog();
 
-        (new WaGateway)->send('0501234567', 'سند قبض عربون');
+        $this->gateway()->sendText('0501234567', 'سند قبض عربون');
 
         $log->shouldHaveReceived('info')
-            ->withArgs(fn (string $message, array $context) => str_contains($message, '→ send')
+            ->withArgs(fn (string $message, array $context) => str_contains($message, 'send text')
                 && $context['number'] === '966501234567'
-                && $context['message'] === 'سند قبض عربون');
-
-        $log->shouldHaveReceived('info')
-            ->withArgs(fn (string $message, array $context) => str_contains($message, '← send ok')
-                && str_contains($context['body'], 'queued'));
+                && $context['status'] === 200
+                && str_contains(json_encode($context['response']), 'queued'));
     }
 
     public function test_a_refusal_carrying_http_200_is_logged_as_a_failure_with_its_body(): void
@@ -57,13 +51,16 @@ class WhatsappGatewayLogTest extends TestCase
 
         $log = $this->spyWhatsappLog();
 
-        (new WaGateway)->send('0501234567', 'مرحبًا');
+        $result = $this->gateway()->sendText('0501234567', 'مرحبًا');
 
         // The gateway refuses inside a 200 as often as it errors outright.
+        $this->assertTrue($result->failed());
+        $this->assertSame('session not connected', $result->error());
+
         $log->shouldHaveReceived('warning')
-            ->withArgs(fn (string $message, array $context) => str_contains($message, 'failed')
-                && $context['http_status'] === 200
-                && str_contains($context['body'], 'session not connected'));
+            ->withArgs(fn (string $message, array $context) => str_contains($message, 'send text')
+                && $context['status'] === 200
+                && str_contains(json_encode($context['response']), 'session not connected'));
     }
 
     public function test_an_attachment_is_logged_with_the_link_that_was_sent(): void
@@ -72,11 +69,12 @@ class WhatsappGatewayLogTest extends TestCase
 
         $log = $this->spyWhatsappLog();
 
-        (new WaGateway)->sendMedia('0501234567', 'https://example.test/bonds/bond-a-1-2.pdf', ['caption' => 'سند']);
+        $this->gateway()->sendMedia('0501234567', 'سند', 'https://example.test/bonds/bond-a-1-2.pdf');
 
         $log->shouldHaveReceived('info')
-            ->withArgs(fn (string $message, array $context) => str_contains($message, '→ send-media')
-                && $context['media_url'] === 'https://example.test/bonds/bond-a-1-2.pdf');
+            ->withArgs(fn (string $message, array $context) => str_contains($message, 'send media')
+                && $context['media_url'] === 'https://example.test/bonds/bond-a-1-2.pdf'
+                && $context['type'] === 'document');
     }
 
     public function test_a_number_the_gateway_would_reject_is_logged_and_never_sent(): void
@@ -85,9 +83,10 @@ class WhatsappGatewayLogTest extends TestCase
 
         $log = $this->spyWhatsappLog();
 
-        $result = (new WaGateway)->send('123', 'مرحبًا');
+        $result = $this->gateway()->sendText('123', 'مرحبًا');
 
-        $this->assertFalse($result['ok']);
+        $this->assertTrue($result->failed());
+        $this->assertSame('invalid_number', $result->error());
         $log->shouldHaveReceived('warning')->withArgs(fn (string $message) => str_contains($message, 'invalid number'));
         Http::assertNothingSent();
     }
@@ -98,13 +97,18 @@ class WhatsappGatewayLogTest extends TestCase
 
         $log = $this->spyWhatsappLog();
 
-        (new WaGateway)->send('0501234567', 'مرحبًا');
+        $this->gateway()->sendText('0501234567', 'مرحبًا');
 
         // Credentials travel in the query string and must stay there.
         $log->shouldNotHaveReceived('info', [
             Mockery::any(),
             Mockery::on(fn ($context) => str_contains(json_encode($context), 'SECRET-TOKEN')),
         ]);
+    }
+
+    private function gateway()
+    {
+        return app(WhatsappManager::class)->driver();
     }
 
     private function spyWhatsappLog(): MockInterface

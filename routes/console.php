@@ -30,3 +30,8 @@ Schedule::command('backup:run --trigger=schedule')
 Schedule::command('bookings:send-reminders')
     ->dailyAt('09:00')
     ->withoutOverlapping();
+
+// A day late, not on send: the gateway still has to fetch the file by URL.
+Schedule::command('pdf:prune')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();

@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendWhatsappMessage;
 use App\Models\Client;
 use App\Models\NotificationTemplate;
 use App\Models\Setting;
-use App\Services\WaGateway;
+use App\Models\WhatsappMessage;
+use App\Services\Whatsapp\MessageTemplate;
+use App\Services\Whatsapp\WhatsappManager;
+use App\Services\WhatsappNotifier;
 use App\Support\NotificationCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -43,7 +45,7 @@ class NotificationTemplatesController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'mobile'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'mobile' => $c->mobile]),
-            'wa_configured' => (new WaGateway)->isConfigured(),
+            'wa_configured' => app(WhatsappManager::class)->isConfigured(),
         ]);
     }
 
@@ -71,16 +73,14 @@ class NotificationTemplatesController extends Controller
     /**
      * إرسال قالب الإشعار عبر الواتساب إلى عميل محدّد أو إلى كل العملاء.
      */
-    public function send(Request $request, NotificationTemplate $template): RedirectResponse
+    public function send(Request $request, NotificationTemplate $template, WhatsappNotifier $whatsapp): RedirectResponse
     {
         $data = $request->validate([
             'target' => ['required', 'in:client,all'],
             'client_id' => ['nullable', 'required_if:target,client', 'exists:clients,id'],
         ]);
 
-        $gateway = new WaGateway;
-
-        if (! $gateway->isConfigured()) {
+        if (! app(WhatsappManager::class)->isConfigured()) {
             return back()->with('warning', 'تكامل الواتساب غير مفعّل. اربط الجهاز من إعدادات الواتساب أولاً.');
         }
 
@@ -96,16 +96,20 @@ class NotificationTemplatesController extends Controller
 
         // الإرسال في الطابور: مهمة لكل عميل حتى لا يُعلّق الطلب أو يُنهك العمّال
         // عند الإرسال الجماعي لعدد كبير من العملاء.
+        $purpose = array_key_exists($template->event, WhatsappMessage::PURPOSES) ? $template->event : 'other';
+
+        // A blast, or a free message, is a campaign — Meta bills it apart from a notice.
+        $category = $data['target'] === 'all' || $template->event === 'custom' ? 'marketing' : 'utility';
         $queued = 0;
 
         foreach ($clients as $client) {
-            $message = WaGateway::renderTemplate($template->body, [
+            $message = MessageTemplate::render($template->body, [
                 'name' => $client->name,
                 'business_name' => $businessName,
                 'mobile' => (string) $client->mobile,
             ]);
 
-            SendWhatsappMessage::dispatch((string) $client->mobile, $message);
+            $whatsapp->send((string) $client->mobile, $message, $purpose, $client, $request->user()?->id, null, $category);
             $queued++;
         }
 

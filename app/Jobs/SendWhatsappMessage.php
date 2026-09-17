@@ -2,14 +2,15 @@
 
 namespace App\Jobs;
 
-use App\Models\Setting;
-use App\Services\WaGateway;
+use App\Models\WhatsappMessage;
+use App\Services\Whatsapp\WhatsappManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * إرسال رسالة واتساب واحدة عبر البوابة في الخلفية.
@@ -31,38 +32,58 @@ class SendWhatsappMessage implements ShouldQueue
         public string $message,
         /** رابط عام لمرفق (عقد PDF مثلًا) — الرسالة نصية بدونه. */
         public ?string $mediaUrl = null,
+        /** The log row this job answers for — its status follows the gateway, not the dispatch. */
+        public ?int $messageId = null,
     ) {}
 
-    public function handle(): void
+    public function handle(WhatsappManager $whatsapp): void
     {
-        $gateway = new WaGateway;
-
-        // Said out loud, not returned silently: an unconfigured gateway is the
-        // commonest reason a "sent" message never arrives, and an empty log
-        // makes it look as though the job never ran at all.
-        if (! $gateway->isConfigured()) {
+        // An unconfigured gateway is the commonest reason a message never arrives.
+        if (! $whatsapp->isConfigured()) {
             Log::channel('whatsapp')->warning('SendWhatsappMessage: البوابة غير مهيّأة — لم تُرسل الرسالة', [
                 'number' => $this->number,
                 'media' => $this->mediaUrl,
-                'wa_enabled' => (bool) Setting::current()->wa_enabled,
-                'has_credentials' => $gateway->hasCredentials(),
+                'enabled' => $whatsapp->enabled(),
+                'has_credentials' => $whatsapp->hasCredentials(),
             ]);
+
+            // Not retried: no number of attempts will configure the gateway.
+            $this->markFailed('البوابة غير مهيّأة');
 
             return;
         }
 
         // البوابة ترسل النص مع الوسائط في طلب واحد، فلا تُرسل رسالتان
         // يصل ترتيبهما مقلوبًا إلى العميل.
-        $result = $this->mediaUrl
-            ? $gateway->sendMedia($this->number, $this->mediaUrl, ['caption' => $this->message])
-            : $gateway->send($this->number, $this->message);
+        $driver = $whatsapp->driver();
 
-        if (! ($result['ok'] ?? false)) {
-            Log::channel('whatsapp')->warning('SendWhatsappMessage: تعذّر إرسال رسالة واتساب', [
-                'number' => $this->number,
-                'media' => $this->mediaUrl,
-                'error' => $result['error'] ?? null,
-            ]);
+        $result = $this->mediaUrl
+            ? $driver->sendMedia($this->number, $this->message, $this->mediaUrl)
+            : $driver->sendText($this->number, $this->message);
+
+        if ($result->failed()) {
+            // Not retried: the gateway is not idempotent, so a second attempt can send twice.
+            $this->markFailed($result->error() ?? 'تعذّر الإرسال');
+
+            return;
         }
+
+        $this->logRow()?->update(['status' => 'sent', 'sent_at' => now(), 'error' => null]);
+    }
+
+    /** The last attempt is what settles the log — earlier ones stay queued. */
+    public function failed(?Throwable $e): void
+    {
+        $this->markFailed($e?->getMessage());
+    }
+
+    private function markFailed(?string $error): void
+    {
+        $this->logRow()?->update(['status' => 'failed', 'error' => $error]);
+    }
+
+    private function logRow(): ?WhatsappMessage
+    {
+        return $this->messageId ? WhatsappMessage::find($this->messageId) : null;
     }
 }

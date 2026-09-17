@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Concerns\AuthorizesActivities;
 use App\Http\Controllers\Controller;
-use App\Jobs\SendWhatsappMessage;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\City;
@@ -14,7 +13,9 @@ use App\Models\NotificationTemplate;
 use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Voucher;
-use App\Services\WaGateway;
+use App\Services\Whatsapp\MessageTemplate;
+use App\Services\Whatsapp\WhatsappManager;
+use App\Services\WhatsappNotifier;
 use App\Support\ActivityPermission;
 use App\Support\ClientType;
 use App\Support\NotificationCatalog;
@@ -35,6 +36,8 @@ class ClientsController extends Controller
 
     /** The actions the clients screen can offer. */
     private const ACTIONS = ['view', 'create', 'edit', 'delete', 'export'];
+
+    public function __construct(private readonly WhatsappNotifier $whatsapp) {}
 
     public function hallClients(Request $request): Response
     {
@@ -591,7 +594,7 @@ class ClientsController extends Controller
 
         $settings = Setting::current();
 
-        if (! $settings->wa_enabled || ! $settings->wa_welcome_enabled) {
+        if (! app(WhatsappManager::class)->isConfigured() || ! $settings->wa_welcome_enabled) {
             return;
         }
 
@@ -610,14 +613,14 @@ class ClientsController extends Controller
         }
 
         try {
-            $message = WaGateway::renderTemplate($body, [
+            $message = MessageTemplate::render($body, [
                 'name' => $client->name,
                 'business_name' => $settings->business_name ?? '',
                 'mobile' => (string) $client->mobile,
             ]);
 
-            // الإرسال في الطابور حتى لا يُعلّق إنشاء العميل على استجابة البوابة.
-            SendWhatsappMessage::dispatch((string) $client->mobile, $message);
+            // Through the notifier, not the job — dispatching straight to the queue left no log row.
+            $this->whatsapp->send((string) $client->mobile, $message, 'welcome', $client);
         } catch (\Throwable $e) {
             Log::warning('تعذّر جدولة رسالة ترحيب الواتساب', [
                 'client_id' => $client->id,

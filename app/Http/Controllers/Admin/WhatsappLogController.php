@@ -23,6 +23,7 @@ class WhatsappLogController extends Controller
 
         $query = WhatsappMessage::query()
             ->when($request->string('purpose')->toString(), fn ($q, $p) => $q->where('purpose', $p))
+            ->when($request->string('category')->toString(), fn ($q, $c) => $q->where('category', $c))
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
             ->whereDate('created_at', '>=', $from)
             ->whereDate('created_at', '<=', $to);
@@ -37,17 +38,21 @@ class WhatsappLogController extends Controller
                     'body' => $m->body,
                     'purpose' => $m->purpose,
                     'purpose_label' => $m->purposeLabel(),
+                    'category' => $m->category,
                     'category_label' => $m->categoryLabel(),
                     'status' => $m->status,
                     'error' => $m->error,
                     'created_at' => $m->created_at->format('Y-m-d H:i'),
                 ]),
-            'filters' => ['from' => $from, 'to' => $to] + $request->only(['purpose', 'status']),
+            'filters' => ['from' => $from, 'to' => $to] + $request->only(['purpose', 'category', 'status']),
             'purposes' => collect(WhatsappMessage::PURPOSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
+            'categories' => collect(WhatsappMessage::CATEGORIES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
             'stats' => [
                 'messages' => (clone $query)->count(),
                 'sent' => (clone $query)->where('status', 'sent')->count(),
                 'failed' => (clone $query)->where('status', 'failed')->count(),
+                'queued' => (clone $query)->where('status', 'queued')->count(),
+                'marketing' => (clone $query)->where('category', 'marketing')->count(),
                 // المحادثة (24 ساعة) هي وحدة التسعير لدى Meta لا الرسالة
                 'conversations' => $conversations,
                 'limit' => $limit,

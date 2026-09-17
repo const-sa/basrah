@@ -238,8 +238,9 @@ abstract class BaseBookingsController extends Controller
             ? fn (): RedirectResponse => redirect()->route('contracts.show', $contract)
             : $back;
 
-        if ($amount > 0 && $request->boolean('payment_notify')) {
-            $this->whatsapp->paymentReceived($booking, $amount, $request->user()?->id);
+        // The confirmation, not the payment notice — it already states total, paid and remaining.
+        if ($request->boolean('payment_notify') && in_array($booking->status, Booking::BLOCKING_STATUSES, true)) {
+            $this->whatsapp->bookingConfirmed($booking, $request->user()?->id);
         }
 
         $state = match (true) {

@@ -26,6 +26,7 @@ import {
     LayoutDashboard,
     LifeBuoy,
     MapPin,
+    Megaphone,
     MessageCircle,
     Package as PackageIcon,
     PartyPopper,
@@ -123,7 +124,12 @@ export function useNavigation() {
                 { title: t('nav.contracts_list'), href: '/admin/halls/contracts', icon: FileSignature, perm: 'hall_contracts.view' },
                 { title: t('nav.packages'), href: '/admin/packages', icon: PackageIcon, perm: 'packages.view' },
                 { title: t('nav.event_types'), href: '/admin/event-types', icon: PartyPopper, perm: 'event_types.view' },
-                { title: t('nav.hall_contract_template'), href: '/admin/units/contract-template', icon: FileText, perm: 'hall_contract_template.view' },
+                {
+                    title: t('nav.hall_contract_template'),
+                    href: '/admin/units/contract-template',
+                    icon: FileText,
+                    perm: 'hall_contract_template.view',
+                },
                 // كل قاعة مدخل مستقل: لها حجوزاتها وفواتيرها وربحيتها، فالوصول
                 // إليها مباشرة أسرع من تصفية الشاشات العامة في كل مرة.
                 ...unitsOfType('hall').map((u) => ({
@@ -149,7 +155,12 @@ export function useNavigation() {
                 // theirs: the employee here wants this activity's contracts,
                 // not every hall rental and pool job in the business.
                 { title: t('nav.contracts_list'), href: '/admin/chalets/contracts', icon: FileSignature, perm: 'chalet_contracts.view' },
-                { title: t('nav.chalet_contract_template'), href: '/admin/units/chalet-contract-template', icon: FileText, perm: 'chalet_contract_template.view' },
+                {
+                    title: t('nav.chalet_contract_template'),
+                    href: '/admin/units/chalet-contract-template',
+                    icon: FileText,
+                    perm: 'chalet_contract_template.view',
+                },
                 ...unitsOfType('chalet').map((u) => ({
                     title: u.name,
                     href: `/admin/units/${u.id}/workspace`,
@@ -166,6 +177,7 @@ export function useNavigation() {
                 { title: t('nav.contracts_list'), href: '/admin/contracts', icon: FileSignature, perm: 'contracts.view' },
                 { title: t('nav.contract_templates'), href: '/admin/contract-templates', icon: FileText, perm: 'contract_templates.view' },
                 { title: t('nav.whatsapp_log'), href: '/admin/whatsapp-log', icon: MessageCircle, perm: 'whatsapp.view' },
+                { title: t('nav.notifications_library'), href: '/admin/notifications/library', icon: Megaphone, perm: 'notifications.view' },
             ],
         },
         {
@@ -208,7 +220,12 @@ export function useNavigation() {
                 { title: t('nav.receivables'), href: '/admin/accounting/receivables', icon: BookUser, perm: 'receivables.view' },
                 { title: t('nav.cost_centers'), href: '/admin/accounting/cost-centers', icon: PieChart, perm: 'cost_centers.view' },
                 { title: t('nav.fixed_assets'), href: '/admin/accounting/fixed-assets', icon: Armchair, perm: 'fixed_assets.view' },
-                { title: t('nav.bank_reconciliation'), href: '/admin/accounting/bank-reconciliation', icon: Landmark, perm: 'bank_reconciliation.view' },
+                {
+                    title: t('nav.bank_reconciliation'),
+                    href: '/admin/accounting/bank-reconciliation',
+                    icon: Landmark,
+                    perm: 'bank_reconciliation.view',
+                },
                 // طريقة الدفع حسابٌ نقديّ أو بنكيّ تُرحَّل إليه السندات، لا خيارَ
                 // إعداداتٍ عامّ، فمكانها مع دفاتر المحاسبة التي تُقيَّد فيها.
                 { title: t('nav.settings_payment_methods'), href: '/admin/settings/payment-methods', icon: CreditCard, perm: 'payment_methods.view' },
@@ -258,8 +275,7 @@ export function useNavigation() {
         // شاشاتٌ مساندة لا تخدم العمل اليومي: تُفتح عند الحاجة لا كل يوم،
         // فذيل القائمة مكانها كي يبقى أعلاها للعمل ولأقسام الأنظمة.
         { title: t('nav.support'), href: '/admin/tickets', icon: LifeBuoy, perm: 'tickets.view' },
-        // مخفيّان من القائمة بطلب الإدارة (الصفحتان والمساران باقيان يُفتحان بالرابط المباشر):
-        // { title: t('nav.notifications_library'), href: '/admin/notifications/library', icon: Megaphone, perm: 'notifications.view' },
+        // مخفيّة من القائمة بطلب الإدارة (الصفحة والمسار باقيان يُفتحان بالرابط المباشر):
         // { title: t('nav.about'), href: '/admin/about', icon: Lightbulb },
     ]);
 
