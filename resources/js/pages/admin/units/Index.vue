@@ -150,6 +150,14 @@ const teamMatches = computed(() => {
     );
 });
 
+/* The picker falls back to its placeholder for a value missing from the offered
+ * employees, so a manager off that list read as «بلا مدير» yet was still posted. */
+const keptManager = ref<{ id: number; name: string } | null>(null);
+
+const managerOptions = computed(() =>
+    keptManager.value ? [keptManager.value, ...props.options.managers] : props.options.managers,
+);
+
 const form = useForm({
     code: '',
     name: '',
@@ -198,6 +206,7 @@ const toggleMember = (id: number) => {
 const openCreate = () => {
     editingId.value = null;
     logoPreview.value = null;
+    keptManager.value = null;
     teamQuery.value = '';
     form.reset();
     form.clearErrors();
@@ -214,7 +223,13 @@ const openEdit = (u: Unit) => {
     form.name = u.name;
     form.logo = null;
     form.remove_logo = false;
-    form.manager_id = u.manager_id;
+    // A manager the server can still name is kept in the list; one whose file is
+    // gone leaves the unit unmanaged rather than failing the whole save.
+    keptManager.value =
+        u.manager_id && u.manager_name && !props.options.managers.some((m) => m.id === u.manager_id)
+            ? { id: u.manager_id, name: u.manager_name }
+            : null;
+    form.manager_id = u.manager_name ? u.manager_id : null;
     form.type = u.type;
     form.bookable_mode = u.bookable_mode;
     form.privacy_mode = u.privacy_mode;
@@ -813,7 +828,7 @@ const destroy = (u: Unit) => {
                                 <div class="grid gap-3 sm:grid-cols-2">
                                     <div>
                                         <label class="mb-1 block text-sm font-bold text-slate-700">مدير الوحدة</label>
-                                        <SearchableSelect v-model="form.manager_id" :options="options.managers" placeholder="— بلا مدير —" />
+                                        <SearchableSelect v-model="form.manager_id" :options="managerOptions" placeholder="— بلا مدير —" />
                                     </div>
                                 </div>
                             </div>
