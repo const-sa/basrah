@@ -208,10 +208,11 @@
 <table class="sign">
     <tr>
         <td class="col">
-            <div class="who">الإدارة</div>
+            <div class="who">المؤجر</div>
+            {{-- Signed in the let place's name, the first party named above. --}}
             <table class="ln"><tr>
                 <td class="k" style="width: 20%;">إسم:</td>
-                <td class="v" style="width: 80%;">{{ $fill($issuer['manager_name'] ?? $issuer['business_name']) }}</td>
+                <td class="v" style="width: 80%;">{{ $fill($unitName ?? $issuer['manager_name'] ?? $issuer['business_name']) }}</td>
             </tr></table>
             <table class="ln"><tr>
                 <td class="k" style="width: 20%;">التوقيع:</td>

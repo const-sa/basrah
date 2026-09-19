@@ -216,10 +216,11 @@ const hasSecurityDeposit = computed(() => Number((props.contract.security_deposi
         <table class="print-keep mt-3 w-full">
             <tr>
                 <td class="w-1/2 pl-6 align-top">
-                    <div class="who">الإدارة</div>
+                    <div class="who">المؤجر</div>
+                    <!-- Signed in the let place's name, the first party named above. -->
                     <table class="ln"><tr>
                         <td class="k" style="width: 20%">إسم:</td>
-                        <td class="v" style="width: 80%">{{ fill(issuer.manager_name ?? issuer.business_name) }}</td>
+                        <td class="v" style="width: 80%">{{ fill(contract.unit_name ?? issuer.manager_name ?? issuer.business_name) }}</td>
                     </tr></table>
                     <table class="ln"><tr>
                         <td class="k" style="width: 20%">التوقيع:</td>

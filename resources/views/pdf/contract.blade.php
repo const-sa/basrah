@@ -216,7 +216,8 @@
         <tr>
             <td>
                 <div><b>توقيع الطرف الأول</b></div>
-                <div><b>الاسم/</b> {{ $issuer['manager_name'] ?? $issuer['business_name'] }}</div>
+                {{-- The same first party named above: the let place, where there is one. --}}
+                <div><b>الاسم/</b> {{ ($isQuotation ? null : $unitName) ?? $issuer['manager_name'] ?? $issuer['business_name'] }}</div>
                 <div style="margin-top: 3pt;"><b>التوقيع/</b></div>
                 <div style="margin-top: 3pt;">
                     @if ($signaturePath)

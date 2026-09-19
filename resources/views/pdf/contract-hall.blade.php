@@ -141,7 +141,8 @@
         <td>
             <table class="ln"><tr>
                 <td class="k" style="width: 32%;">الطرف الأول المؤجر :</td>
-                <td class="v" style="width: 68%;">{{ $fill($issuer['manager_name'] ?? $issuer['business_name']) }}</td>
+                {{-- The lessor is the hall itself, not whoever manages it. --}}
+                <td class="v" style="width: 68%;">{{ $fill($unitName ?? $issuer['manager_name'] ?? $issuer['business_name']) }}</td>
             </tr></table>
             <table class="ln"><tr>
                 <td class="k" style="width: 32%;">التوقيع :</td>

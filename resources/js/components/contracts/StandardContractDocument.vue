@@ -85,6 +85,11 @@ const offered = (key: string) => props.editable && key in fields.value;
 const isQuotation = computed(() => props.contract.from_quotation);
 const isStay = computed(() => props.contract.unit_type === 'chalet');
 
+// The first party signs as the place it lets; a quotation contract has none.
+const lessorName = computed(
+    () => (isQuotation.value ? null : props.contract.unit_name) ?? props.issuer.manager_name ?? props.issuer.business_name,
+);
+
 const lines = computed(() => (props.editable ? items.value : props.contract.items) ?? []);
 
 const termsText = computed(() => (props.editable ? terms.value : props.contract.terms ?? props.contract.body));
@@ -377,9 +382,7 @@ const removeLine = (i: number) => items.value.splice(i, 1);
         <div class="print-keep mt-4 grid gap-4 border-t border-slate-900 pt-4 sm:grid-cols-2 print:grid-cols-2 print:pt-3">
             <div>
                 <div class="font-extrabold text-slate-900">توقيع الطرف الأول</div>
-                <div class="mt-1 text-sm text-slate-800">
-                    <span class="font-extrabold">الاسم/ </span>{{ issuer.manager_name ?? issuer.business_name }}
-                </div>
+                <div class="mt-1 text-sm text-slate-800"><span class="font-extrabold">الاسم/ </span>{{ lessorName }}</div>
                 <div class="mt-1 text-sm font-extrabold text-slate-800">التوقيع/</div>
                 <div class="mt-1 flex items-end gap-3">
                     <img

@@ -319,7 +319,8 @@ const remaining = computed(() => {
                 <td class="w-1/2 pl-6 align-top">
                     <table class="ln"><tr>
                         <td class="k" style="width: 30%">اسم المؤجر :</td>
-                        <td class="v" style="width: 70%">{{ fill(issuer.manager_name ?? issuer.business_name) }}</td>
+                        <!-- The lessor is the hall itself, not whoever manages it. -->
+                        <td class="v" style="width: 70%">{{ fill(contract.unit_name ?? issuer.manager_name ?? issuer.business_name) }}</td>
                     </tr></table>
                     <table class="ln"><tr>
                         <td class="k" style="width: 30%">التوقيع :</td>
