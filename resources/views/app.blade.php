@@ -8,7 +8,7 @@
              يُهيَّأ الجدول في التنصيب الأول، فلا يصحّ أن يُسقط الصفحة كلها. --}}
         @php($brand = rescue(fn () => \App\Support\SiteIdentity::brand(), ['name' => config('app.name'), 'logo_url' => null, 'favicon_url' => null], false))
 
-        <title inertia>{{ $brand['name'] ?: config('app.name', 'ديوان البصرة') }}</title>
+        <title inertia>{{ $brand['name'] ?: config('app.name', 'ديوان المسرة') }}</title>
 
         <link rel="icon" href="{{ $brand['favicon_url'] ?? $brand['logo_url'] ?? '/favicon.ico' }}">
 

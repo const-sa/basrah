@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { whatsappLink } from '@/lib/whatsapp';
 import { Link } from '@inertiajs/vue3';
 import { LogIn, Mail, MapPin, MessageCircle, Phone } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -14,16 +15,7 @@ export interface SiteOrg {
 
 const props = defineProps<{ org: SiteOrg }>();
 
-// رابط واتساب بصيغة دولية بلا + أو أصفار — نفس تطبيع البوابة في الخادم.
-const waLink = computed(() => {
-    const raw = props.org.whatsapp ?? props.org.phone;
-    if (!raw) return null;
-    let digits = raw.replace(/\D+/g, '');
-    if (digits.startsWith('00')) digits = digits.slice(2);
-    if (digits.startsWith('0')) digits = `966${digits.slice(1)}`;
-    else if (digits.length <= 9) digits = `966${digits}`;
-    return `https://wa.me/${digits}`;
-});
+const waLink = computed(() => whatsappLink(props.org.whatsapp ?? props.org.phone));
 
 const year = new Date().getFullYear();
 </script>
@@ -79,9 +71,7 @@ const year = new Date().getFullYear();
                         <Mail class="h-4 w-4" /> <span dir="ltr">{{ org.email }}</span>
                     </p>
                 </div>
-                <div class="text-sm text-slate-500 sm:text-left">
-                    © {{ year }} {{ org.name }} — جميع الحقوق محفوظة
-                </div>
+                <div class="text-sm text-slate-500 sm:text-left">© {{ year }} {{ org.name }} — جميع الحقوق محفوظة</div>
             </div>
         </footer>
     </div>
