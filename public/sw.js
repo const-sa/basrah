@@ -7,7 +7,7 @@
  * لتسريع الإقلاع ولإظهار صفحة انقطاع مفهومة، لا للعمل دون اتصال.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `bsrah-static-${VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
