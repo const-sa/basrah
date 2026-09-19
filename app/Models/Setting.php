@@ -17,6 +17,8 @@ class Setting extends Model
         // الهوية والتواصل
         'business_name', 'logo_path', 'favicon_path',
         'phone', 'whatsapp', 'email', 'address',
+        // Social accounts — a handle or a full profile link
+        'instagram', 'tiktok', 'snapchat',
         // هوية نشاط المسابح — يتاجر باسمه وشعاره وهاتفه
         'pools_name', 'pools_logo_path', 'pools_phone',
         // أوقات الحجز — فترات اليوم وأوقات الشاليه

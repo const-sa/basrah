@@ -140,6 +140,8 @@ class ChaletBookingsController extends BaseBookingsController
                 // المبلغ المتَّفق عليه في الحجز بالساعات — تفتح عليه الشاشة
                 // خانةَ المبلغ، فلا يُعاد الاتفاق كتابةً في كل تعديل.
                 'base_amount' => (float) $booking->base_amount,
+                // The agreed price, so an edit reopens on the agreement.
+                'agreed_amount' => $booking->agreed_amount !== null ? (float) $booking->agreed_amount : null,
                 'addons' => $booking->addons->mapWithKeys(
                     fn ($a) => [$a->id => (int) $a->pivot->quantity],
                 ),
@@ -220,6 +222,9 @@ class ChaletBookingsController extends BaseBookingsController
             'client_id' => ['nullable', 'exists:clients,id'],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // The price agreed with this guest, where one was agreed: it
+            // stands in for the chalet's table.
+            'agreed_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             // With tax or without it — a question about this booking: a chalet let
             // to an exempt body is invoiced without tax while the same chalet is
             // let with it to anyone else.
@@ -274,6 +279,7 @@ class ChaletBookingsController extends BaseBookingsController
                 $data['addons'] ?? [],
                 (float) ($data['discount_amount'] ?? 0),
                 (bool) ($data['is_taxable'] ?? true),
+                isset($data['agreed_amount']) ? (float) $data['agreed_amount'] : null,
             ),
         ]);
     }
@@ -390,6 +396,7 @@ class ChaletBookingsController extends BaseBookingsController
                 null,
                 $days,
                 (bool) ($data['is_taxable'] ?? true),
+                isset($data['agreed_amount']) ? (float) $data['agreed_amount'] : null,
             ),
         ]);
     }
@@ -551,6 +558,10 @@ class ChaletBookingsController extends BaseBookingsController
             'deposit_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'addons' => ['array'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // Left blank the chalet is priced from its table; written, it is
+            // the price — one guest takes the night at one price and another
+            // at another.
+            'agreed_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             // With tax or without it — a question about this booking: a chalet let
             // to an exempt body is invoiced without tax while the same chalet is
             // let with it to anyone else.

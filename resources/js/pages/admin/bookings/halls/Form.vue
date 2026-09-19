@@ -10,7 +10,7 @@ import { toHijri, weekdayName } from '@/lib/hijri';
 import { todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Info, Loader2, PartyPopper, ShieldCheck, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Handshake, Info, Loader2, PartyPopper, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -43,6 +43,8 @@ interface ExistingBooking {
     last_day_date: string;
     status: string;
     discount_amount: number;
+    /** The price agreed on this booking — null is priced from the table. */
+    agreed_amount: number | null;
     deposit_amount: number;
     /** The deposit agreed on this booking, and what is still held of it. */
     security_deposit_amount: number;
@@ -59,6 +61,8 @@ interface Quote {
     pricing: {
         base_amount: number; package_amount: number; event_fee_amount: number;
         priced_by_event: boolean;
+        /** Was the base price agreed rather than read from the table? */
+        priced_by_agreement: boolean;
         addons_amount: number; discount_amount: number;
         total_amount: number; deposit_amount: number; is_weekend: boolean;
         /** الضريبة مستخرجة من الإجمالي شاملةً لا مضافة فوقه. */
@@ -149,6 +153,9 @@ const form = useForm({
     // المناسبة يوم واحد في الغالب، والامتداد استثناء يطلبه الموظف صراحةً.
     days_count: props.booking?.days_count ?? 1,
     period: props.booking?.period ?? pre.period ?? 'full_day',
+    // The price agreed with this client. Left blank the hall is priced from
+    // its table or from the event type; written, it is the price.
+    agreed_amount: (props.booking?.agreed_amount ?? null) as number | string | null,
     // الحجز الجديد «مدفوع العربون» — وهي حالة كل حجز حتى يكتمل مبلغه.
     status: props.booking?.status ?? 'deposit_paid',
     discount_amount: props.booking?.discount_amount ?? 0,
@@ -273,12 +280,24 @@ const daysLabel = computed(() =>
 const canBookWhole = computed(() => ['whole', 'both'].includes(selectedUnit.value?.bookable_mode ?? 'both'));
 const canBookSections = computed(() => ['sections', 'both'].includes(selectedUnit.value?.bookable_mode ?? 'both'));
 
+/** The agreed price as the server reads it: a blank field is no agreement. */
+const agreedAmount = computed(() => {
+    const raw = form.agreed_amount;
+
+    return raw === null || raw === '' ? null : Number(raw);
+});
+
 /**
  * سعر النوع ثمن القاعة كاملة، فلا يسري على حجز قسم منفرد.
  * التنبيه صريح لأن الموظف يرى سعرًا على الزر ثم يجده غير مطبَّق.
  */
 const eventPriceIgnored = computed(
     () => form.scope === 'sections' && (selectedEventType.value?.price ?? 0) > 0,
+);
+
+/** An agreed price outranks the event's, so the screen says so plainly. */
+const eventPriceOverridden = computed(
+    () => agreedAmount.value !== null && (selectedEventType.value?.price ?? 0) > 0 && !eventPriceIgnored.value,
 );
 
 // تعبئة النموذج من حجز قائم ليست تبديلًا للقاعة: بدون هذا العلم يمسح المراقب
@@ -344,6 +363,7 @@ const refreshQuote = () => {
                     event_type_id: form.event_type_id,
                     package_id: form.package_id,
                     discount_amount: form.discount_amount,
+                    agreed_amount: agreedAmount.value,
                     is_taxable: form.is_taxable,
                     ignore_booking_id: props.booking?.id ?? null,
                 }),
@@ -371,7 +391,7 @@ const quoteFailure = (status: number) =>
     })[status] ?? `تعذّر احتساب السعر (${status}).`;
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, daysCount.value, form.period, form.client_id, form.event_type_id, form.package_id, form.discount_amount, form.is_taxable],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, daysCount.value, form.period, form.client_id, form.event_type_id, form.package_id, form.discount_amount, agreedAmount.value, form.is_taxable],
     refreshQuote,
     { deep: true },
 );
@@ -462,6 +482,9 @@ watch(
 const submit = () => {
     // الحقل قد يُترك فارغًا أو بقيمة خارج الحد — يُرسل مشذَّبًا كما حُسب وعُرض.
     form.days_count = daysCount.value;
+
+    // A cleared field is no agreement, not a zero price.
+    form.agreed_amount = agreedAmount.value;
 
     // ما دون الإجمالي عربون، وما أقفله سداد — والدفاتر تفرّق بينهما.
     form.payment_type = isFullSettlement.value ? 'payment' : 'deposit';
@@ -638,6 +661,30 @@ const eventBadge = (color: string) =>
                             </p>
 
                             <p v-if="form.errors.event_type_id" class="mt-1 text-sm text-red-700">{{ form.errors.event_type_id }}</p>
+                        </div>
+
+                        <!-- المبلغ المتفق عليه: يُكتب حين يُتَّفق على غير المعلن،
+                             ولا ينتظر نوع مناسبة ولا تسعيرة مكتوبة أصلًا. -->
+                        <div class="mt-4 border-t border-slate-200 pt-3">
+                            <label class="mb-1 flex items-center gap-1.5 text-[15px] font-bold text-slate-900">
+                                <Handshake class="h-4 w-4 text-slate-600" /> المبلغ المتفق عليه
+                                <span class="text-[13px] font-medium text-slate-600">(اختياري)</span>
+                            </label>
+                            <input
+                                v-model="form.agreed_amount"
+                                type="number" min="0" step="0.01" dir="ltr"
+                                placeholder="اتركه فارغًا ليُحسب من التسعيرة"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px] font-bold sm:w-64"
+                            />
+                            <p class="mt-1 text-[13px] font-medium text-slate-700">
+                                سعر هذا الحجز كما اتُّفق عليه مع العميل — يحل محل تسعيرة القاعة وسعر نوع المناسبة، ويشمل أيام المناسبة كلها.
+                            </p>
+                            <p v-if="eventPriceOverridden"
+                                class="mt-2 flex items-start gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-800">
+                                <AlertTriangle class="mt-px h-3.5 w-3.5 shrink-0" />
+                                المبلغ المتفق عليه هو سعر الحجز — سعر «{{ selectedEventType?.name }}» لا يُطبَّق ما دام مكتوبًا.
+                            </p>
+                            <p v-if="form.errors.agreed_amount" class="mt-1 text-sm text-red-700">{{ form.errors.agreed_amount }}</p>
                         </div>
                     </div>
 
@@ -856,6 +903,9 @@ const eventBadge = (color: string) =>
                             </span>
                             <span v-if="quote.pricing.priced_by_event" class="rounded-md bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-800">
                                 سعر نوع المناسبة
+                            </span>
+                            <span v-if="quote.pricing.priced_by_agreement" class="rounded-md bg-sky-100 px-2.5 py-1 text-sm font-bold text-sky-800">
+                                مبلغ متفق عليه
                             </span>
                             <span v-if="quote.pricing.is_weekend" class="rounded-md bg-amber-100 px-2.5 py-1 text-sm font-bold text-amber-800">نهاية أسبوع</span>
                         </div>

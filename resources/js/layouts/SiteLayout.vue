@@ -11,6 +11,9 @@ export interface SiteOrg {
     whatsapp: string | null;
     email: string | null;
     address: string | null;
+    instagram: string | null;
+    tiktok: string | null;
+    snapchat: string | null;
 }
 
 const props = defineProps<{ org: SiteOrg }>();

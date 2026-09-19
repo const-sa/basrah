@@ -51,6 +51,9 @@ class ChaletBookingService
             $scope = $data['scope'] ?? 'whole';
             $sectionIds = $scope === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
 
+            // What was settled with this guest, where it was settled at all.
+            $agreed = $this->agreedPrice($data);
+
             $plan = $this->plan(
                 $unit,
                 $data['period'] ?? StayPeriod::PERIOD,
@@ -68,6 +71,7 @@ class ChaletBookingService
                 // booking from the public site is never asked, so it takes the
                 // common case along with the rest of its defaults.
                 (bool) ($data['is_taxable'] ?? true),
+                $agreed,
             );
 
             $quote = $plan['quote'];
@@ -89,6 +93,9 @@ class ChaletBookingService
                 // الإقامة تُسجَّل «مدفوع العربون» كحجز القاعة — راجع BookingService.
                 'status' => $data['status'] ?? 'deposit_paid',
                 'base_amount' => $quote['base_amount'],
+                // Kept beside the base so an edit reopens on the agreement
+                // instead of pricing the stay afresh from the table.
+                'agreed_amount' => $plan['agreed_amount'],
                 'package_amount' => 0,
                 'event_fee_amount' => 0,
                 'addons_amount' => $quote['addons_amount'],
@@ -149,6 +156,8 @@ class ChaletBookingService
                 $booking->id,
                 $this->hourlyTerms($data, $booking),
                 $taxable,
+                // An edit keeps the agreement unless it is being changed.
+                $this->agreedPrice($data, $booking->agreed_amount !== null ? (float) $booking->agreed_amount : null),
             );
 
             $quote = $plan['quote'];
@@ -169,6 +178,7 @@ class ChaletBookingService
                 'starts_at' => $plan['starts_at'],
                 'ends_at' => $plan['ends_at'],
                 'base_amount' => $quote['base_amount'],
+                'agreed_amount' => $plan['agreed_amount'],
                 'package_amount' => 0,
                 'event_fee_amount' => 0,
                 'addons_amount' => $quote['addons_amount'],
@@ -256,7 +266,8 @@ class ChaletBookingService
      * @return array{
      *     quote: array<string, mixed>, period: string,
      *     starts_at: CarbonImmutable, ends_at: CarbonImmutable,
-     *     check_out_date: string|null, nights: int|null, days_count: int|null
+     *     check_out_date: string|null, nights: int|null, days_count: int|null,
+     *     agreed_amount: float|null
      * }
      *
      * @throws ValidationException
@@ -275,6 +286,7 @@ class ChaletBookingService
         ?int $ignoreId = null,
         array $hourly = [],
         bool $taxable = true,
+        ?float $agreed = null,
     ): array {
         // الحجز بالساعات: ساعتاه في الطلب لا في جدول الفترات، ومبلغه معه.
         if ($period === HourlyPeriod::PERIOD) {
@@ -298,6 +310,9 @@ class ChaletBookingService
                 'check_out_date' => null,
                 'nights' => null,
                 'days_count' => null,
+                // This shape has an agreed amount of its own — hourly_amount,
+                // which is its whole price — so the column stays empty.
+                'agreed_amount' => null,
             ];
         }
 
@@ -306,7 +321,7 @@ class ChaletBookingService
             [$startsAt, $endsAt] = StayPeriod::range($date, (string) $checkOut, $unit);
 
             return [
-                'quote' => $this->pricing->quoteStay($unit, $date, (string) $checkOut, $sectionIds, $addons, $discount, $taxable),
+                'quote' => $this->pricing->quoteStay($unit, $date, (string) $checkOut, $sectionIds, $addons, $discount, $taxable, $agreed),
                 'period' => StayPeriod::PERIOD,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
@@ -315,6 +330,7 @@ class ChaletBookingService
                 // nights and days_count do not combine — see the migration
                 // that added days_count.
                 'days_count' => null,
+                'agreed_amount' => $agreed,
             ];
         }
 
@@ -328,7 +344,7 @@ class ChaletBookingService
             // simply passes no package and no event type, which are hall
             // tools and default to null anyway.
             'quote' => $this->pricing->quote(
-                $unit, $scope, $date, $period, $sectionIds, $addons, $discount, null, null, $days, $taxable,
+                $unit, $scope, $date, $period, $sectionIds, $addons, $discount, null, null, $days, $taxable, $agreed,
             ),
             'period' => $period,
             'starts_at' => $startsAt,
@@ -338,6 +354,7 @@ class ChaletBookingService
             'check_out_date' => null,
             'nights' => null,
             'days_count' => $days,
+            'agreed_amount' => $agreed,
         ];
     }
 

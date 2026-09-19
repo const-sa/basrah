@@ -248,6 +248,8 @@ class HallBookingsController extends BaseBookingsController
                 'package_id' => $booking->package_id,
                 'event_type_id' => $booking->event_type_id,
                 'discount_amount' => (float) $booking->discount_amount,
+                // The agreed price, so an edit reopens on the agreement.
+                'agreed_amount' => $booking->agreed_amount !== null ? (float) $booking->agreed_amount : null,
             ],
             ...$this->formData($request, $booking),
         ]);
@@ -352,6 +354,9 @@ class HallBookingsController extends BaseBookingsController
             'event_type_id' => ['nullable', $this->eventTypeBelongsToUnit($request)],
             'package_id' => ['nullable', 'exists:packages,id'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // The price agreed with this client, where one was agreed: it
+            // stands in for the hall's table and for the event's price.
+            'agreed_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             // With tax or without it — a question about this booking: a hall let
             // to an exempt body is invoiced without tax while the same hall is let
             // with it to anyone else.
@@ -387,6 +392,7 @@ class HallBookingsController extends BaseBookingsController
                 isset($data['event_type_id']) ? (int) $data['event_type_id'] : null,
                 $days,
                 (bool) ($data['is_taxable'] ?? true),
+                isset($data['agreed_amount']) ? (float) $data['agreed_amount'] : null,
             ),
             // آخر يوم يُحسب في الخادم لا في المتصفح: هو ما سيُخزَّن فعلًا،
             // فيرى الموظف قبل الحفظ ما سيُقفَل بالضبط.
@@ -418,6 +424,10 @@ class HallBookingsController extends BaseBookingsController
             'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            // Left blank the hall is priced from its table; written, it is the
+            // price — one client takes the hall at one price and another at
+            // another, and the event type's price is a default, not a rule.
+            'agreed_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             // العربون المطلوب مقترحٌ من التسعيرة، والموظف يعدّله لما اتفق
             // عليه فعلًا مع العميل.
             'deposit_amount' => ['nullable', 'numeric', 'min:0'],

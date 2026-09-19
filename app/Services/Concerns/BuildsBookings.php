@@ -55,6 +55,25 @@ trait BuildsBookings
     }
 
     /**
+     * The agreed price, or null where the booking is priced from the table.
+     *
+     * A blank field means "price it as usual", so it is read as null and not
+     * as a zero. An edit that does not carry the key keeps what was agreed.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function agreedPrice(array $data, ?float $fallback = null): ?float
+    {
+        if (! array_key_exists('agreed_amount', $data)) {
+            return $fallback;
+        }
+
+        return $data['agreed_amount'] === null || $data['agreed_amount'] === ''
+            ? null
+            : round((float) $data['agreed_amount'], 2);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $lines
      */
     protected function syncSections(Booking $booking, string $scope, array $lines): void

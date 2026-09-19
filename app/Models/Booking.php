@@ -99,6 +99,8 @@ class Booking extends Model
         'ends_at',
         'status',
         'base_amount',
+        // The price agreed with the client — null is priced from the table.
+        'agreed_amount',
         'package_amount',
         'event_fee_amount',
         'addons_amount',
@@ -125,6 +127,7 @@ class Booking extends Model
             'ends_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'base_amount' => 'decimal:2',
+            'agreed_amount' => 'decimal:2',
             'package_amount' => 'decimal:2',
             'event_fee_amount' => 'decimal:2',
             'addons_amount' => 'decimal:2',

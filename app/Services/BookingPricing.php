@@ -49,9 +49,11 @@ class BookingPricing
      * @param  array<int, int>  $addons  معرّف الخدمة => الكمية
      * @param  int  $days  عدد أيام المناسبة — كل يوم يُسعَّر بيومه ثم تُجمع
      * @param  bool  $taxable  the booking's own answer — neither the unit nor its price row is asked
+     * @param  float|null  $agreed  the agreed price, standing in for the table's
      * @return array{
      *     base_amount: float, package_amount: float, event_fee_amount: float,
-     *     priced_by_event: bool, addons_amount: float, discount_amount: float,
+     *     priced_by_event: bool, priced_by_agreement: bool,
+     *     addons_amount: float, discount_amount: float,
      *     total_amount: float, deposit_amount: float, is_weekend: bool, days: int,
      *     is_taxable: bool, tax_rate: float, net_amount: float, tax_amount: float,
      *     package: array{id: int, name: string, price: float}|null,
@@ -71,8 +73,11 @@ class BookingPricing
         ?int $eventTypeId = null,
         int $days = 1,
         bool $taxable = true,
+        ?float $agreed = null,
     ): array {
         $daysCount = BookingPeriod::days($days);
+
+        $agreed = $this->agreedAmount($agreed);
 
         $eventType = $this->eventTypeFor($unit, $eventTypeId);
 
@@ -82,7 +87,9 @@ class BookingPricing
         // ويقتصر ذلك على حجز القاعة كاملة: سعر النوع ثمن القاعة كلها، وتطبيقه
         // على قسم منفرد يبيع نصف القاعة بسعر كلّها. حجز الأقسام يبقى على
         // تسعيرة الأقسام، وتنبّه الواجهة الموظف إلى ذلك.
-        $pricedByEvent = $scope === 'whole' && $eventType?->hasOwnPrice();
+        // An agreed price outranks both: what was settled with the client is
+        // the price, not the event's and not the day's.
+        $pricedByEvent = $agreed === null && $scope === 'whole' && $eventType?->hasOwnPrice();
 
         // مناسبة تمتد أيامًا تُسعَّر يومًا يومًا ثم تُجمع: نهاية الأسبوع قد تقع
         // داخل المناسبة لا على طرفها، وتسعير الأيام كلها بسعر يوم البداية
@@ -98,6 +105,9 @@ class BookingPricing
             $dayOfWeek = $day->dayOfWeek;
 
             [$amount, $lines] = match (true) {
+                // The agreed price is the whole booking's, not a day's; it is
+                // written after the loop.
+                $agreed !== null => [0.0, []],
                 (bool) $pricedByEvent => $this->eventTypeBase($unit, $eventType),
                 $scope === 'whole' => $this->wholeUnitBase($unit, $period, $dayIsWeekend, $dayOfWeek),
                 default => $this->sectionsBase($unit, $sectionIds, $period, $dayIsWeekend, $dayOfWeek),
@@ -116,6 +126,10 @@ class BookingPricing
 
         $base = round($base, 2);
         $lines = $daysCount === 1 ? $dayLines : $this->foldDayLines($dayLines);
+
+        if ($agreed !== null) {
+            [$base, $lines] = $this->agreedBase($unit, $scope, $sectionIds, $period, $agreed);
+        }
 
         [$packageTotal, $packageLines, $package] = $this->packageTotal($unit, $packageId);
         [$addonsTotal, $addonLines] = $this->addonsTotal($addons);
@@ -141,6 +155,7 @@ class BookingPricing
             'event_fee_amount' => $eventFee,
             // تقوله الواجهة للموظف: هل السعر جاء من النوع أم من جدول القاعة؟
             'priced_by_event' => (bool) $pricedByEvent,
+            'priced_by_agreement' => $agreed !== null,
             'addons_amount' => $addonsTotal,
             'discount_amount' => $discount,
             // تفصيل الضريبة يصحب الإجمالي ليرى الموظف على الشاشة ما ستحمله
@@ -175,13 +190,14 @@ class BookingPricing
      *
      * @param  list<int>  $sectionIds
      * @param  array<int, int>  $addons
+     * @param  float|null  $agreed  المبلغ المتفق عليه — يحل محل تسعيرة الليالي
      * @return array{
      *     base_amount: float, package_amount: float, event_fee_amount: float,
      *     addons_amount: float, discount_amount: float,
      *     total_amount: float, deposit_amount: float, is_weekend: bool,
      *     is_taxable: bool, tax_rate: float, net_amount: float, tax_amount: float,
      *     nights: int, weekend_nights: int, average_night: float,
-     *     package: null, event_type: null,
+     *     priced_by_agreement: bool, package: null, event_type: null,
      *     lines: list<array<string, mixed>>
      * }
      */
@@ -193,8 +209,10 @@ class BookingPricing
         array $addons = [],
         float $discount = 0,
         bool $taxable = true,
+        ?float $agreed = null,
     ): array {
         $scope = $sectionIds === [] ? 'whole' : 'sections';
+        $agreed = $this->agreedAmount($agreed);
         $nights = StayPeriod::nightDates($checkIn, $checkOut);
 
         $base = 0.0;
@@ -206,6 +224,11 @@ class BookingPricing
             $isWeekend = $this->isWeekend($date);
 
             $weekendNights += $isWeekend ? 1 : 0;
+
+            // The agreed price is the whole stay's, not a night's.
+            if ($agreed !== null) {
+                continue;
+            }
 
             [$amount, $nightLines] = $scope === 'whole'
                 ? $this->wholeUnitBase($unit, StayPeriod::PERIOD, $isWeekend, $night->dayOfWeek)
@@ -226,6 +249,11 @@ class BookingPricing
         [$addonsTotal, $addonLines] = $this->addonsTotal($addons);
 
         $base = round($base, 2);
+
+        if ($agreed !== null) {
+            [$base, $lines] = $this->agreedBase($unit, $scope, $sectionIds, StayPeriod::PERIOD, $agreed);
+        }
+
         $discount = (float) max(0, round($discount, 2));
         $net = (float) max(0, round($base + $addonsTotal - $discount, 2));
         $tax = Vat::breakdown($net, $taxable);
@@ -244,11 +272,16 @@ class BookingPricing
             'nights' => $count,
             'weekend_nights' => $weekendNights,
             'average_night' => $count > 0 ? round($base / $count, 2) : 0.0,
+            'priced_by_agreement' => $agreed !== null,
             'package' => null,
             'event_type' => null,
             // أسطر الليالي تُدمج في سطر واحد إن تشابهت، وإلا صارت قائمة
             // إقامة شهر ثلاثين سطرًا لا يقرأها أحد.
-            'lines' => [...$this->foldNightLines($lines), ...$addonLines],
+            // An agreed price is one line already, and carries no night to fold on.
+            'lines' => [
+                ...($agreed !== null ? $lines : $this->foldNightLines($lines)),
+                ...$addonLines,
+            ],
         ];
     }
 
@@ -312,6 +345,78 @@ class BookingPricing
             'event_type' => null,
             'lines' => [...$lines, ...$addonLines],
         ];
+    }
+
+    /** The agreed price, trimmed — null when nothing was agreed. */
+    private function agreedAmount(?float $agreed): ?float
+    {
+        return $agreed === null ? null : round(max(0, $agreed), 2);
+    }
+
+    /**
+     * The base price when it is agreed rather than read from the table.
+     *
+     * One line for the whole unit. Sections keep a line each — the lines are
+     * what links the booking to them and prices each one — so the agreed
+     * amount is split by what they would have cost, equally where they carry
+     * no price at all, which is the case that invites an agreement.
+     *
+     * @param  list<int>  $sectionIds
+     * @return array{0: float, 1: list<array<string, mixed>>}
+     */
+    private function agreedBase(Unit $unit, string $scope, array $sectionIds, string $period, float $amount): array
+    {
+        $label = 'مبلغ متفق عليه';
+
+        if ($scope !== 'sections' || $sectionIds === []) {
+            return [$amount, [[
+                'label' => "{$unit->name} — الوحدة كاملة ({$label})",
+                'amount' => $amount,
+            ]]];
+        }
+
+        $sections = $unit->sections()->whereIn('id', $sectionIds)->get();
+        $shares = $this->splitAmount($amount, $sections->map(
+            fn ($section) => (float) ($this->sectionPriceRow($unit, $section->id, $period)[0]?->priceFor(false) ?? 0),
+        )->all());
+
+        $lines = [];
+
+        foreach ($sections as $i => $section) {
+            $lines[] = [
+                'label' => "{$unit->name} — {$section->name} ({$label})",
+                'amount' => $shares[$i],
+                'section_id' => $section->id,
+            ];
+        }
+
+        return [$amount, $lines];
+    }
+
+    /**
+     * Split an amount by weights, the remainder on the last share so the
+     * shares still add up to it.
+     *
+     * @param  list<float>  $weights
+     * @return list<float>
+     */
+    private function splitAmount(float $amount, array $weights): array
+    {
+        $count = count($weights);
+        $total = array_sum($weights);
+        $shares = [];
+        $left = $amount;
+
+        foreach ($weights as $i => $weight) {
+            $share = $i === $count - 1
+                ? round($left, 2)
+                : round($total > 0 ? $amount * $weight / $total : $amount / $count, 2);
+
+            $shares[] = $share;
+            $left = round($left - $share, 2);
+        }
+
+        return $shares;
     }
 
     /**

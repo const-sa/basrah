@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import SnapchatIcon from '@/components/icons/SnapchatIcon.vue';
+import TiktokIcon from '@/components/icons/TiktokIcon.vue';
 import type { SiteOrg } from '@/layouts/SiteLayout.vue';
+import { socialHandle, socialLink } from '@/lib/social';
 import { whatsappLink } from '@/lib/whatsapp';
 import { Head, Link } from '@inertiajs/vue3';
 import {
@@ -9,6 +12,7 @@ import {
     CircleCheck,
     FilePen,
     Headset,
+    Instagram,
     KeyRound,
     LogIn,
     Mail,
@@ -45,6 +49,9 @@ const contacts = computed(() =>
         { icon: Phone, label: 'اتصل بنا', value: props.org.phone, href: props.org.phone ? `tel:${props.org.phone.replace(/\s+/g, '')}` : null },
         { icon: MessageCircle, label: 'واتساب', value: props.org.whatsapp ?? props.org.phone, href: waLink.value },
         { icon: Mail, label: 'البريد الإلكتروني', value: props.org.email, href: props.org.email ? `mailto:${props.org.email}` : null },
+        { icon: Instagram, label: 'انستغرام', value: socialHandle(props.org.instagram), href: socialLink('instagram', props.org.instagram) },
+        { icon: TiktokIcon, label: 'تيك توك', value: socialHandle(props.org.tiktok), href: socialLink('tiktok', props.org.tiktok) },
+        { icon: SnapchatIcon, label: 'سناب شات', value: socialHandle(props.org.snapchat), href: socialLink('snapchat', props.org.snapchat) },
     ].filter((c): c is typeof c & { value: string; href: string } => Boolean(c.value && c.href)),
 );
 const hasContact = computed(() => contacts.value.length > 0 || Boolean(props.org.address));

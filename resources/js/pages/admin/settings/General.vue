@@ -19,6 +19,9 @@ interface SettingsData {
     whatsapp: string | null;
     email: string | null;
     address: string | null;
+    instagram: string | null;
+    tiktok: string | null;
+    snapchat: string | null;
     tax_enabled: boolean;
     tax_number: string | null;
     tax_rate: number | string | null;
@@ -52,6 +55,9 @@ const form = useForm({
     whatsapp: props.settings.whatsapp ?? '',
     email: props.settings.email ?? '',
     address: props.settings.address ?? '',
+    instagram: props.settings.instagram ?? '',
+    tiktok: props.settings.tiktok ?? '',
+    snapchat: props.settings.snapchat ?? '',
     tax_enabled: props.settings.tax_enabled ?? false,
     tax_number: props.settings.tax_number ?? '',
     tax_rate: props.settings.tax_rate ?? 15,
@@ -187,7 +193,7 @@ const submit = () => {
                     <h2 class="text-lg font-bold text-slate-800">بيانات النشاط</h2>
                 </div>
                 <p class="-mt-2 mb-4 text-xs text-slate-500">
-                    الهاتف والواتساب والبريد والعنوان تظهر للزوّار في قسم «بيانات التواصل» بالصفحة الرئيسية للموقع.
+                    الهاتف والواتساب والبريد وحسابات التواصل والعنوان تظهر للزوّار في قسم «بيانات التواصل» بالصفحة الرئيسية للموقع.
                 </p>
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
@@ -248,7 +254,42 @@ const submit = () => {
                         />
                         <p v-if="form.errors.address" class="mt-1 text-xs text-red-500">{{ form.errors.address }}</p>
                     </div>
+                    <!-- Social accounts: a handle or a pasted profile link. -->
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">انستغرام</label>
+                        <input
+                            v-model="form.instagram"
+                            type="text"
+                            dir="ltr"
+                            placeholder="diwanalmasara"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
+                        <p v-if="form.errors.instagram" class="mt-1 text-xs text-red-500">{{ form.errors.instagram }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">تيك توك</label>
+                        <input
+                            v-model="form.tiktok"
+                            type="text"
+                            dir="ltr"
+                            placeholder="diwanalmasara"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
+                        <p v-if="form.errors.tiktok" class="mt-1 text-xs text-red-500">{{ form.errors.tiktok }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">سناب شات</label>
+                        <input
+                            v-model="form.snapchat"
+                            type="text"
+                            dir="ltr"
+                            placeholder="diwanalmasara"
+                            class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
+                        <p v-if="form.errors.snapchat" class="mt-1 text-xs text-red-500">{{ form.errors.snapchat }}</p>
+                    </div>
                 </div>
+                <p class="mt-3 text-xs text-slate-500">اكتب معرّف الحساب وحده أو الصق رابطه كاملًا — كلاهما يعمل.</p>
             </div>
 
             <!-- The pools activity trades under its own letterhead, printed on its contracts. -->

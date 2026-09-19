@@ -10,7 +10,7 @@ import { toHijri, weekdayName } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { usePermissions } from '@/composables/usePermissions';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, CheckCircle2, FileText, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, CheckCircle2, FileText, Handshake, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string; is_active: boolean }
@@ -48,6 +48,8 @@ interface ExistingBooking {
     ends_at: string;
     /** المبلغ المتَّفق عليه — هو مبلغ الحجز بالساعات كما أُدخل. */
     base_amount: number;
+    /** The price agreed on this booking — null is priced from the table. */
+    agreed_amount: number | null;
     status: string;
     discount_amount: number;
     /** Is this booking invoiced with tax? Stored with it, and asked again on every edit. */
@@ -75,6 +77,8 @@ interface Quote {
         days?: number;
         /** وحجز الساعات يحمل ساعاته — لا ليلة له ولا يوم. */
         hours?: number; hours_label?: string;
+        /** Was the base price agreed rather than read from the table? */
+        priced_by_agreement?: boolean;
         lines: QuoteLine[];
     } | null;
 }
@@ -160,6 +164,9 @@ const form = useForm({
     start_time: props.booking?.period === HOURLY ? timeOf(props.booking.starts_at) : '16:00',
     end_time: props.booking?.period === HOURLY ? timeOf(props.booking.ends_at) : '21:00',
     hourly_amount: props.booking?.period === HOURLY ? props.booking.base_amount : 0,
+    // The price agreed with this guest. Left blank the chalet is priced from
+    // its table; written, it is the price.
+    agreed_amount: (props.booking?.agreed_amount ?? null) as number | string | null,
     // الإقامة الجديدة «مدفوع العربون» — وهي حالة كل حجز حتى يكتمل مبلغه.
     status: props.booking?.status ?? 'deposit_paid',
     // العربون المطلوب على هذه الإقامة — يتبع التسعيرة حتى يكتبه الموظف.
@@ -443,6 +450,13 @@ const sectionId = computed<number | null>({
     },
 });
 
+/** The agreed price as the server reads it: a blank field is no agreement. */
+const agreedAmount = computed(() => {
+    const raw = form.agreed_amount;
+
+    return raw === null || raw === '' ? null : Number(raw);
+});
+
 /**
  * فحص الإتاحة واحتساب سعر الإقامة على الخادم عند كل تغيير مؤثر.
  * التسعير هنا مجموع ليالٍ لا سعر يوم، فلا يمكن اشتقاقه في الواجهة.
@@ -491,6 +505,7 @@ const refreshQuote = () => {
                     client_id: form.client_id,
                     addons: form.addons,
                     discount_amount: form.discount_amount,
+                    agreed_amount: isHourly.value ? null : agreedAmount.value,
                     is_taxable: form.is_taxable,
                     ignore_booking_id: props.booking?.id ?? null,
                 }),
@@ -503,7 +518,7 @@ const refreshQuote = () => {
 };
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.start_time, form.end_time, form.hourly_amount, form.client_id, JSON.stringify(form.addons), form.discount_amount, form.is_taxable],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, form.check_out_date, form.period, form.days_count, form.start_time, form.end_time, form.hourly_amount, form.client_id, JSON.stringify(form.addons), form.discount_amount, agreedAmount.value, form.is_taxable],
     refreshQuote,
     { deep: true },
 );
@@ -799,7 +814,7 @@ watch(
 const inlineErrorKeys = computed(() => [
     'unit_id', 'client_id', 'booking_date', 'period', 'days_count',
     'availability', 'payment_amount', 'deposit_amount', 'discount_amount', 'is_taxable', 'notes',
-    'security_deposit_amount', 'start_time', 'end_time', 'hourly_amount',
+    'security_deposit_amount', 'start_time', 'end_time', 'hourly_amount', 'agreed_amount',
     ...(isStay.value ? ['check_out_date'] : []),
 ]);
 
@@ -822,6 +837,9 @@ const submit = () => {
         ...data,
         check_out_date: isStay.value ? data.check_out_date : null,
         days_count: isStay.value || isHourly.value ? null : days.value,
+        // A cleared field is no agreement, not a zero price; and the hourly
+        // shape carries its agreement in hourly_amount instead.
+        agreed_amount: isHourly.value ? null : agreedAmount.value,
         // ما دون الإجمالي عربون، وما أقفله سداد — والدفاتر تفرّق بينهما.
         payment_type: isFullSettlement.value ? 'payment' : 'deposit',
     }));
@@ -1046,6 +1064,26 @@ const submit = () => {
                         <p v-if="isStay && overMaxNights" class="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-600">
                             أقصى مدة إقامة {{ meta.stay.max_nights }} ليلة، والمطلوب {{ nights }}.
                         </p>
+
+                        <!-- المبلغ المتفق عليه: الحجز بالساعات له خانته أعلاه،
+                             وسائر الأشكال تُسعَّر من الجدول ما لم يُكتب هنا. -->
+                        <div v-if="!isHourly" class="mt-4 border-t border-slate-200 pt-3">
+                            <label class="mb-1 flex items-center gap-1.5 text-sm font-extrabold text-slate-900">
+                                <Handshake class="h-4 w-4 text-teal-500" /> المبلغ المتفق عليه
+                                <span class="text-[11px] font-bold text-slate-500">(اختياري)</span>
+                            </label>
+                            <input
+                                v-model="form.agreed_amount"
+                                type="number" min="0" step="0.01" dir="ltr"
+                                placeholder="اتركه فارغًا ليُحسب من التسعيرة"
+                                class="w-full rounded-xl border border-slate-400 px-3 py-2.5 text-sm font-bold sm:w-64"
+                            />
+                            <p class="mt-1 text-[11px] font-semibold text-slate-600">
+                                سعر هذا الحجز كما اتُّفق عليه مع النزيل — يحل محل تسعيرة الشاليه، ويشمل
+                                {{ isStay ? 'الليالي كلها' : 'الأيام كلها' }}.
+                            </p>
+                            <p v-if="form.errors.agreed_amount" class="mt-1 text-xs text-red-500">{{ form.errors.agreed_amount }}</p>
+                        </div>
                     </div>
 
 
@@ -1166,6 +1204,9 @@ const submit = () => {
                             </span>
                             <span v-else-if="!isStay && !isHourly && pricing.is_weekend" class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
                                 يشمل نهاية الأسبوع
+                            </span>
+                            <span v-if="pricing.priced_by_agreement" class="rounded bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">
+                                مبلغ متفق عليه
                             </span>
                         </div>
 

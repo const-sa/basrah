@@ -58,6 +58,10 @@ class SiteIdentity
             'whatsapp' => $settings->whatsapp ?: $settings->phone,
             'email' => $settings->email,
             'address' => $settings->address,
+            // Handles as typed; the front end builds the profile link.
+            'instagram' => $settings->instagram,
+            'tiktok' => $settings->tiktok,
+            'snapchat' => $settings->snapchat,
         ];
     }
 }

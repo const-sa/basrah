@@ -145,6 +145,10 @@ class BookingService
             // case along with the rest of its defaults.
             $taxable = (bool) ($data['is_taxable'] ?? true);
 
+            // What was settled with this client, where it was settled at all:
+            // one client takes the hall at one price and another at another.
+            $agreed = $this->agreedPrice($data);
+
             $quote = $this->pricing->quote(
                 $unit,
                 $scope,
@@ -157,6 +161,7 @@ class BookingService
                 isset($data['event_type_id']) ? (int) $data['event_type_id'] : null,
                 $days,
                 $taxable,
+                $agreed,
             );
 
             [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days, $unit);
@@ -182,6 +187,9 @@ class BookingService
                 // بالكامل من السجل، حيث يُثبَت إيراده.
                 'status' => $data['status'] ?? 'deposit_paid',
                 'base_amount' => $quote['base_amount'],
+                // Kept beside the base so an edit reopens on the agreement
+                // instead of pricing the booking afresh from the table.
+                'agreed_amount' => $agreed,
                 'package_amount' => $quote['package_amount'],
                 'event_fee_amount' => $quote['event_fee_amount'],
                 'addons_amount' => $quote['addons_amount'],
@@ -240,6 +248,9 @@ class BookingService
 
             $this->guardAvailability($unit, $scope, $payload, $sectionIds, $booking->id);
 
+            // An edit keeps the agreement unless it is being changed.
+            $agreed = $this->agreedPrice($data, $booking->agreed_amount !== null ? (float) $booking->agreed_amount : null);
+
             $quote = $this->pricing->quote(
                 $unit,
                 $scope,
@@ -252,6 +263,7 @@ class BookingService
                 $payload['event_type_id'] ? (int) $payload['event_type_id'] : null,
                 $payload['days_count'],
                 $payload['is_taxable'],
+                $agreed,
             );
 
             [$startsAt, $endsAt] = BookingPeriod::range(
@@ -273,6 +285,7 @@ class BookingService
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 'base_amount' => $quote['base_amount'],
+                'agreed_amount' => $agreed,
                 'package_amount' => $quote['package_amount'],
                 'event_fee_amount' => $quote['event_fee_amount'],
                 'addons_amount' => $quote['addons_amount'],
