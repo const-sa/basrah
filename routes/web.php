@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AccountingController;
+use App\Http\Controllers\Admin\AccountingSettingsController;
 use App\Http\Controllers\Admin\AddonsController;
 use App\Http\Controllers\Admin\ArchiveController;
 use App\Http\Controllers\Admin\AuditLogController;
@@ -390,6 +391,10 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::put('accounting/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'update'])->middleware('perm:payment_methods.edit')->name('payment_methods.update');
     Route::patch('accounting/payment-methods/{paymentMethod}/toggle', [PaymentMethodsController::class, 'toggle'])->middleware('perm:payment_methods.edit')->name('payment_methods.toggle');
     Route::delete('accounting/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'destroy'])->middleware('perm:payment_methods.delete')->name('payment_methods.destroy');
+
+    Route::get('accounting/settings', [AccountingSettingsController::class, 'edit'])->middleware('perm:settings.view')->name('settings.accounting.edit');
+    Route::post('accounting/settings', [AccountingSettingsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.accounting.update');
+    Route::post('accounting/settings/remap', [AccountingSettingsController::class, 'remap'])->middleware('perm:settings.edit')->name('settings.accounting.remap');
 
     // الروابط القديمة تبقى تعمل: مفضّلةٌ محفوظة أو رابطٌ في رسالة لا يجوز
     // أن ينتهي إلى صفحة مفقودة لأننا رتّبنا القائمة.

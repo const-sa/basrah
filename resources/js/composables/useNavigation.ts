@@ -246,7 +246,7 @@ export function useNavigation() {
                     icon: CreditCard,
                     perm: 'payment_methods.view',
                 },
-                { title: t('nav.settings_revenue_accounts'), href: '/admin/accounting/revenue-accounts', icon: TrendingUp, perm: 'settings.view' },
+                { title: t('nav.settings_accounting'), href: '/admin/accounting/settings', icon: SlidersHorizontal, perm: 'settings.view' },
                 { title: t('nav.settings_tax'), href: '/admin/accounting/tax', icon: Percent, perm: 'settings.view' },
             ],
         },

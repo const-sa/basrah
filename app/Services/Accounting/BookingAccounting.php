@@ -21,6 +21,7 @@ class BookingAccounting
     public function __construct(
         private readonly Ledger $ledger,
         private readonly RevenueAccounts $revenueAccounts,
+        private readonly PaymentMethodAccounts $paymentMethodAccounts,
     ) {}
 
     /**
@@ -174,8 +175,11 @@ class BookingAccounting
      */
     private function treasuryAccount(BookingPayment $payment, Booking $booking): string|int
     {
-        return $this->revenueAccounts->depositForBooking($booking)
-            ?? $payment->paymentMethod()->firstOrFail()->ledgerAccount();
+        $method = $payment->paymentMethod()->firstOrFail();
+
+        return $this->paymentMethodAccounts->resolveForBooking($booking, $method)
+            ?? $this->revenueAccounts->depositForBooking($booking)
+            ?? $method->ledgerAccount();
     }
 
     /**

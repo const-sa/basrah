@@ -10,6 +10,7 @@ use App\Models\JournalLine;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\Accounting\Ledger;
+use App\Services\Accounting\PaymentMethodAccounts;
 use App\Services\Accounting\RevenueAccounts;
 use App\Support\Vat;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,7 @@ class SalesService
         private readonly InventoryService $inventory,
         private readonly Ledger $ledger,
         private readonly RevenueAccounts $revenueAccounts,
+        private readonly PaymentMethodAccounts $paymentMethodAccounts,
     ) {}
 
     /**
@@ -335,8 +337,11 @@ class SalesService
         // المقبوض يدخل حيث قرّر المشغّل لهذا النشاط — حساب المسابح البنكي
         // مثلًا. فإن لم يحدّد، فبحسب أداة الدفع؛ والآجل المدفوع جزئيًا نقدُه
         // في الصندوق (لذلك «على الحساب» تحمل deposits_to = cash).
-        $collectedAccount = $this->revenueAccounts->depositForInvoiceCenter($costCenter)
-            ?? $sale->paymentMethod()->firstOrFail()->ledgerAccount();
+        $method = $sale->paymentMethod()->firstOrFail();
+
+        $collectedAccount = $this->paymentMethodAccounts->resolveForInvoiceCenter($costCenter, $method)
+            ?? $this->revenueAccounts->depositForInvoiceCenter($costCenter)
+            ?? $method->ledgerAccount();
 
         $lines = [];
 
@@ -385,7 +390,9 @@ class SalesService
         $method = $return->paymentMethod()->firstOrFail();
         $creditAccount = $method->is_credit
             ? $method->refundAccount()
-            : ($this->revenueAccounts->depositForInvoiceCenter($costCenter) ?? $method->refundAccount());
+            : ($this->paymentMethodAccounts->resolveForInvoiceCenter($costCenter, $method)
+                ?? $this->revenueAccounts->depositForInvoiceCenter($costCenter)
+                ?? $method->refundAccount());
 
         $lines = [
             ['account' => $this->returnedRevenueAccount($return, $costCenter), 'debit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],

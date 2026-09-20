@@ -76,7 +76,7 @@ export const messages: Record<Locale, Dict> = {
         'nav.settings_general': 'الإعدادات العامة',
         'nav.settings_whatsapp': 'إعدادات الواتساب',
         'nav.settings_payment_methods': 'طرق الدفع',
-        'nav.settings_revenue_accounts': 'حسابات الإيراد',
+        'nav.settings_accounting': 'إعدادات المحاسبة',
         'nav.settings_tax': 'إعدادات الضريبة',
 
         // الهيدر
@@ -193,7 +193,7 @@ export const messages: Record<Locale, Dict> = {
         'nav.settings_general': 'General Settings',
         'nav.settings_whatsapp': 'WhatsApp Settings',
         'nav.settings_payment_methods': 'Payment Methods',
-        'nav.settings_revenue_accounts': 'Revenue Accounts',
+        'nav.settings_accounting': 'Accounting Settings',
         'nav.settings_tax': 'Tax Settings',
 
         // Header

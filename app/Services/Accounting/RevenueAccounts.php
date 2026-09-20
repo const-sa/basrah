@@ -41,6 +41,15 @@ class RevenueAccounts
      *
      * @var array<string, array{label: string, hint: string, default: string}>
      */
+    /**
+     * @var array<string, string>
+     */
+    public const SECTION_STREAMS = [
+        ActivitySegment::HALLS => 'hall_bookings',
+        ActivitySegment::CHALETS => 'chalet_bookings',
+        ActivitySegment::POOLS => 'pool_revenue',
+    ];
+
     public const STREAMS = [
         'hall_bookings' => [
             'label' => 'حجوزات القاعات',
