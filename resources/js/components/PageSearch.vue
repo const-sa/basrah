@@ -12,6 +12,7 @@ import {
     CalendarDays,
     CalendarRange,
     Contact,
+    CreditCard,
     CornerDownLeft,
     FileBarChart2,
     FileSignature,
@@ -158,6 +159,13 @@ const allPages = computed<Page[]>(() => [
 
     // المحاسبة
     {
+        // صفحة القسم نفسها — تُفتح فتُبسط شاشات المحاسبة كلها.
+        href: '/admin/accounting',
+        icon: CalculatorIcon,
+        title: t('nav.accounting'),
+        keywords: ['accounting', 'محاسبة', 'المحاسبه', 'قسم المحاسبة', 'شاشات'],
+    },
+    {
         href: '/admin/accounting/accounts',
         icon: CalculatorIcon,
         title: t('nav.accounts'),
@@ -184,6 +192,13 @@ const allPages = computed<Page[]>(() => [
         title: t('nav.revenues'),
         perm: 'revenues.view',
         keywords: ['revenue', 'إيراد', 'إيرادات', 'دخل', 'قاعات', 'شاليهات', 'مسابح'],
+    },
+    {
+        href: '/admin/accounting/revenue-statement',
+        icon: FileText,
+        title: t('nav.revenue_statement'),
+        perm: 'revenues.view',
+        keywords: ['statement', 'كشف', 'كشف حساب', 'إيراد', 'حساب الإيراد', 'رصيد'],
     },
     {
         href: '/admin/accounting/receivables',
@@ -307,6 +322,27 @@ const allPages = computed<Page[]>(() => [
         title: t('nav.settings_general'),
         perm: 'settings.view',
         keywords: ['settings', 'اعدادات', 'عامة'],
+    },
+    {
+        href: '/admin/accounting/tax',
+        icon: Receipt,
+        title: t('nav.settings_tax'),
+        perm: 'settings.view',
+        keywords: ['tax', 'vat', 'ضريبة', 'القيمة المضافة', 'الرقم الضريبي', 'نسبة'],
+    },
+    {
+        href: '/admin/accounting/payment-methods',
+        icon: CreditCard,
+        title: t('nav.settings_payment_methods'),
+        perm: 'payment_methods.view',
+        keywords: ['payment methods', 'طرق الدفع', 'نقد', 'شبكة', 'تحويل', 'آجل'],
+    },
+    {
+        href: '/admin/accounting/revenue-accounts',
+        icon: TrendingUp,
+        title: t('nav.settings_revenue_accounts'),
+        perm: 'settings.view',
+        keywords: ['revenue accounts', 'حسابات الإيراد', 'ربط', 'شجرة الحسابات', 'اعدادات'],
     },
     {
         href: '/admin/settings/whatsapp',

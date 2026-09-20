@@ -39,6 +39,7 @@ export const messages: Record<Locale, Dict> = {
         'nav.journal': 'دفتر اليومية',
         'nav.vouchers': 'السندات والخزائن',
         'nav.revenues': 'الإيرادات',
+        'nav.revenue_statement': 'كشف حساب الإيراد',
         'nav.expenses': 'المصروفات والتكاليف',
         'nav.receivables': 'ذمم العملاء والموردين',
         'nav.cost_centers': 'مراكز التكلفة',
@@ -75,8 +76,11 @@ export const messages: Record<Locale, Dict> = {
         'nav.settings_general': 'الإعدادات العامة',
         'nav.settings_whatsapp': 'إعدادات الواتساب',
         'nav.settings_payment_methods': 'طرق الدفع',
+        'nav.settings_revenue_accounts': 'حسابات الإيراد',
+        'nav.settings_tax': 'إعدادات الضريبة',
 
         // الهيدر
+        'header.back_to': 'رجوع إلى',
         'header.notifications': 'الإشعارات',
         'header.switch_lang': 'English',
         'header.search_placeholder': 'ابحث عن صفحة…',
@@ -152,6 +156,7 @@ export const messages: Record<Locale, Dict> = {
         'nav.journal': 'Journal',
         'nav.vouchers': 'Vouchers & Treasuries',
         'nav.revenues': 'Revenues',
+        'nav.revenue_statement': 'Revenue Statement',
         'nav.expenses': 'Expenses & Costs',
         'nav.receivables': 'Receivables & Payables',
         'nav.cost_centers': 'Cost Centers',
@@ -188,8 +193,11 @@ export const messages: Record<Locale, Dict> = {
         'nav.settings_general': 'General Settings',
         'nav.settings_whatsapp': 'WhatsApp Settings',
         'nav.settings_payment_methods': 'Payment Methods',
+        'nav.settings_revenue_accounts': 'Revenue Accounts',
+        'nav.settings_tax': 'Tax Settings',
 
         // Header
+        'header.back_to': 'Back to',
         'header.notifications': 'Notifications',
         'header.switch_lang': 'العربية',
         'header.search_placeholder': 'Search for a page…',

@@ -18,7 +18,10 @@ use App\Models\JournalEntry;
  */
 class BookingAccounting
 {
-    public function __construct(private readonly Ledger $ledger) {}
+    public function __construct(
+        private readonly Ledger $ledger,
+        private readonly RevenueAccounts $revenueAccounts,
+    ) {}
 
     /**
      * قيد استلام دفعة على حجز.
@@ -33,8 +36,7 @@ class BookingAccounting
             return $this->recordSecurityMovement($payment, $booking, $costCenter, $userId);
         }
 
-        // الطريقة تحمل حسابها، فلا تبقى ترجمةٌ في الكود تهبط بالمجهول على الصندوق.
-        $treasuryAccount = $payment->paymentMethod()->firstOrFail()->ledgerAccount();
+        $treasuryAccount = $this->treasuryAccount($payment, $booking);
 
         $amount = (float) $payment->amount;
         $isRefund = $payment->type === 'refund';
@@ -83,16 +85,18 @@ class BookingAccounting
 
         $lines = match ($payment->type) {
             'security_deposit' => [
-                ['account' => $payment->paymentMethod()->firstOrFail()->ledgerAccount(), 'debit' => $amount, 'cost_center_id' => $costCenter],
+                ['account' => $this->treasuryAccount($payment, $booking), 'debit' => $amount, 'cost_center_id' => $costCenter],
                 ['account' => Ledger::REFUNDABLE_DEPOSITS, 'credit' => $amount, 'cost_center_id' => $costCenter],
             ],
             'security_refund' => [
                 ['account' => Ledger::REFUNDABLE_DEPOSITS, 'debit' => $amount, 'cost_center_id' => $costCenter],
-                ['account' => $payment->paymentMethod()->firstOrFail()->ledgerAccount(), 'credit' => $amount, 'cost_center_id' => $costCenter],
+                ['account' => $this->treasuryAccount($payment, $booking), 'credit' => $amount, 'cost_center_id' => $costCenter],
             ],
             default => [
                 ['account' => Ledger::REFUNDABLE_DEPOSITS, 'debit' => $amount, 'cost_center_id' => $costCenter],
-                ...$this->revenueLines($booking, $amount, $costCenter),
+                // A kept deposit is its own kind of earning, and the operator
+                // may want it read apart from the night that was let.
+                ...$this->revenueLines($booking, $amount, $costCenter, $this->revenueAccounts->idFor('security_forfeit')),
             ],
         };
 
@@ -155,6 +159,26 @@ class BookingAccounting
     }
 
     /**
+     * The till or bank this booking's money moves through.
+     *
+     * The stream may name its own account — «مقبوض القاعات يودع في البنك
+     * الأهلي» — and it then answers for every movement on the booking: a
+     * payment in, a refund out, a security deposit held and given back. Money
+     * must leave through the door it came in by, or the account it came in on
+     * keeps a balance that was long since paid away.
+     *
+     * Where no account was named, the payment method decides as it always did:
+     * cash at the till, everything else at the bank. The method carries its own
+     * account, so no translation is left in the code to land on the till by
+     * default.
+     */
+    private function treasuryAccount(BookingPayment $payment, Booking $booking): string|int
+    {
+        return $this->revenueAccounts->depositForBooking($booking)
+            ?? $payment->paymentMethod()->firstOrFail()->ledgerAccount();
+    }
+
+    /**
      * مركز تكلفة الحجز = مركز تكلفة وحدته.
      */
     private function costCenter(Booking $booking): ?int
@@ -179,15 +203,22 @@ class BookingAccounting
      * an unbalanced entry is refused outright, and a booking that cannot be
      * posted is worse than one reported coarsely.
      *
+     * The account is the one the operator has put this activity's income on —
+     * halls and chalets may be kept apart, or share one line as they always
+     * have. Which room earned it and which account it lands on are separate
+     * questions, so the split below is unchanged by the choice.
+     *
      * @return list<array<string, mixed>>
      */
-    private function revenueLines(Booking $booking, float $amount, ?int $unitCenter): array
+    private function revenueLines(Booking $booking, float $amount, ?int $unitCenter, ?int $account = null): array
     {
+        $account ??= $this->revenueAccounts->forBooking($booking);
+
         $booking->loadMissing('sections');
         $sections = $booking->sections;
 
         if ($booking->scope !== 'sections' || $sections->isEmpty()) {
-            return [['account' => Ledger::BOOKING_REVENUE, 'credit' => $amount, 'cost_center_id' => $unitCenter]];
+            return [['account' => $account, 'credit' => $amount, 'cost_center_id' => $unitCenter]];
         }
 
         $prices = $sections->map(fn ($s) => (float) ($s->pivot->price ?? 0));
@@ -208,7 +239,7 @@ class BookingAccounting
             $left = round($left - $share, 2);
 
             $lines[] = [
-                'account' => Ledger::BOOKING_REVENUE,
+                'account' => $account,
                 'credit' => $share,
                 'cost_center_id' => CostCenter::forSection($section)->id,
                 'description' => $section->name,

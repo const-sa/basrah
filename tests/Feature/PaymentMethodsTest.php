@@ -66,10 +66,10 @@ class PaymentMethodsTest extends TestCase
     public function test_the_settings_screen_lists_the_methods_with_their_usage(): void
     {
         $this->actingAs($this->owner)
-            ->get('/admin/settings/payment-methods')
+            ->get('/admin/accounting/payment-methods')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('admin/settings/PaymentMethods')
+                ->component('admin/accounting/PaymentMethods')
                 ->has('methods', 5)
                 ->has('destinations', 2)
                 ->where('stats.active', 5));
@@ -80,7 +80,7 @@ class PaymentMethodsTest extends TestCase
      */
     public function test_a_new_method_is_added_and_appears_in_every_screen(): void
     {
-        $this->actingAs($this->owner)->post('/admin/settings/payment-methods', [
+        $this->actingAs($this->owner)->post('/admin/accounting/payment-methods', [
             'code' => 'wallet',
             'name' => 'محفظة إلكترونية',
             'deposits_to' => 'bank',
@@ -160,7 +160,7 @@ class PaymentMethodsTest extends TestCase
         $transfer = PaymentMethod::where('code', 'transfer')->firstOrFail();
 
         $this->actingAs($this->owner)
-            ->delete("/admin/settings/payment-methods/{$transfer->id}")
+            ->delete("/admin/accounting/payment-methods/{$transfer->id}")
             ->assertSessionHas('success');
 
         // الحذف أرشفة: الطريقة ترتفع من الاستعمال ويبقى صفّها للاسترجاع.
@@ -169,7 +169,7 @@ class PaymentMethodsTest extends TestCase
 
         // النقد أساسي ومستعمل معًا — يُرفض حذفه لكلا السببين.
         $this->actingAs($this->owner)
-            ->delete("/admin/settings/payment-methods/{$cash->id}")
+            ->delete("/admin/accounting/payment-methods/{$cash->id}")
             ->assertSessionHas('error');
 
         $this->assertDatabaseHas('payment_methods', ['id' => $cash->id]);
@@ -180,7 +180,7 @@ class PaymentMethodsTest extends TestCase
         $cash = PaymentMethod::where('code', 'cash')->firstOrFail();
 
         $this->actingAs($this->owner)
-            ->patch("/admin/settings/payment-methods/{$cash->id}/toggle")
+            ->patch("/admin/accounting/payment-methods/{$cash->id}/toggle")
             ->assertSessionHas('error');
 
         $this->assertTrue($cash->fresh()->is_active);
@@ -194,7 +194,7 @@ class PaymentMethodsTest extends TestCase
     {
         $account = PaymentMethod::where('code', 'account')->firstOrFail();
 
-        $this->actingAs($this->owner)->put("/admin/settings/payment-methods/{$account->id}", [
+        $this->actingAs($this->owner)->put("/admin/accounting/payment-methods/{$account->id}", [
             'code' => 'deferred',
             'name' => 'بيع آجل',
             'deposits_to' => 'bank',
@@ -213,7 +213,7 @@ class PaymentMethodsTest extends TestCase
 
     public function test_the_code_must_be_a_latin_slug(): void
     {
-        $this->actingAs($this->owner)->post('/admin/settings/payment-methods', [
+        $this->actingAs($this->owner)->post('/admin/accounting/payment-methods', [
             'code' => 'محفظة',
             'name' => 'محفظة',
             'deposits_to' => 'cash',

@@ -2,7 +2,7 @@
 import { StatusBadge } from '@/components/data-table';
 import SmallBox from '@/components/lte/SmallBox.vue';
 import { usePermissions } from '@/composables/usePermissions';
-import SettingsTabs from '@/components/SettingsTabs.vue';
+import SectionBackLink from '@/components/SectionBackLink.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -34,7 +34,8 @@ const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
-    { title: 'طرق الدفع', href: '/admin/settings/payment-methods' },
+    { title: 'المحاسبة', href: '/admin/accounting' },
+    { title: 'طرق الدفع', href: '/admin/accounting/payment-methods' },
 ];
 
 const activeCount = computed(() => props.stats.active);
@@ -77,17 +78,17 @@ const submit = () => {
     const done = { preserveScroll: true, onSuccess: () => (showModal.value = false) };
 
     if (editing.value) {
-        form.put(`/admin/settings/payment-methods/${editing.value.id}`, done);
+        form.put(`/admin/accounting/payment-methods/${editing.value.id}`, done);
     } else {
-        form.post('/admin/settings/payment-methods', done);
+        form.post('/admin/accounting/payment-methods', done);
     }
 };
 
-const toggle = (m: MethodRow) => router.patch(`/admin/settings/payment-methods/${m.id}/toggle`, {}, { preserveScroll: true });
+const toggle = (m: MethodRow) => router.patch(`/admin/accounting/payment-methods/${m.id}/toggle`, {}, { preserveScroll: true });
 
 const destroy = (m: MethodRow) => {
     if (confirm(`حذف طريقة الدفع «${m.name}»؟`)) {
-        router.delete(`/admin/settings/payment-methods/${m.id}`, { preserveScroll: true });
+        router.delete(`/admin/accounting/payment-methods/${m.id}`, { preserveScroll: true });
     }
 };
 
@@ -99,7 +100,7 @@ const destinationIcon = (key: string) => (key === 'bank' ? Landmark : Banknote);
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="space-y-4 p-5">
-            <SettingsTabs />
+            <SectionBackLink />
 
             <div>
                 <h1 class="text-2xl font-extrabold text-slate-900">طرق الدفع</h1>

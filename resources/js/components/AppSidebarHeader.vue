@@ -6,14 +6,42 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useLocale } from '@/composables/useLocale';
+import { useNavigation } from '@/composables/useNavigation';
 import type { BreadcrumbItemType, SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Bell, ChevronDown, Languages } from 'lucide-vue-next';
+import { ArrowRight, Bell, ChevronDown, Languages } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-defineProps<{
+const props = defineProps<{
     breadcrumbs?: BreadcrumbItemType[];
 }>();
+
+/**
+ * الرجوع درجةً واحدة إلى أعلى — لا رجوعَ المتصفّح.
+ *
+ * كانت كل شاشة تُفتح بلا بابٍ للخروج منها إلا القائمة الجانبية، وهي تُطوى
+ * على الجوال فيبقى المستخدم حيث دخل. و«رجوع المتصفّح» لا يصلح بديلًا: من
+ * فتح الشاشة برابطٍ مباشر لا تاريخ له يرجع إليه، ومن أعاد التحميل بعد حفظٍ
+ * يعود إلى الطلب نفسه. الوجهة هنا محسوبة من شجرة التنقّل فهي ثابتة مهما كان
+ * الطريق إلى الصفحة.
+ */
+const { backTarget } = useNavigation();
+
+/**
+ * مسار التنقّل مع قسمه: الصفحات تكتب «لوحة التحكم › الشاشة» فيسقط القسم
+ * بينهما، فلا يبقى في الترويسة ما يدلّ على مكان الشاشة ولا ما يُنقر للعودة
+ * إليه. يُدسّ القسم قبل آخر درجة إن لم يكن مكتوبًا أصلًا.
+ */
+const trail = computed<BreadcrumbItemType[]>(() => {
+    const items = props.breadcrumbs ?? [];
+    const back = backTarget.value;
+
+    if (!back || items.length === 0) return items;
+    if (items.some((item) => item.href === back.href)) return items;
+    if (items[items.length - 1].href === back.href) return items;
+
+    return [...items.slice(0, -1), { title: back.title, href: back.href }, items[items.length - 1]];
+});
 
 const page = usePage<SharedData>();
 const user = page.props.auth?.user;
@@ -47,19 +75,33 @@ const brand = computed(() => page.props.brand ?? { name: '', logo_url: null });
             <span class="hidden max-w-[9rem] truncate text-sm font-extrabold text-slate-800 lg:inline">{{ brand.name }}</span>
         </Link>
 
-        <template v-if="breadcrumbs && breadcrumbs.length > 0">
+        <!-- باب الخروج من الشاشة: أول ما تقع عليه العين بعد الشعار، وقبل
+             المسار كي يُقرأ «ارجع إلى كذا» ثم «أنت هنا». -->
+        <Link
+            v-if="backTarget"
+            :href="backTarget.href"
+            :title="`${t('header.back_to')} ${backTarget.title}`"
+            class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 transition hover:border-[#0BA6CE] hover:bg-[#E6F7FB] hover:text-[#0BA6CE]"
+        >
+            <ArrowRight class="h-4 w-4 shrink-0 ltr:rotate-180 rtl:rotate-0" />
+            <span class="hidden max-w-[10rem] truncate md:inline">{{ backTarget.title }}</span>
+        </Link>
+
+        <template v-if="trail.length > 0">
             <Breadcrumb class="hidden min-w-0 sm:block">
                 <BreadcrumbList class="flex-nowrap text-slate-600">
-                    <template v-for="(item, index) in breadcrumbs" :key="index">
+                    <template v-for="(item, index) in trail" :key="index">
                         <BreadcrumbItem class="whitespace-nowrap">
-                            <template v-if="index === breadcrumbs.length - 1">
+                            <template v-if="index === trail.length - 1">
                                 <BreadcrumbPage class="font-extrabold text-[#0BA6CE]">{{ item.title }}</BreadcrumbPage>
                             </template>
                             <template v-else>
-                                <BreadcrumbLink :href="item.href" class="font-semibold text-[#0BA6CE]/80 hover:text-[#0BA6CE]">{{ item.title }}</BreadcrumbLink>
+                                <BreadcrumbLink :href="item.href" class="font-semibold text-[#0BA6CE]/80 hover:text-[#0BA6CE]">{{
+                                    item.title
+                                }}</BreadcrumbLink>
                             </template>
                         </BreadcrumbItem>
-                        <BreadcrumbSeparator v-if="index !== breadcrumbs.length - 1" />
+                        <BreadcrumbSeparator v-if="index !== trail.length - 1" />
                     </template>
                 </BreadcrumbList>
             </Breadcrumb>
@@ -70,7 +112,7 @@ const brand = computed(() => page.props.brand ?? { name: '', logo_url: null });
             <PageSearch />
         </div>
 
-        <div class="flex shrink-0 items-center gap-2 ltr:ml-auto rtl:mr-auto sm:ltr:ml-0 sm:rtl:mr-0">
+        <div class="flex shrink-0 items-center gap-2 ltr:ml-auto sm:ltr:ml-0 rtl:mr-auto sm:rtl:mr-0">
             <div class="sm:hidden">
                 <PageSearch compact />
             </div>

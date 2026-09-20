@@ -27,6 +27,8 @@ class PurgeTrialData extends Command
         'packages', 'package_items', 'addons',
         'items', 'item_categories', 'item_groups', 'item_group_items', 'item_components', 'measure_units',
         'accounts', 'cost_centers', 'treasuries', 'payment_methods', 'expense_categories',
+        // أين يُرحَّل كل إيراد — إعدادٌ يُضبط مرة ويبقى بعد تسليم النظام.
+        'revenue_accounts',
         'cities', 'event_types', 'employee_groups',
         'contract_templates', 'notification_templates',
     ];

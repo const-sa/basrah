@@ -6,9 +6,11 @@ use App\Models\Client;
 use App\Models\CostCenter;
 use App\Models\Item;
 use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Services\Accounting\Ledger;
+use App\Services\Accounting\RevenueAccounts;
 use App\Support\Vat;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -25,6 +27,7 @@ class SalesService
     public function __construct(
         private readonly InventoryService $inventory,
         private readonly Ledger $ledger,
+        private readonly RevenueAccounts $revenueAccounts,
     ) {}
 
     /**
@@ -329,9 +332,11 @@ class SalesService
         $paid = round(min($total, max(0, (float) $sale->paid_amount)), 2);
         $due = round($total - $paid, 2);
 
-        // المقبوض يدخل بحسب أداة الدفع؛ والآجل المدفوع جزئيًا نقدُه في الصندوق
-        // (لذلك «على الحساب» تحمل deposits_to = cash).
-        $collectedAccount = $sale->paymentMethod()->firstOrFail()->ledgerAccount();
+        // المقبوض يدخل حيث قرّر المشغّل لهذا النشاط — حساب المسابح البنكي
+        // مثلًا. فإن لم يحدّد، فبحسب أداة الدفع؛ والآجل المدفوع جزئيًا نقدُه
+        // في الصندوق (لذلك «على الحساب» تحمل deposits_to = cash).
+        $collectedAccount = $this->revenueAccounts->depositForInvoiceCenter($costCenter)
+            ?? $sale->paymentMethod()->firstOrFail()->ledgerAccount();
 
         $lines = [];
 
@@ -345,7 +350,11 @@ class SalesService
             $lines[] = ['account' => $collectedAccount, 'debit' => $total, 'cost_center_id' => $costCenter];
         }
 
-        $lines[] = ['account' => Ledger::SALES_REVENUE, 'credit' => $total, 'cost_center_id' => $costCenter];
+        // The pools invoice their own work, and the operator may keep that
+        // income on its own account — the centre the sale earns on says which.
+        $revenueAccount = $this->revenueAccounts->forInvoiceCenter($costCenter);
+
+        $lines[] = ['account' => $revenueAccount, 'credit' => $total, 'cost_center_id' => $costCenter];
 
         // تكلفة المبيعات تُثبت فقط إن كان للمباع تكلفة (الخدمي بلا تكلفة).
         if ((float) $sale->cost_amount > 0) {
@@ -371,10 +380,15 @@ class SalesService
         $costCenter = $this->costCenterFor($return);
 
         // الآجل يعود على ذمة العميل لا على الخزينة — المال لم يُقبض منه أصلًا.
-        $creditAccount = $return->paymentMethod()->firstOrFail()->refundAccount();
+        // وما قُبض فعلًا يخرج من حيث دخل: حساب إيداع النشاط إن حُدِّد، وإلا
+        // فحساب أداة الدفع.
+        $method = $return->paymentMethod()->firstOrFail();
+        $creditAccount = $method->is_credit
+            ? $method->refundAccount()
+            : ($this->revenueAccounts->depositForInvoiceCenter($costCenter) ?? $method->refundAccount());
 
         $lines = [
-            ['account' => Ledger::SALES_REVENUE, 'debit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],
+            ['account' => $this->returnedRevenueAccount($return, $costCenter), 'debit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],
             ['account' => $creditAccount, 'credit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],
         ];
 
@@ -391,6 +405,39 @@ class SalesService
             $return,
             $return->user_id,
         );
+    }
+
+    /**
+     * The account a return debits — the one its own sale credited.
+     *
+     * Read off the original invoice's entry rather than resolved afresh: the
+     * revenue account for an activity may have been changed between the sale
+     * and the return, and taking the money back out of the new account would
+     * leave the old one overstated and the new one negative, for a refund that
+     * balanced perfectly in the till.
+     */
+    private function returnedRevenueAccount(Sale $return, int $costCenter): int
+    {
+        $original = $return->original_sale_id;
+
+        if ($original) {
+            $account = JournalLine::query()
+                ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
+                ->join('accounts', 'accounts.id', '=', 'journal_lines.account_id')
+                ->where('journal_entries.reference_type', Sale::class)
+                ->where('journal_entries.reference_id', $original)
+                ->whereIn('journal_entries.status', JournalEntry::EFFECTIVE_STATUSES)
+                ->where('accounts.type', 'revenue')
+                ->where('journal_lines.credit', '>', 0)
+                ->orderBy('journal_lines.id')
+                ->value('journal_lines.account_id');
+
+            if ($account) {
+                return (int) $account;
+            }
+        }
+
+        return $this->revenueAccounts->forInvoiceCenter($costCenter);
     }
 
     /**

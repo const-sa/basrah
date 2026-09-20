@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\Channels\DatabaseChannel;
 use App\Observers\AuditObserver;
 use App\Observers\NotifyObserver;
+use App\Services\Accounting\RevenueAccounts;
 use App\Support\ActivitySegment;
 use App\Support\BookingTimes;
 use App\Support\NotificationRegistry;
@@ -33,6 +34,11 @@ class AppServiceProvider extends ServiceProvider
         // The centre → activity map is one query, read on every scoped
         // permission check, so it resolves once per request rather than per call.
         $this->app->scoped(ActivitySegment::class);
+
+        // Which account each revenue posts to is read once per booking, sale
+        // and return, and changes only when the settings screen is saved —
+        // which clears the instance it is saved through.
+        $this->app->scoped(RevenueAccounts::class);
 
         // Our database channel writes the inbox's own columns beside Laravel's.
         $this->app->bind(BaseDatabaseChannel::class, DatabaseChannel::class);

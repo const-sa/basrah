@@ -53,6 +53,14 @@ const toggleMenu = (item: NavItem) => {
     menuState.value = { ...menuState.value, [item.title]: !isOpen(item) };
     persist();
 };
+
+/**
+ * قسمٌ له صفحةٌ تعرض شاشاته — مسارُه طريقٌ حقيقيّ لا مرساة (‎#accounting‎).
+ *
+ * مثله يُفتح بنقرة تنقل إلى صفحته، فتُبسط شاشاته بأيقوناتها في مساحة الصفحة
+ * بدل عمودٍ ضيّق يُقرأ سطرًا سطرًا.
+ */
+const hasOwnPage = (item: NavItem) => !item.href.startsWith('#');
 </script>
 
 <template>
@@ -60,8 +68,18 @@ const toggleMenu = (item: NavItem) => {
         <SidebarGroupLabel>القائمة</SidebarGroupLabel>
         <SidebarMenu>
             <template v-for="item in items" :key="item.title">
+                <!-- Section with a page of its own: one link, no unfolding -->
+                <SidebarMenuItem v-if="item.children && item.children.length > 0 && hasOwnPage(item)">
+                    <SidebarMenuButton as-child :is-active="isActive(item.href) || isGroupActive(item)">
+                        <Link :href="item.href" class="relative">
+                            <component :is="item.icon" v-if="item.icon" />
+                            <span>{{ item.title }}</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+
                 <!-- Parent with children -->
-                <SidebarMenuItem v-if="item.children && item.children.length > 0">
+                <SidebarMenuItem v-else-if="item.children && item.children.length > 0">
                     <SidebarMenuButton @click="toggleMenu(item)" :is-active="isGroupActive(item)" class="cursor-pointer">
                         <component :is="item.icon" v-if="item.icon" />
                         <span>{{ item.title }}</span>

@@ -32,9 +32,9 @@ class GeneralSettingsController extends Controller
                 'instagram' => $settings->instagram,
                 'tiktok' => $settings->tiktok,
                 'snapchat' => $settings->snapchat,
-                'tax_enabled' => $settings->tax_enabled,
-                'tax_number' => $settings->tax_number,
-                'tax_rate' => $settings->tax_rate,
+                // الضريبة انتقلت إلى المحاسبة (TaxSettingsController): نسبتها
+                // تدخل في كل فاتورة، فمكانها القسم الذي يُحاسب بها. والسجل
+                // التجاري يبقى هنا — بيانُ هويةٍ يُطبع في الترويسة كالهاتف.
                 'commercial_register' => $settings->commercial_register,
                 'manager_name' => $settings->manager_name,
                 'manager_signature_url' => $settings->manager_signature_path ? asset($settings->manager_signature_path) : null,
@@ -59,9 +59,6 @@ class GeneralSettingsController extends Controller
             'instagram' => ['nullable', 'string', 'max:255'],
             'tiktok' => ['nullable', 'string', 'max:255'],
             'snapchat' => ['nullable', 'string', 'max:255'],
-            'tax_enabled' => ['boolean'],
-            'tax_number' => ['nullable', 'string', 'max:100'],
-            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'commercial_register' => ['nullable', 'string', 'max:100'],
             'manager_name' => ['nullable', 'string', 'max:255'],
             'finance_manager_name' => ['nullable', 'string', 'max:255'],
@@ -87,9 +84,6 @@ class GeneralSettingsController extends Controller
             'instagram' => $data['instagram'] ?? null,
             'tiktok' => $data['tiktok'] ?? null,
             'snapchat' => $data['snapchat'] ?? null,
-            'tax_enabled' => $data['tax_enabled'] ?? false,
-            'tax_number' => $data['tax_number'] ?? null,
-            'tax_rate' => $data['tax_rate'] ?? 15,
             'commercial_register' => $data['commercial_register'] ?? null,
             'manager_name' => $data['manager_name'] ?? null,
             'finance_manager_name' => $data['finance_manager_name'] ?? null,

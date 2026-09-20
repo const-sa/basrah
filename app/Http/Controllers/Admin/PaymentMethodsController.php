@@ -36,7 +36,7 @@ class PaymentMethodsController extends Controller
             'usage_count' => $m->usageCount(),
         ]);
 
-        return Inertia::render('admin/settings/PaymentMethods', [
+        return Inertia::render('admin/accounting/PaymentMethods', [
             'methods' => $methods,
             'destinations' => collect(PaymentMethod::DESTINATIONS)
                 ->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])

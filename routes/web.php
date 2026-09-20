@@ -43,11 +43,15 @@ use App\Http\Controllers\Admin\PurchaseController;
 use App\Http\Controllers\Admin\QuotationController;
 use App\Http\Controllers\Admin\ReceivablesController;
 use App\Http\Controllers\Admin\ReportsController;
+use App\Http\Controllers\Admin\RevenueAccountsController;
 use App\Http\Controllers\Admin\RevenuesController;
+use App\Http\Controllers\Admin\RevenueStatementController;
 use App\Http\Controllers\Admin\RolesController;
 use App\Http\Controllers\Admin\SalesController;
 use App\Http\Controllers\Admin\SearchController;
+use App\Http\Controllers\Admin\SectionHubController;
 use App\Http\Controllers\Admin\SuppliersController;
+use App\Http\Controllers\Admin\TaxSettingsController;
 use App\Http\Controllers\Admin\TicketsController;
 use App\Http\Controllers\Admin\UnitsController;
 use App\Http\Controllers\Admin\UnitWorkspaceController;
@@ -361,6 +365,37 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     |--------------------------------------------------------------------------
     */
     // The activities reach their own spend registers through this gate too.
+    // صفحة قسم المحاسبة — شاشاته مبسوطةً بأيقوناتها بدل قائمةٍ جانبية.
+    //
+    // حارسها «المحاسبة» وحدها لا المجموعة التي تشاركها الأنشطة: من يملك شاشةً
+    // محاسبيةً واحدة يفتحها، ومن لا يملك منها شيئًا لا تُفتح له صفحةٌ فارغة.
+    Route::get('accounting', [SectionHubController::class, 'accounting'])
+        ->middleware('system:accounting')->name('accounting.hub');
+
+    // إعدادات المحاسبة — مكانها القسم الذي تحكمه لا صفحة الإعدادات العامة:
+    // نسبةُ الضريبة تُحتسب في كل فاتورة، وطريقةُ الدفع حسابٌ يُرحَّل عليه،
+    // وحساباتُ الإيراد وجهةُ كل قيد دخل. ومن يفتح المحاسبة يضبطها من داخلها.
+    //
+    // حرّاسها تبقى كما كانت — المسار انتقل والصلاحية لا: من كان يضبطها أمس
+    // يضبطها اليوم، ونقلُ شاشةٍ في القائمة ليس قرارًا بمن يدخلها.
+    Route::get('accounting/tax', [TaxSettingsController::class, 'edit'])->middleware('perm:settings.view')->name('settings.tax.edit');
+    Route::post('accounting/tax', [TaxSettingsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.tax.update');
+
+    Route::get('accounting/revenue-accounts', [RevenueAccountsController::class, 'edit'])->middleware('perm:settings.view')->name('settings.revenue_accounts.edit');
+    Route::post('accounting/revenue-accounts', [RevenueAccountsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.revenue_accounts.update');
+
+    // طرق الدفع — تقرأها شاشات الحجوزات والكاشير والسندات
+    Route::get('accounting/payment-methods', [PaymentMethodsController::class, 'index'])->middleware('perm:payment_methods.view')->name('payment_methods.index');
+    Route::post('accounting/payment-methods', [PaymentMethodsController::class, 'store'])->middleware('perm:payment_methods.create')->name('payment_methods.store');
+    Route::put('accounting/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'update'])->middleware('perm:payment_methods.edit')->name('payment_methods.update');
+    Route::patch('accounting/payment-methods/{paymentMethod}/toggle', [PaymentMethodsController::class, 'toggle'])->middleware('perm:payment_methods.edit')->name('payment_methods.toggle');
+    Route::delete('accounting/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'destroy'])->middleware('perm:payment_methods.delete')->name('payment_methods.destroy');
+
+    // الروابط القديمة تبقى تعمل: مفضّلةٌ محفوظة أو رابطٌ في رسالة لا يجوز
+    // أن ينتهي إلى صفحة مفقودة لأننا رتّبنا القائمة.
+    Route::redirect('settings/payment-methods', '/admin/accounting/payment-methods', 301);
+    Route::redirect('settings/revenue-accounts', '/admin/accounting/revenue-accounts', 301);
+
     Route::middleware('system:accounting|halls|chalets|pools')->group(function () {
         Route::get('accounting/accounts', [AccountingController::class, 'accounts'])->middleware('perm:accounts.view')->name('accounts.index');
         Route::post('accounting/accounts', [AccountingController::class, 'storeAccount'])->middleware('perm:accounts.create')->name('accounts.store');
@@ -412,6 +447,10 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         // والشاليهات والمسابح
         Route::get('accounting/revenues', [RevenuesController::class, 'index'])->middleware('perm:revenues.view')->name('revenues.index');
         Route::get('accounting/revenues/export', [RevenuesController::class, 'export'])->middleware('perm:revenues.export')->name('revenues.export');
+
+        // كشف حساب إيراد واحد — يُختار الإيراد فيُفتح حسابه بحركته ورصيده
+        Route::get('accounting/revenue-statement', [RevenueStatementController::class, 'index'])->middleware('perm:revenues.view')->name('revenue_statement.index');
+        Route::get('accounting/revenue-statement/export', [RevenueStatementController::class, 'export'])->middleware('perm:revenues.export')->name('revenue_statement.export');
 
         // المصروفات والتكاليف (§9) — سندات صرف بوجهٍ تشغيلي
         Route::get('accounting/expenses', [ExpensesController::class, 'index'])->middleware('perm:expenses.view')->name('expenses.index');
@@ -551,13 +590,6 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::put('clients/{client}', [ClientsController::class, 'update'])->name('clients.update');
     Route::patch('clients/{client}/toggle', [ClientsController::class, 'toggle'])->name('clients.toggle');
     Route::delete('clients/{client}', [ClientsController::class, 'destroy'])->name('clients.destroy');
-
-    // طرق الدفع — تُدار من الإعدادات وتقرأها شاشات الحجوزات والكاشير والسندات
-    Route::get('settings/payment-methods', [PaymentMethodsController::class, 'index'])->middleware('perm:payment_methods.view')->name('payment_methods.index');
-    Route::post('settings/payment-methods', [PaymentMethodsController::class, 'store'])->middleware('perm:payment_methods.create')->name('payment_methods.store');
-    Route::put('settings/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'update'])->middleware('perm:payment_methods.edit')->name('payment_methods.update');
-    Route::patch('settings/payment-methods/{paymentMethod}/toggle', [PaymentMethodsController::class, 'toggle'])->middleware('perm:payment_methods.edit')->name('payment_methods.toggle');
-    Route::delete('settings/payment-methods/{paymentMethod}', [PaymentMethodsController::class, 'destroy'])->middleware('perm:payment_methods.delete')->name('payment_methods.destroy');
 
     // المدن
     Route::get('cities', [CitiesController::class, 'index'])->middleware('perm:cities.view')->name('cities.index');

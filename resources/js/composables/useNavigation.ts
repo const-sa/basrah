@@ -30,6 +30,7 @@ import {
     MessageCircle,
     Package as PackageIcon,
     PartyPopper,
+    Percent,
     PieChart,
     Receipt,
     Ruler,
@@ -67,6 +68,9 @@ export type GuardedNavItem = NavItem & { perm?: string; shared?: boolean; childr
  * فصفحة الإنشاء تحت «حجوزات القاعات» تُبقي القسم مضاءً.
  */
 export const urlBelongsTo = (currentUrl: string, href: string): boolean => currentUrl === href || currentUrl.startsWith(`${href}/`);
+
+/** لوحة التحكم — جذر القسم الإداري، ووجهة الرجوع حين لا يكون فوق الصفحة غيرها. */
+export const DASHBOARD_HREF = '/admin';
 
 /**
  * المدخل الذي يمثّل الصفحة المفتوحة من بين إخوته — أطولُ مسارٍ مطابق يفوز.
@@ -205,8 +209,12 @@ export function useNavigation() {
             ],
         },
         {
+            // A section with a page of its own: its href is a route, not an
+            // anchor, so the sidebar links to it instead of unfolding thirteen
+            // rows into a column too narrow to scan. The children stay here —
+            // the page is built from them, and so are the shortcut chips.
             title: t('nav.accounting'),
-            href: '#accounting',
+            href: '/admin/accounting',
             icon: CalculatorIcon,
             children: [
                 { title: t('nav.accounts'), href: '/admin/accounting/accounts', icon: CalculatorIcon, perm: 'accounts.view' },
@@ -216,6 +224,8 @@ export function useNavigation() {
                 { title: t('nav.journal'), href: '/admin/accounting/journal', icon: FileText, perm: 'journal.view' },
                 { title: t('nav.vouchers'), href: '/admin/accounting/vouchers', icon: Receipt, perm: 'vouchers.view' },
                 { title: t('nav.revenues'), href: '/admin/accounting/revenues', icon: TrendingUp, perm: 'revenues.view' },
+                // شاشة الإيرادات تجمع؛ وهذه تفتح حسابًا واحدًا بحركته ورصيده.
+                { title: t('nav.revenue_statement'), href: '/admin/accounting/revenue-statement', icon: FileText, perm: 'revenues.view' },
                 { title: t('nav.expenses'), href: '/admin/accounting/expenses', icon: Receipt, perm: 'expenses.view' },
                 { title: t('nav.receivables'), href: '/admin/accounting/receivables', icon: BookUser, perm: 'receivables.view' },
                 { title: t('nav.cost_centers'), href: '/admin/accounting/cost-centers', icon: PieChart, perm: 'cost_centers.view' },
@@ -226,10 +236,18 @@ export function useNavigation() {
                     icon: Landmark,
                     perm: 'bank_reconciliation.view',
                 },
-                // طريقة الدفع حسابٌ نقديّ أو بنكيّ تُرحَّل إليه السندات، لا خيارَ
-                // إعداداتٍ عامّ، فمكانها مع دفاتر المحاسبة التي تُقيَّد فيها.
-                { title: t('nav.settings_payment_methods'), href: '/admin/settings/payment-methods', icon: CreditCard, perm: 'payment_methods.view' },
                 { title: t('nav.fin_reports'), href: '/admin/accounting/reports', icon: FileBarChart2, perm: 'fin_reports.view' },
+                // إعدادات القسم في ذيله: تُضبط مرةً وتُقرأ في كل شاشة فوقها —
+                // نسبةُ الضريبة في كل فاتورة، وطريقةُ الدفع حسابٌ يُرحَّل عليه،
+                // وحساباتُ الإيراد وجهةُ كل قيد دخل.
+                {
+                    title: t('nav.settings_payment_methods'),
+                    href: '/admin/accounting/payment-methods',
+                    icon: CreditCard,
+                    perm: 'payment_methods.view',
+                },
+                { title: t('nav.settings_revenue_accounts'), href: '/admin/accounting/revenue-accounts', icon: TrendingUp, perm: 'settings.view' },
+                { title: t('nav.settings_tax'), href: '/admin/accounting/tax', icon: Percent, perm: 'settings.view' },
             ],
         },
         {
@@ -300,5 +318,56 @@ export function useNavigation() {
             .filter((item): item is GuardedNavItem => item !== null),
     );
 
-    return { navItems };
+    /**
+     * وجهة الرجوع من الصفحة المفتوحة: الدرجة التي فوقها في شجرة التنقّل.
+     *
+     * تُحسب من الشجرة نفسها لا من قائمةٍ مكتوبة بجانبها، فالشاشة التي تُضاف
+     * إلى القائمة يصير لها رجوعٌ من تلقائه. وترتيب البحث من الأخصّ إلى الأعمّ:
+     *
+     *  - صفحةٌ فرعية داخل شاشة (‏/bookings/halls/5/edit) ترجع إلى شاشتها.
+     *  - شاشةٌ داخل قسمٍ له صفحة (المحاسبة) ترجع إلى صفحة القسم.
+     *  - ما عدا ذلك يرجع إلى لوحة التحكم، وهي وحدها بلا رجوع.
+     *
+     * أقسام القائمة التي مرساتها وسمٌ (‏#halls) لا صفحة لها تُفتح، فلا تصلح
+     * وجهةً — الرجوع منها إلى اللوحة.
+     */
+    const backTarget = computed<{ title: string; href: string } | null>(() => {
+        const url = usePage().url.split(/[?#]/)[0];
+        if (url === DASHBOARD_HREF) return null;
+
+        const dashboard = { title: t('nav.dashboard'), href: DASHBOARD_HREF };
+
+        // أطولُ مسارٍ مطابق يفوز: «تقويم القاعات» بادئةُ «التقويم الشهري»، فلو
+        // فاز الأقصر لصار رجوعُ الشهري إليه لا إلى قسمه.
+        //
+        // ثم القسم الذي له صفحة تُفتح: شاشةٌ تعرضها قائمتان (المورّدون في
+        // المسابح وفي المحاسبة) خيرُ رجوعٍ منها ما كان صفحةً لا لوحةَ تحكم.
+        const rank = (e: { group: GuardedNavItem; child: GuardedNavItem }) => [
+            e.child.href.length,
+            e.group.href.startsWith('/') ? 1 : 0,
+            e.child.shared ? 0 : 1,
+        ];
+
+        const owner = navItems.value
+            .flatMap((group) => (group.children ?? []).map((child) => ({ group, child: child as GuardedNavItem })))
+            .filter(({ child }) => urlBelongsTo(url, child.href))
+            .sort((a, b) => {
+                const [x, y] = [rank(a), rank(b)];
+                return y[0] - x[0] || y[1] - x[1] || y[2] - x[2];
+            })[0];
+
+        if (owner) {
+            // داخل الشاشة لا عليها: الرجوع خطوةٌ واحدة إلى الشاشة نفسها.
+            if (url !== owner.child.href) return { title: owner.child.title, href: owner.child.href };
+
+            return owner.group.href.startsWith('/') ? { title: owner.group.title, href: owner.group.href } : dashboard;
+        }
+
+        // مدخلٌ مفرد (التقارير، الدعم) أو صفحةٌ خارج الشجرة كلها.
+        const top = navItems.value.find((item) => !item.children && item.href !== DASHBOARD_HREF && urlBelongsTo(url, item.href));
+
+        return top && url !== top.href ? { title: top.title, href: top.href } : dashboard;
+    });
+
+    return { navItems, backTarget };
 }
