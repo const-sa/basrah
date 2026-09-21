@@ -8,7 +8,7 @@
  */
 import { usePermissions } from '@/composables/usePermissions';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Clock, DatabaseBackup, MessageCircle, SlidersHorizontal } from 'lucide-vue-next';
+import { Clock, DatabaseBackup, SlidersHorizontal } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const page = usePage();
@@ -17,7 +17,6 @@ const { can } = usePermissions();
 const tabs = [
     { label: 'الإعدادات العامة', href: '/admin/settings/general', icon: SlidersHorizontal, perm: 'settings.view' },
     { label: 'أوقات الحجز', href: '/admin/settings/booking-times', icon: Clock, perm: 'settings.view' },
-    { label: 'واتساب', href: '/admin/settings/whatsapp', icon: MessageCircle, perm: 'settings.view' },
     { label: 'النسخ الاحتياطي', href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
 ];
 

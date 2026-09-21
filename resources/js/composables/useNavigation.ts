@@ -291,7 +291,7 @@ export function useNavigation() {
                 // The hours behind every booking range — day periods and chalet
                 // check-in/out. They decide what counts as a clash, not just labels.
                 { title: t('nav.settings_booking_times'), href: '/admin/settings/booking-times', icon: Clock, perm: 'settings.view' },
-                { title: t('nav.settings_whatsapp'), href: '/admin/settings/whatsapp', icon: MessageCircle, perm: 'settings.view' },
+                // إعدادات البوابة انتقلت إلى مجموعة «الواتساب» أعلاه مع قوالبها وسجلّها.
                 { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
                 { title: t('nav.departments'), href: '/admin/departments', icon: Building2, perm: 'departments.view' },
                 { title: t('nav.cities'), href: '/admin/cities', icon: MapPin, perm: 'cities.view' },
