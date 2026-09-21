@@ -210,9 +210,9 @@ export function useNavigation() {
         },
         {
             // A section with a page of its own: its href is a route, not an
-            // anchor, so the sidebar links to it instead of unfolding thirteen
-            // rows into a column too narrow to scan. The children stay here —
-            // the page is built from them, and so are the shortcut chips.
+            // anchor, because the section page finds this group by it and the
+            // page search links to it. The sidebar still unfolds it like any
+            // other group, so every accounting screen is one click away.
             title: t('nav.accounting'),
             href: '/admin/accounting',
             icon: CalculatorIcon,

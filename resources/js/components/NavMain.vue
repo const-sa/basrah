@@ -54,13 +54,6 @@ const toggleMenu = (item: NavItem) => {
     persist();
 };
 
-/**
- * قسمٌ له صفحةٌ تعرض شاشاته — مسارُه طريقٌ حقيقيّ لا مرساة (‎#accounting‎).
- *
- * مثله يُفتح بنقرة تنقل إلى صفحته، فتُبسط شاشاته بأيقوناتها في مساحة الصفحة
- * بدل عمودٍ ضيّق يُقرأ سطرًا سطرًا.
- */
-const hasOwnPage = (item: NavItem) => !item.href.startsWith('#');
 </script>
 
 <template>
@@ -68,19 +61,15 @@ const hasOwnPage = (item: NavItem) => !item.href.startsWith('#');
         <SidebarGroupLabel>القائمة</SidebarGroupLabel>
         <SidebarMenu>
             <template v-for="item in items" :key="item.title">
-                <!-- Section with a page of its own: one link, no unfolding -->
-                <SidebarMenuItem v-if="item.children && item.children.length > 0 && hasOwnPage(item)">
-                    <SidebarMenuButton as-child :is-active="isActive(item.href) || isGroupActive(item)">
-                        <Link :href="item.href" class="relative">
-                            <component :is="item.icon" v-if="item.icon" />
-                            <span>{{ item.title }}</span>
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-
-                <!-- Parent with children -->
-                <SidebarMenuItem v-else-if="item.children && item.children.length > 0">
-                    <SidebarMenuButton @click="toggleMenu(item)" :is-active="isGroupActive(item)" class="cursor-pointer">
+                <!-- Parent with children. A section that also has a page of its own
+                     (المحاسبة) unfolds here like the rest; isActive keeps it lit
+                     while that page is open. -->
+                <SidebarMenuItem v-if="item.children && item.children.length > 0">
+                    <SidebarMenuButton
+                        @click="toggleMenu(item)"
+                        :is-active="isActive(item.href) || isGroupActive(item)"
+                        class="cursor-pointer"
+                    >
                         <component :is="item.icon" v-if="item.icon" />
                         <span>{{ item.title }}</span>
                         <ChevronDown :class="['ms-auto h-4 w-4 transition-transform', isOpen(item) && 'rotate-180']" />
