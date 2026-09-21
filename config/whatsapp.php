@@ -52,6 +52,9 @@ return [
             'instance_id' => env('CWTS_INSTANCE_ID'),
             'access_token' => env('CWTS_ACCESS_TOKEN'),
             'verify_ssl' => (bool) env('CWTS_VERIFY_SSL', true),
+            // مفتاحٌ مشترك يجلب به معرّف الجهاز ورمز الوصول أعلاه من
+            // المنصّة برقم الواتساب وحده. فارغ = الجلب معطّل وتُدخَل يدوياً.
+            'lookup_key' => env('CWTS_LOOKUP_KEY'),
         ],
 
         // https://waclient.com/docs/whatsapp-web-api

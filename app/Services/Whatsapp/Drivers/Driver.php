@@ -4,6 +4,7 @@ namespace App\Services\Whatsapp\Drivers;
 
 use App\Services\Whatsapp\Contracts\WhatsappProvider;
 use App\Services\Whatsapp\PhoneNumber;
+use App\Services\Whatsapp\WhatsappNumberCheck;
 use App\Services\Whatsapp\WhatsappResponse;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -44,6 +45,21 @@ abstract class Driver implements WhatsappProvider
     public function configured(): bool
     {
         return $this->instanceId() !== '' && $this->accessToken() !== '';
+    }
+
+    /** البوابات تقترن بأي جوال يمسح الرمز، ما لم تقل غير ذلك. */
+    public function linksByPhone(): bool
+    {
+        return false;
+    }
+
+    /**
+     * أكثر البوابات لا تعرف عن الأرقام إلا الرقم المرتبط بها، ومن يستطيع
+     * الفحص يُعيد تعريف هذه.
+     */
+    public function checkNumber(string $phone): WhatsappNumberCheck
+    {
+        return WhatsappNumberCheck::unsupported($this->name(), $this->phone($phone));
     }
 
     protected function instanceId(): string

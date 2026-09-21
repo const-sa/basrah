@@ -3,6 +3,7 @@
 namespace App\Services\Whatsapp\Drivers;
 
 use App\Services\Whatsapp\MediaType;
+use App\Services\Whatsapp\WhatsappNumberCheck;
 use App\Services\Whatsapp\WhatsappQrCode;
 use App\Services\Whatsapp\WhatsappResponse;
 use Illuminate\Http\Client\Response;
@@ -10,12 +11,21 @@ use Illuminate\Http\Client\Response;
 /**
  * c-wts.com gateway — https://www.c-wts.com/docs
  * Credentials go in the query string: an HTTP→HTTPS redirect drops the POST body.
+ *
+ * هذه بوابة الشركة نفسها، فالربط فيها يبدأ من الرقم: المنصّة تسلّم معرّفات
+ * العميل صاحب الرقم، و/api/check-number يقول أهو رقم واتساب أصلاً، و/api/status
+ * يقول أهو المرتبط بالفعل. وعندها وحدها يستحقّ الرمز أن يُعرَض.
  */
 class CwtsDriver extends Driver
 {
     public function name(): string
     {
         return 'cwts';
+    }
+
+    public function linksByPhone(): bool
+    {
+        return true;
     }
 
     public function sendText(string $phone, string $message): WhatsappResponse
@@ -100,9 +110,10 @@ class CwtsDriver extends Driver
             return WhatsappQrCode::failed($this->name(), 'missing_credentials', 'missing_credentials');
         }
 
-        // A linked instance has no QR code to hand out.
+        // A linked instance has no QR code to hand out. بقيّة الحمولة
+        // (المنصّة، الاشتراك) هي ما تعرضه شاشة الربط مكانه.
         if ($status->ok() && $status->json('connected')) {
-            return WhatsappQrCode::linked($this->name(), $status->json('phone'));
+            return WhatsappQrCode::linked($this->name(), $status->json('phone'), $status->data());
         }
 
         $response = $this->call(
@@ -128,6 +139,45 @@ class CwtsDriver extends Driver
         $error = $response->error() ?? 'unknown_error';
 
         return WhatsappQrCode::failed($this->name(), $error, $code ?: ($error === 'missing_credentials' ? $error : null));
+    }
+
+    /**
+     * تجيب البوابة من جلسة واتساب حيّة — جلستها بعد الربط، وجلسة المنصّة
+     * قبله — فالفحص يعمل ولا شيء مرتبط بعد، وهو موضع حاجة شاشة الربط إليه.
+     */
+    public function checkNumber(string $phone): WhatsappNumberCheck
+    {
+        $number = $this->phone($phone);
+
+        if ($number === '') {
+            return WhatsappNumberCheck::failed($this->name(), $number, 'no_phone', 'no_phone');
+        }
+
+        $response = $this->call(
+            'check number',
+            fn () => $this->request()->get($this->url('api/check-number', $this->credentials() + ['number' => $number])),
+            ['number' => $number]
+        );
+
+        if ($response->ok()) {
+            // رقمٌ خارج واتساب جوابٌ ناجح لا إخفاق.
+            return $response->json('exists')
+                ? WhatsappNumberCheck::registered($this->name(), $number)
+                : WhatsappNumberCheck::notRegistered($this->name(), $number);
+        }
+
+        // بوابةٌ أقدم من أن تعرف الخدمة لا تفحص الأرقام أصلاً، وهذا غير
+        // إخفاقها في فحص هذا الرقم.
+        if ($response->status() === 404) {
+            return WhatsappNumberCheck::unsupported($this->name(), $number);
+        }
+
+        return WhatsappNumberCheck::failed(
+            $this->name(),
+            $number,
+            $response->error() ?? 'unknown_error',
+            ((string) $response->json('code', '')) ?: null
+        );
     }
 
     protected function isSuccessful(Response $response, array $payload): bool

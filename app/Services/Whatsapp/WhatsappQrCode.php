@@ -13,15 +13,16 @@ class WhatsappQrCode
         protected ?string $image = null,
         protected ?string $error = null,
         protected ?string $code = null,
-        protected ?string $phone = null
+        protected ?string $phone = null,
+        protected array $account = []
     ) {}
 
     /**
      * The instance is already linked to a WhatsApp account, no QR needed.
      */
-    public static function linked(string $driver, ?string $phone = null): self
+    public static function linked(string $driver, ?string $phone = null, array $account = []): self
     {
-        return new self($driver, true, null, null, null, $phone);
+        return new self($driver, true, null, null, null, $phone, $account);
     }
 
     /**
@@ -70,6 +71,17 @@ class WhatsappQrCode
     public function phone(): ?string
     {
         return $this->phone;
+    }
+
+    /**
+     * ما قالته البوابة عن الحساب المرتبط سوى رقمه، مثل المنصّة وما تبقّى
+     * من الاشتراك.
+     *
+     * @return array<string, mixed>
+     */
+    public function account(): array
+    {
+        return $this->account;
     }
 
     public function driver(): string
