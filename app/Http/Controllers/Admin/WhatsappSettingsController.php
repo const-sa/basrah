@@ -18,7 +18,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * شاشة بوابة الواتساب — المعرّفات في .env، والترحيب ورقم العمل في الإعدادات.
+ * شاشة بوابة الواتساب — المعرّفات في .env، ورقم العمل في الإعدادات. ونصوص
+ * الرسائل ليست من شأنها: موضعها مكتبة الإشعارات.
  *
  * على بوابة الشركة (c-wts) يبدأ الربط من الرقم لا من المعرّفات: المنصّة تعرف
  * أي عميل يملك الرقم، فتُجلب معرّفاته وتُكتب في .env دون أن ينسخها أحد بيده.
@@ -53,9 +54,6 @@ class WhatsappSettingsController extends Controller
                 'wa_enabled' => $this->whatsapp->enabled(),
                 'wa_number' => $settings->wa_number,
                 'wa_connected_at' => $settings->wa_connected_at?->toDateTimeString(),
-                'wa_welcome_enabled' => $settings->wa_welcome_enabled,
-                'wa_welcome_template' => $settings->wa_welcome_template
-                    ?? "مرحباً {name} 👋\nأهلاً بك في {business_name}. سعداء بانضمامك، ونحن في خدمتك دائماً.",
             ],
             'gateway' => [
                 'driver' => $driver,
@@ -86,8 +84,6 @@ class WhatsappSettingsController extends Controller
             // فارغ = إبقاء التوكن الحالي دون تغيير.
             'credentials.*.access_token' => ['nullable', 'string', 'max:191'],
             'wa_number' => ['nullable', 'string', 'max:30'],
-            'wa_welcome_enabled' => ['boolean'],
-            'wa_welcome_template' => ['nullable', 'string', 'max:2000'],
         ], [
             'credentials.*.base_url.url' => 'رابط الـ API غير صالح.',
             'wa_country_code.regex' => 'مفتاح الدولة يجب أن يكون أرقاماً فقط.',
@@ -136,8 +132,6 @@ class WhatsappSettingsController extends Controller
         }
 
         $settings->wa_number = $number;
-        $settings->wa_welcome_enabled = $data['wa_welcome_enabled'] ?? false;
-        $settings->wa_welcome_template = $data['wa_welcome_template'] ?? null;
         $settings->save();
 
         return back()->with('success', 'تم حفظ إعدادات الواتساب بنجاح');

@@ -46,7 +46,23 @@ class NotificationTemplatesController extends Controller
                 ->get(['id', 'name', 'mobile'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'mobile' => $c->mobile]),
             'wa_configured' => app(WhatsappManager::class)->isConfigured(),
+            // الترحيب وحده يُرسَل دون أن يطلبه أحد، فمفتاحه يقف مع قالبه.
+            'welcome_enabled' => Setting::current()->wa_welcome_enabled,
         ]);
+    }
+
+    /** تشغيل الترحيب التلقائي أو إيقافه — القالب نفسه قالبٌ في المكتبة كغيره. */
+    public function welcome(Request $request): RedirectResponse
+    {
+        $enabled = $request->validate(['enabled' => ['required', 'boolean']])['enabled'];
+
+        $settings = Setting::current();
+        $settings->wa_welcome_enabled = $enabled;
+        $settings->save();
+
+        return back()->with('success', $enabled
+            ? 'تم تفعيل الترحيب التلقائي بالعميل الجديد'
+            : 'تم إيقاف الترحيب التلقائي بالعميل الجديد');
     }
 
     public function store(Request $request): RedirectResponse

@@ -28,7 +28,7 @@ class Setting extends Model
         // الواتساب
         'wa_enabled', 'wa_instance_id', 'wa_access_token',
         'wa_number', 'wa_connected_at',
-        'wa_welcome_enabled', 'wa_welcome_template',
+        'wa_welcome_enabled',
         // المدراء والتواقيع والختم
         'manager_name', 'manager_signature_path',
         'finance_manager_name', 'finance_manager_signature_path',

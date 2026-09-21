@@ -3,15 +3,13 @@ import SettingsTabs from '@/components/SettingsTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
     KeyRound,
     Link2,
     Lock,
-    Megaphone,
-    MessageCircle,
     Plug,
     QrCode,
     RefreshCw,
@@ -27,8 +25,6 @@ interface WhatsappSettings {
     wa_enabled: boolean;
     wa_number: string | null;
     wa_connected_at: string | null;
-    wa_welcome_enabled: boolean;
-    wa_welcome_template: string;
 }
 
 interface DriverOption {
@@ -83,8 +79,6 @@ const form = useForm({
     wa_country_code: props.gateway.country_code ?? '',
     credentials: blankCredentials(),
     wa_number: props.settings.wa_number ?? '',
-    wa_welcome_enabled: props.settings.wa_welcome_enabled ?? false,
-    wa_welcome_template: props.settings.wa_welcome_template ?? '',
 });
 
 /** البوابة المنتقاة الآن على الشاشة، لا المحفوظة في .env. */
@@ -319,9 +313,6 @@ const sendTest = async () => {
     }
 };
 
-const insertVar = (v: string) => {
-    form.wa_welcome_template = (form.wa_welcome_template ?? '') + `{${v}}`;
-};
 </script>
 
 <template>
@@ -537,39 +528,6 @@ const insertVar = (v: string) => {
                     <QrCode class="h-10 w-10" />
                     <span class="text-sm font-bold">اضغط «استعلام وربط» لعرض رمز الاتصال</span>
                 </div>
-            </div>
-
-            <!-- قالب الترحيب -->
-            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div class="mb-4 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <MessageCircle class="h-5 w-5 text-emerald-600" />
-                        <h2 class="text-lg font-bold text-slate-800">الترحيب بالعميل</h2>
-                    </div>
-                    <button type="button" role="switch" :aria-checked="form.wa_welcome_enabled" @click="form.wa_welcome_enabled = !form.wa_welcome_enabled"
-                        :class="['relative inline-flex h-6 w-11 items-center rounded-full transition', form.wa_welcome_enabled ? 'brand-gradient' : 'bg-slate-300']">
-                        <span :class="['inline-block h-4 w-4 transform rounded-full bg-white transition', form.wa_welcome_enabled ? '-translate-x-1' : '-translate-x-6']"></span>
-                    </button>
-                </div>
-
-                <p class="mb-3 text-sm font-medium text-slate-600">
-                    تُرسَل رسالة الترحيب تلقائياً عند إضافة عميل جديد لديه رقم جوال. يُستخدم قالب «ترحيب» من
-                    <Link href="/admin/notifications/library" class="font-bold text-emerald-700 underline underline-offset-2">مكتبة الإشعارات</Link>
-                    — قسم الشاليهات أو القاعات عند الإضافة من نموذج الحجز، أو القسم العام من شاشة العملاء — وإلا يُستخدم النصّ الاحتياطي أدناه.
-                </p>
-
-                <div class="mb-2 flex flex-wrap items-center gap-2">
-                    <span class="text-xs font-bold text-slate-600">إدراج متغيّر:</span>
-                    <button type="button" @click="insertVar('name')" class="rounded-lg bg-slate-200 px-2 py-1 text-xs font-bold text-slate-700 transition hover:bg-slate-300">{name} اسم العميل</button>
-                    <button type="button" @click="insertVar('business_name')" class="rounded-lg bg-slate-200 px-2 py-1 text-xs font-bold text-slate-700 transition hover:bg-slate-300">{business_name} اسم النشاط</button>
-                </div>
-
-                <textarea v-model="form.wa_welcome_template" rows="5" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-7 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" placeholder="مرحباً {name} 👋 …"></textarea>
-                <p v-if="form.errors.wa_welcome_template" class="mt-1 text-xs text-red-500">{{ form.errors.wa_welcome_template }}</p>
-
-                <Link href="/admin/notifications/library" class="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
-                    <Megaphone class="h-4 w-4" /> إدارة قوالب الشاليهات والقاعات والمسابح
-                </Link>
             </div>
 
             <!-- إرسال تجريبي -->

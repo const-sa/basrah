@@ -168,7 +168,6 @@ class WhatsappLinkByPhoneTest extends TestCase
                 'waclient' => ['base_url' => 'https://api.waclient.com', 'instance_id' => 'WA-1', 'access_token' => 'WA-TOKEN'],
             ],
             'wa_number' => '0551234567',
-            'wa_welcome_enabled' => false,
         ])->assertRedirect();
 
         $env = file_get_contents($this->envPath);

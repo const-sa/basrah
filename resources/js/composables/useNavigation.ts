@@ -180,8 +180,18 @@ export function useNavigation() {
             children: [
                 { title: t('nav.contracts_list'), href: '/admin/contracts', icon: FileSignature, perm: 'contracts.view' },
                 { title: t('nav.contract_templates'), href: '/admin/contract-templates', icon: FileText, perm: 'contract_templates.view' },
-                { title: t('nav.whatsapp_log'), href: '/admin/whatsapp-log', icon: MessageCircle, perm: 'whatsapp.view' },
+            ],
+        },
+        // الواتساب مجموعةٌ قائمة بذاتها: بوابته وقوالبه وسجلّه في موضع واحد،
+        // فمن جاء يبحث عن رسائل العملاء لا يفتّش في قائمة العقود.
+        {
+            title: t('nav.whatsapp'),
+            href: '#whatsapp',
+            icon: MessageCircle,
+            children: [
+                { title: t('nav.whatsapp_settings'), href: '/admin/settings/whatsapp', icon: SlidersHorizontal, perm: 'settings.view' },
                 { title: t('nav.notifications_library'), href: '/admin/notifications/library', icon: Megaphone, perm: 'notifications.view' },
+                { title: t('nav.whatsapp_log'), href: '/admin/whatsapp-log', icon: MessageCircle, perm: 'whatsapp.view' },
             ],
         },
         {

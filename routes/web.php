@@ -106,6 +106,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     // مكتبة الإشعارات (قوالب قابلة للإرسال للعملاء)
     Route::get('notifications/library', [NotificationTemplatesController::class, 'index'])->middleware('perm:notifications.view')->name('notifications.library');
     Route::post('notifications/library', [NotificationTemplatesController::class, 'store'])->middleware('perm:notifications.create')->name('notifications.library.store');
+    // مفتاح الإرسال التلقائي للترحيب — مع قالبه لا في شاشة البوابة.
+    Route::post('notifications/library/welcome', [NotificationTemplatesController::class, 'welcome'])->middleware('perm:notifications.edit')->name('notifications.library.welcome');
     Route::put('notifications/library/{template}', [NotificationTemplatesController::class, 'update'])->middleware('perm:notifications.edit')->name('notifications.library.update');
     Route::delete('notifications/library/{template}', [NotificationTemplatesController::class, 'destroy'])->middleware('perm:notifications.delete')->name('notifications.library.destroy');
     Route::post('notifications/library/{template}/send', [NotificationTemplatesController::class, 'send'])->middleware('perm:notifications.send')->name('notifications.library.send');

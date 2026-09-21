@@ -2,8 +2,8 @@
 import { TableActionButton } from '@/components/data-table';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, Bell, Building2, Layers, Megaphone, Pencil, Plus, Send, Trash2, User, Users, Waves, X } from 'lucide-vue-next';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { AlertTriangle, Bell, Building2, Layers, Megaphone, MessageCircle, Pencil, Plus, Send, Trash2, User, Users, Waves, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Template {
@@ -40,7 +40,22 @@ const props = defineProps<{
     catalog: Catalog;
     clients: ClientOption[];
     wa_configured: boolean;
+    welcome_enabled: boolean;
 }>();
+
+// الترحيب وحده يُرسَل دون أن يطلبه أحد، فمفتاحه هنا مع قالبه.
+const welcomeEnabled = ref(props.welcome_enabled);
+
+const toggleWelcome = () => {
+    const next = !welcomeEnabled.value;
+    welcomeEnabled.value = next;
+
+    router.post('/admin/notifications/library/welcome', { enabled: next }, {
+        preserveScroll: true,
+        // المفتاح يصف ما في الخادم، فيعود إن لم يُحفظ.
+        onError: () => (welcomeEnabled.value = !next),
+    });
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -194,6 +209,26 @@ const submitSend = () => {
                 <AlertTriangle class="h-5 w-5 shrink-0" />
                 تكامل الواتساب غير مفعّل، لن يتم الإرسال الفعلي. اربط الجهاز من
                 <Link href="/admin/settings/whatsapp" class="underline underline-offset-2 hover:text-amber-800">إعدادات الواتساب</Link>.
+            </div>
+
+            <!-- الترحيب التلقائي: مفتاحٌ واحد لقوالب «ترحيب بالعميل» أعلاه -->
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="flex items-start gap-2">
+                    <MessageCircle class="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800">الترحيب التلقائي بالعميل</h2>
+                        <p class="mt-1 text-sm font-medium leading-6 text-slate-600">
+                            تُرسَل رسالة الترحيب تلقائياً عند إضافة عميل جديد لديه رقم جوال، بقالب مناسبة
+                            «ترحيب بالعميل» من هذه المكتبة — قسم الشاليهات أو القاعات أو المسابح بحسب موضع
+                            الإضافة، وإلا فالقسم العام. وبلا قالب ترحيب مفعّل لا يُرسَل شيء.
+                        </p>
+                    </div>
+                </div>
+
+                <button type="button" role="switch" :aria-checked="welcomeEnabled" @click="toggleWelcome"
+                    :class="['relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition', welcomeEnabled ? 'brand-gradient' : 'bg-slate-300']">
+                    <span :class="['inline-block h-4 w-4 transform rounded-full bg-white transition', welcomeEnabled ? '-translate-x-1' : '-translate-x-6']"></span>
+                </button>
             </div>
 
             <!-- تبويبات الأقسام -->

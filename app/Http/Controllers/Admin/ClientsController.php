@@ -603,10 +603,8 @@ class ClientsController extends Controller
             ? $category
             : 'general';
 
-        // قالب المكتبة أولاً — هو ما يراه المستخدم ويحرّره ويقسّمه —
-        // ونصّ الإعدادات احتياطٌ لمن لم يُنشئ قالب ترحيب بعد.
-        $body = NotificationTemplate::resolve('welcome', $templateCategory)?->body
-            ?? $settings->wa_welcome_template;
+        // المكتبة موضع نصوص الرسائل كلها، فلا ترحيب بلا قالبٍ فيها.
+        $body = NotificationTemplate::resolve('welcome', $templateCategory)?->body;
 
         if (blank($body)) {
             return;
