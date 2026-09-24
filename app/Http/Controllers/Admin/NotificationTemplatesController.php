@@ -8,7 +8,7 @@ use App\Models\NotificationTemplate;
 use App\Models\Setting;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
-use App\Services\Whatsapp\WhatsappManager;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\WhatsappNotifier;
 use App\Support\NotificationCatalog;
 use Illuminate\Http\RedirectResponse;
@@ -45,7 +45,7 @@ class NotificationTemplatesController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'mobile'])
                 ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'mobile' => $c->mobile]),
-            'wa_configured' => app(WhatsappManager::class)->isConfigured(),
+            'wa_configured' => app(WhatsappAccounts::class)->anyConfigured(),
             // الترحيب وحده يُرسَل دون أن يطلبه أحد، فمفتاحه يقف مع قالبه.
             'welcome_enabled' => Setting::current()->wa_welcome_enabled,
         ]);
@@ -96,11 +96,11 @@ class NotificationTemplatesController extends Controller
             'client_id' => ['nullable', 'required_if:target,client', 'exists:clients,id'],
         ]);
 
-        if (! app(WhatsappManager::class)->isConfigured()) {
+        $accounts = app(WhatsappAccounts::class);
+
+        if (! $accounts->anyConfigured()) {
             return back()->with('warning', 'تكامل الواتساب غير مفعّل. اربط الجهاز من إعدادات الواتساب أولاً.');
         }
-
-        $businessName = Setting::current()->business_name ?? config('app.name');
 
         $clients = $data['target'] === 'all'
             ? Client::where('is_active', true)->whereNotNull('mobile')->get()
@@ -121,7 +121,8 @@ class NotificationTemplatesController extends Controller
         foreach ($clients as $client) {
             $message = MessageTemplate::render($template->body, [
                 'name' => $client->name,
-                'business_name' => $businessName,
+                // Each client hears from their own section, under its name.
+                'business_name' => $accounts->senderName($client),
                 'mobile' => (string) $client->mobile,
             ]);
 

@@ -7,9 +7,9 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Contract;
 use App\Models\NotificationTemplate;
-use App\Models\Setting;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\Whatsapp\PhoneNumber;
 use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
@@ -44,6 +44,10 @@ class WhatsappNotifier
             return null;
         }
 
+        // رقم القسم الذي يخصّ السجلّ، فتصل رسالة المسبح من رقم المسابح
+        // ورسالة القاعة من رقم قاعتها.
+        $account = app(WhatsappAccounts::class)->for($related);
+
         $message = WhatsappMessage::create([
             'to_number' => $number,
             'body' => $body,
@@ -53,6 +57,7 @@ class WhatsappNotifier
             'related_type' => $related ? $related::class : null,
             'related_id' => $related?->getKey(),
             'sent_by' => $userId,
+            'whatsapp_account_id' => $account?->id,
         ]);
 
         // Logged where the message is queued, not only where it is sent: the
@@ -63,11 +68,12 @@ class WhatsappNotifier
             'number' => $number,
             'purpose' => $purpose,
             'media_url' => $mediaUrl,
+            'account' => $account?->name,
             'queue' => config('queue.default'),
         ]);
 
         // Stays queued until the gateway answers — marking it sent here reads as delivered.
-        SendWhatsappMessage::dispatch($number, $body, $mediaUrl, $message->id);
+        SendWhatsappMessage::dispatch($number, $body, $mediaUrl, $message->id, $account?->id);
 
         return $message;
     }
@@ -313,7 +319,8 @@ class WhatsappNotifier
 
         return [
             'name' => (string) ($client?->name ?? ''),
-            'business_name' => (string) (Setting::current()->business_name ?? config('app.name')),
+            // اسم القسم المُرسِل إن كان له رقمه، وإلا اسم النشاط العام.
+            'business_name' => app(WhatsappAccounts::class)->senderName($booking),
             'mobile' => (string) ($client?->mobile ?? ''),
             'reference' => (string) ($booking?->reference ?? ''),
             'unit' => (string) ($booking?->unit?->name ?? '—'),

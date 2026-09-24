@@ -40,6 +40,7 @@ import {
     ShoppingBag,
     ShoppingCart,
     SlidersHorizontal,
+    Smartphone,
     TrendingUp,
     Truck,
     Users,
@@ -190,6 +191,7 @@ export function useNavigation() {
             icon: MessageCircle,
             children: [
                 { title: t('nav.whatsapp_settings'), href: '/admin/settings/whatsapp', icon: SlidersHorizontal, perm: 'settings.view' },
+                { title: t('nav.whatsapp_accounts'), href: '/admin/settings/whatsapp/accounts', icon: Smartphone, perm: 'settings.view' },
                 { title: t('nav.notifications_library'), href: '/admin/notifications/library', icon: Megaphone, perm: 'notifications.view' },
                 { title: t('nav.whatsapp_log'), href: '/admin/whatsapp-log', icon: MessageCircle, perm: 'whatsapp.view' },
             ],

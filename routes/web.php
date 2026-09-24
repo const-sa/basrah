@@ -58,6 +58,7 @@ use App\Http\Controllers\Admin\UnitsController;
 use App\Http\Controllers\Admin\UnitWorkspaceController;
 use App\Http\Controllers\Admin\UsersController;
 use App\Http\Controllers\Admin\WhatsappLogController;
+use App\Http\Controllers\Admin\WhatsappAccountsController;
 use App\Http\Controllers\Admin\WhatsappSettingsController;
 use App\Http\Controllers\Site\OnlineBookingController;
 use App\Http\Controllers\Site\SiteController;
@@ -632,6 +633,14 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/whatsapp/status', [WhatsappSettingsController::class, 'status'])->middleware('perm:settings.view')->name('settings.whatsapp.status');
     Route::get('settings/whatsapp/connect', [WhatsappSettingsController::class, 'connect'])->middleware('perm:settings.edit')->name('settings.whatsapp.connect');
     Route::post('settings/whatsapp/test', [WhatsappSettingsController::class, 'test'])->middleware('perm:settings.edit')->name('settings.whatsapp.test');
+    // أرقام الأقسام: لكل قسمٍ أو قاعةٍ رقمه واشتراكه.
+    Route::get('settings/whatsapp/accounts', [WhatsappAccountsController::class, 'index'])->middleware('perm:settings.view')->name('settings.whatsapp.accounts.index');
+    Route::post('settings/whatsapp/accounts', [WhatsappAccountsController::class, 'store'])->middleware('perm:settings.edit')->name('settings.whatsapp.accounts.store');
+    Route::put('settings/whatsapp/accounts/{account}', [WhatsappAccountsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.whatsapp.accounts.update');
+    Route::delete('settings/whatsapp/accounts/{account}', [WhatsappAccountsController::class, 'destroy'])->middleware('perm:settings.edit')->name('settings.whatsapp.accounts.destroy');
+    Route::get('settings/whatsapp/accounts/{account}/status', [WhatsappAccountsController::class, 'status'])->middleware('perm:settings.view')->name('settings.whatsapp.accounts.status');
+    Route::get('settings/whatsapp/accounts/{account}/connect', [WhatsappAccountsController::class, 'connect'])->middleware('perm:settings.edit')->name('settings.whatsapp.accounts.connect');
+    Route::post('settings/whatsapp/accounts/{account}/test', [WhatsappAccountsController::class, 'test'])->middleware('perm:settings.edit')->name('settings.whatsapp.accounts.test');
 });
 
 require __DIR__.'/settings.php';

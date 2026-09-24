@@ -14,7 +14,7 @@ use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Voucher;
 use App\Services\Whatsapp\MessageTemplate;
-use App\Services\Whatsapp\WhatsappManager;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\WhatsappNotifier;
 use App\Support\ActivityPermission;
 use App\Support\ClientType;
@@ -594,7 +594,8 @@ class ClientsController extends Controller
 
         $settings = Setting::current();
 
-        if (! app(WhatsappManager::class)->isConfigured() || ! $settings->wa_welcome_enabled) {
+        // Checked against the client's own section number, which may be linked when the shared gateway is not.
+        if (! app(WhatsappAccounts::class)->canSend($client) || ! $settings->wa_welcome_enabled) {
             return;
         }
 
@@ -613,7 +614,7 @@ class ClientsController extends Controller
         try {
             $message = MessageTemplate::render($body, [
                 'name' => $client->name,
-                'business_name' => $settings->business_name ?? '',
+                'business_name' => app(WhatsappAccounts::class)->senderName($client),
                 'mobile' => (string) $client->mobile,
             ]);
 

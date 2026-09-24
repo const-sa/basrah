@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Models\WhatsappAccount;
 use App\Models\WhatsappMessage;
+use App\Services\Whatsapp\Contracts\WhatsappProvider;
 use App\Services\Whatsapp\WhatsappManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -34,10 +36,20 @@ class SendWhatsappMessage implements ShouldQueue
         public ?string $mediaUrl = null,
         /** The log row this job answers for — its status follows the gateway, not the dispatch. */
         public ?int $messageId = null,
+        /** رقم القسم الذي تخرج منه الرسالة — فارغ للبوابة العامة. */
+        public ?int $accountId = null,
     ) {}
 
-    public function handle(WhatsappManager $whatsapp): void
+    public function handle(?WhatsappManager $whatsapp = null): void
     {
+        $whatsapp ??= app(WhatsappManager::class);
+
+        if ($this->accountId) {
+            $this->sendFromAccount($whatsapp);
+
+            return;
+        }
+
         // An unconfigured gateway is the commonest reason a message never arrives.
         if (! $whatsapp->isConfigured()) {
             Log::channel('whatsapp')->warning('SendWhatsappMessage: البوابة غير مهيّأة — لم تُرسل الرسالة', [
@@ -53,10 +65,41 @@ class SendWhatsappMessage implements ShouldQueue
             return;
         }
 
+        $this->deliver($whatsapp->driver());
+    }
+
+    /**
+     * رسالة القسم تخرج من رقمه أو لا تخرج: البوابة العامة رقمٌ آخر باسمٍ آخر،
+     * والعميل الذي يردّ عليها يصل إلى غير من راسله.
+     */
+    private function sendFromAccount(WhatsappManager $whatsapp): void
+    {
+        $account = WhatsappAccount::find($this->accountId);
+
+        $problem = match (true) {
+            $account === null => 'رقم القسم محذوف',
+            ! $account->is_active => 'رقم القسم موقوف',
+            ! $account->hasCredentials() => 'رقم القسم غير مربوط',
+            default => null,
+        };
+
+        if ($problem) {
+            Log::channel('whatsapp')->warning('SendWhatsappMessage: '.$problem.' — لم تُرسل الرسالة', [
+                'number' => $this->number,
+                'account' => $this->accountId,
+            ]);
+            $this->markFailed($problem);
+
+            return;
+        }
+
+        $this->deliver($whatsapp->forAccount($account));
+    }
+
+    private function deliver(WhatsappProvider $driver): void
+    {
         // البوابة ترسل النص مع الوسائط في طلب واحد، فلا تُرسل رسالتان
         // يصل ترتيبهما مقلوبًا إلى العميل.
-        $driver = $whatsapp->driver();
-
         $result = $this->mediaUrl
             ? $driver->sendMedia($this->number, $this->message, $this->mediaUrl)
             : $driver->sendText($this->number, $this->message);

@@ -15,6 +15,8 @@ interface Message {
     category: string;
     category_label: string;
     status: string;
+    /** الرقم الذي خرجت منه — فارغ للبوابة العامة. */
+    account: string | null;
     error: string | null;
     created_at: string;
 }
@@ -24,6 +26,7 @@ const props = defineProps<{
     filters: Record<string, string | null>;
     purposes: { key: string; label: string }[];
     categories: { key: string; label: string }[];
+    accounts: { key: string; label: string }[];
     stats: {
         messages: number;
         sent: number;
@@ -57,11 +60,18 @@ const nearLimit = computed(() => props.stats.usage_percent >= 80);
                     <h1 class="text-2xl font-extrabold text-slate-900">سجل رسائل الواتساب</h1>
                     <p class="mt-1 text-sm font-medium text-slate-600">كل رسالة تخرج من النظام — بغرضها وحالتها وتصنيفها لدى Meta</p>
                 </div>
-                <Link
-                    href="/admin/contracts"
-                    class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                    >العقود</Link
-                >
+                <div class="flex items-center gap-2">
+                    <Link
+                        href="/admin/settings/whatsapp/accounts"
+                        class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >أرقام الأقسام</Link
+                    >
+                    <Link
+                        href="/admin/contracts"
+                        class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >العقود</Link
+                    >
+                </div>
             </div>
 
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -97,7 +107,12 @@ const nearLimit = computed(() => props.stats.usage_percent >= 80);
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                <div class="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                <div class="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    <select v-model="filters.account" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        <option :value="null">كل الأرقام</option>
+                        <option value="general">البوابة العامة</option>
+                        <option v-for="a in accounts" :key="a.key" :value="a.key">{{ a.label }}</option>
+                    </select>
                     <input v-model="filters.from" @change="apply" type="date" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                     <input v-model="filters.to" @change="apply" type="date" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                     <select v-model="filters.purpose" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
@@ -123,6 +138,7 @@ const nearLimit = computed(() => props.stats.usage_percent >= 80);
                         <thead class="bg-slate-100">
                             <tr>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المُرسِل</th>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الرقم</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الغرض</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">التصنيف</th>
@@ -133,6 +149,7 @@ const nearLimit = computed(() => props.stats.usage_percent >= 80);
                         <tbody>
                             <tr v-for="m in messages.data" :key="m.id" class="border-t border-slate-100 hover:bg-slate-50">
                                 <td class="px-4 py-2.5 text-xs text-slate-600" dir="ltr">{{ m.created_at }}</td>
+                                <td class="px-4 py-2.5 text-xs font-bold text-slate-700">{{ m.account ?? 'البوابة العامة' }}</td>
                                 <td class="px-4 py-2.5 font-bold text-slate-700" dir="ltr">{{ m.to_number }}</td>
                                 <td class="px-4 py-2.5 text-center">
                                     <span class="rounded-md bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">{{ m.purpose_label }}</span>
@@ -161,7 +178,7 @@ const nearLimit = computed(() => props.stats.usage_percent >= 80);
                                 </td>
                             </tr>
                             <tr v-if="!messages.data.length">
-                                <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">لا رسائل</td>
+                                <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">لا رسائل</td>
                             </tr>
                         </tbody>
                     </table>

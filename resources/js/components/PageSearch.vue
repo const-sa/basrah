@@ -351,6 +351,13 @@ const allPages = computed<Page[]>(() => [
         perm: 'settings.view',
         keywords: ['whatsapp', 'واتساب', 'واتس'],
     },
+    {
+        href: '/admin/settings/whatsapp/accounts',
+        icon: MessageCircle,
+        title: t('nav.whatsapp_accounts'),
+        perm: 'settings.view',
+        keywords: ['whatsapp numbers', 'ارقام الواتساب', 'رقم القسم', 'اشتراك', 'قاعات', 'مسابح'],
+    },
 ]);
 
 // لا يُقترح على المستخدم ما لا يملك صلاحيته — اقتراح يفضي إلى 403 إزعاج لا مساعدة.

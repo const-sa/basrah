@@ -2,6 +2,7 @@
 
 namespace App\Services\Whatsapp;
 
+use App\Models\WhatsappAccount;
 use App\Services\Whatsapp\Contracts\WhatsappProvider;
 use App\Services\Whatsapp\Drivers\CwtsDriver;
 use App\Services\Whatsapp\Drivers\WaClientDriver;
@@ -50,6 +51,27 @@ class WhatsappManager extends Manager
     public function hasCredentials(): bool
     {
         return $this->driver()->configured();
+    }
+
+    /**
+     * بوابة رقم قسمٍ بمعرّفاته هو، على إعدادات بوابته المشتركة. لا تُخبَّأ:
+     * المعرّفات تتبدّل بالربط، ومُدرِكٌ محفوظ يرسل بمعرّفاتٍ قديمة.
+     */
+    public function forAccount(WhatsappAccount $account): WhatsappProvider
+    {
+        $name = in_array($account->driver, $this->availableDrivers(), true) ? $account->driver : 'cwts';
+
+        $config = $this->driverConfig($name);
+
+        if (filled($account->base_url)) {
+            $config['base_url'] = $account->base_url;
+        }
+
+        // معرّفات البوابة العامة لا تُستعار لحسابٍ لم يُربط بعد.
+        $config['instance_id'] = (string) $account->instance_id;
+        $config['access_token'] = $account->access_token;
+
+        return $name === 'waclient' ? new WaClientDriver($config) : new CwtsDriver($config);
     }
 
     protected function createCwtsDriver(): WhatsappProvider

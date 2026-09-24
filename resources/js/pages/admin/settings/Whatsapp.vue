@@ -3,7 +3,7 @@ import SettingsTabs from '@/components/SettingsTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { jsonHeaders } from '@/lib/csrf';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -325,11 +325,16 @@ const sendTest = async () => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">إعدادات الواتساب</h1>
-                    <p class="mt-1 text-sm font-medium text-slate-600">ربط بوابة c-wts.com للتراسل الآلي مع العملاء</p>
+                    <p class="mt-1 text-sm font-medium text-slate-600">البوابة العامة — تُرسل منها رسائل ما ليس له رقم قسم في «أرقام الأقسام»</p>
                 </div>
-                <button type="submit" :disabled="form.processing" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">
-                    <Save class="h-4 w-4" /> حفظ التغييرات
-                </button>
+                <div class="flex items-center gap-2">
+                    <Link href="/admin/settings/whatsapp/accounts" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                        <Smartphone class="h-4 w-4" /> أرقام الأقسام
+                    </Link>
+                    <button type="submit" :disabled="form.processing" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60">
+                        <Save class="h-4 w-4" /> حفظ التغييرات
+                    </button>
+                </div>
             </div>
 
             <!-- إعدادات البوابة: ما يُكتب في .env -->
