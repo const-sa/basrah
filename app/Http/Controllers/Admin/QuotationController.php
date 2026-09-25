@@ -12,6 +12,7 @@ use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Services\QuotationPdf;
 use App\Services\SalesService;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\WhatsappNotifier;
 use App\Support\Letterhead;
 use App\Support\Vat;
@@ -368,6 +369,18 @@ class QuotationController extends Controller
             return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
         }
 
+        // يُقال السبب هنا لا في سجلّ الرسائل: رقم القسم غير المربوط يُسقط
+        // الرسالة في الخلفية بصمت، والموظف يظنّها وصلت.
+        $accounts = app(WhatsappAccounts::class);
+
+        if (! $accounts->canSend($quotation)) {
+            $account = $accounts->for($quotation);
+
+            return back()->with('warning', $account
+                ? "رقم واتساب «{$account->name}» غير مربوط بالبوابة — اربطه من إعدادات واتساب ثم أعد الإرسال."
+                : 'بوابة واتساب غير مهيّأة — اضبطها من إعدادات واتساب ثم أعد الإرسال.');
+        }
+
         try {
             $path = $pdfService->store($quotation);
         } catch (RuntimeException $e) {
@@ -380,7 +393,8 @@ class QuotationController extends Controller
             return back()->with('warning', 'رقم جوال العميل غير صالح — لم يُرسل العرض.');
         }
 
-        return back()->with('success', "تم إرسال عرض السعر {$quotation->number} (PDF) على واتساب العميل");
+        // «أُرسل إلى الطابور» لا «وصل»: البوابة تُجيب لاحقًا، وحالته في سجلّ الرسائل.
+        return back()->with('success', "جارٍ إرسال عرض السعر {$quotation->number} (PDF) على واتساب العميل — تابع حالته في سجل رسائل واتساب");
     }
 
     public function pdf(Request $request, Quotation $quotation, QuotationPdf $pdfService): HttpResponse

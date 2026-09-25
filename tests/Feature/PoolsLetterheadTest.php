@@ -396,6 +396,8 @@ class PoolsLetterheadTest extends TestCase
         $this->setPoolsIdentity();
 
         $quotation = $this->poolsQuotation();
+        app(WhatsappAccounts::class)->for($quotation)->update(['instance_id' => 'POOLS-1', 'access_token' => 'token']);
+        app(WhatsappAccounts::class)->forget();
 
         $this->actingAs($this->owner)->post("/admin/quotations/{$quotation->id}/send")
             ->assertRedirect()
@@ -413,6 +415,27 @@ class PoolsLetterheadTest extends TestCase
         $this->assertStringNotContainsString('ديوان المسرة', $message->body);
         // من رقم المسابح لا من رقم الديوان.
         $this->assertSame(app(WhatsappAccounts::class)->for($quotation)?->id, $message->whatsapp_account_id);
+    }
+
+    /**
+     * The pools number not yet linked: the employee is told so at once,
+     * rather than shown "sent" for a message the queue will drop.
+     */
+    public function test_an_unlinked_pools_number_is_reported_before_sending(): void
+    {
+        Storage::fake('public');
+
+        $quotation = $this->poolsQuotation();
+        $account = app(WhatsappAccounts::class)->for($quotation);
+        $account->update(['instance_id' => null]);
+        app(WhatsappAccounts::class)->forget();
+
+        $this->actingAs($this->owner)->post("/admin/quotations/{$quotation->id}/send")
+            ->assertSessionMissing('success')
+            ->assertSessionHas('warning', fn (string $w) => str_contains($w, $account->name) && str_contains($w, 'غير مربوط'));
+
+        $this->assertSame(0, WhatsappMessage::count());
+        $this->assertSame([], Storage::disk('public')->files('quotations'));
     }
 
     public function test_a_quotation_without_a_mobile_is_not_sent(): void
