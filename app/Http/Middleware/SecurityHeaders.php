@@ -19,8 +19,10 @@ class SecurityHeaders
         $headers = [
             // منع تخمين نوع المحتوى (يخفّف مخاطر رفع الملفات).
             'X-Content-Type-Options' => 'nosniff',
-            // منع تضمين اللوحة داخل إطار (Clickjacking).
-            'X-Frame-Options' => 'DENY',
+            // منع تضمين اللوحة داخل إطارٍ من موقعٍ آخر (Clickjacking).
+            // SAMEORIGIN لا DENY: «حفظ وطباعة» يحمّل ورقة المستند في إطار خفي
+            // من الموقع نفسه ليطبعها، وDENY يحجبه بصمت فلا تظهر الطباعة.
+            'X-Frame-Options' => 'SAMEORIGIN',
             // تقليل تسريب الـ Referrer إلى مواقع خارجية.
             'Referrer-Policy' => 'strict-origin-when-cross-origin',
             // منع سياسات Flash/PDF عبر النطاقات.
