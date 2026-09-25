@@ -94,6 +94,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'warning' => fn () => $request->session()->get('warning'),
+                // «حفظ وطباعة»: ورقة المستند المحفوظ للتو تُطبع دون مغادرة الشاشة.
+                'print' => fn () => $request->session()->get('print'),
             ],
             'notificationsUnread' => fn () => NotificationsController::unreadCount($request->user()),
         ]);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAutoPrint } from '@/composables/useAutoPrint';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -61,6 +62,9 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumF
 const qty = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 3 }).format(n ?? 0);
 
 const print = () => window.print();
+
+// «حفظ وطباعة»: الورقة تُفتح بـ ?print=1 في إطار خفي وتطبع نفسها.
+useAutoPrint();
 
 // ── إصدار الفاتورة من العرض ───────────────────
 /**

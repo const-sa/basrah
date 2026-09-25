@@ -36,6 +36,8 @@ export interface SharedData {
     flash?: {
         success?: string;
         warning?: string;
+        /** رابط ورقة المستند المحفوظ للتو حين طُلب «حفظ وطباعة» — تطبعه PrintAfterSave. */
+        print?: string;
     };
     notificationsUnread?: number;
     ziggy: {

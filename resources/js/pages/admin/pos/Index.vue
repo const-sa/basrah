@@ -7,7 +7,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type ClientTypeKey, type PaymentMethodOption } from '@/types';
 import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, Plus, Receipt, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, Plus, Printer, Receipt, Trash2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 // شاشة إدخال، فتتبع المفتاح وحده. وسطر «+ ضريبة» تحت كل صنف يختفي من تلقائه:
@@ -83,6 +83,8 @@ const form = useForm({
     discount_amount: 0,
     paid_amount: 0,
     notes: '',
+    // «حفظ وطباعة» — يضبطه زرّه عند الإرسال، فيعيد الخادم رابط الورقة لتُطبع.
+    print: false as boolean,
 });
 
 /** تبديل القسم يعيد تحميل أصنافه وعملائه — مستودع كل نشاط مستقل وسجلّه كذلك. */
@@ -249,8 +251,10 @@ const changeMethod = (id: number) => {
 /** الدَّين على العميل النقدي لا يُتابَع باسم — ننبّه دون منع. */
 const debtOnWalkIn = computed(() => remaining.value > 0.005 && (form.client_id === null || form.client_id === props.defaultClientId));
 
-const submit = () => {
+const submit = (print = false) => {
     if (!filledLines.value.length || hasStockIssue.value) return;
+
+    form.print = print;
 
     form.lines = filledLines.value.map((l) => ({
         item_id: l.item_id,
@@ -294,7 +298,7 @@ const numField =
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-full space-y-4 bg-slate-100 p-4">
-            <form @submit.prevent="submit" class="space-y-4">
+            <form @submit.prevent="submit()" class="space-y-4">
                 <!-- ترويسة الفاتورة -->
                 <div class="rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-sm">
                     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -621,13 +625,23 @@ const numField =
                             لا يمكن الحفظ: أحد الأصناف يتجاوز رصيده المتاح.
                         </p>
 
-                        <button
-                            type="submit"
-                            :disabled="form.processing || !filledLines.length || hasStockIssue"
-                            class="mt-3 w-full rounded-md bg-blue-700 py-3 text-base font-extrabold text-white shadow transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-slate-100 disabled:shadow-none"
-                        >
-                            حفظ الفاتورة
-                        </button>
+                        <div class="mt-3 grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                @click="submit(true)"
+                                :disabled="form.processing || !filledLines.length || hasStockIssue"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-700 py-3 text-base font-extrabold text-white shadow transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-slate-100 disabled:shadow-none"
+                            >
+                                <Printer class="h-4 w-4" /> حفظ وطباعة
+                            </button>
+                            <button
+                                type="submit"
+                                :disabled="form.processing || !filledLines.length || hasStockIssue"
+                                class="rounded-md border-2 border-blue-700 bg-white py-3 text-base font-extrabold text-blue-800 shadow transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400 disabled:shadow-none"
+                            >
+                                حفظ بدون طباعة
+                            </button>
+                        </div>
                     </div>
                 </div>
             </form>

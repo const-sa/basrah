@@ -224,4 +224,13 @@ class QuotationLineTaxChoiceTest extends TestCase
         $this->assertSame('0.00', $quotation->tax_amount);
         $this->assertSame('600.00', $quotation->total_amount);
     }
+
+    public function test_save_and_print_hands_back_the_quotation_sheet(): void
+    {
+        $this->actingAs($this->admin)
+            ->post('/admin/quotations', $this->payload(secondLineTaxable: true) + ['print' => true])
+            ->assertRedirect('/admin/quotations');
+
+        $this->assertSame(route('quotations.show', Quotation::latest('id')->firstOrFail()), session('print'));
+    }
 }

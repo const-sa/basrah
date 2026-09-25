@@ -8,7 +8,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { Save, Trash2 } from 'lucide-vue-next';
+import { Printer, Save, Trash2 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 // شاشة إدخال، فتتبع المفتاح وحده: لا عمود ضريبة ولا سطرها ما دامت مطفأة.
@@ -81,6 +81,8 @@ const form = useForm({
               tax_amount: i.tax_amount,
           }))
         : ([] as FormLine[]),
+    // «حفظ وطباعة» — يضبطه زرّه عند الإرسال، فيعيد الخادم رابط الورقة لتُطبع.
+    print: false as boolean,
 });
 
 interface SupplierOption {
@@ -191,7 +193,9 @@ watch(grandTotal, (val) => {
     if (form.paid_amount > val) form.paid_amount = val;
 });
 
-const submit = () => {
+const submit = (print = false) => {
+    form.print = print;
+
     if (props.purchase) {
         form.put(`/admin/purchases/${props.purchase.id}`, { preserveScroll: true });
     } else {
@@ -222,7 +226,7 @@ const submit = () => {
                 </Link>
             </div>
 
-            <form @submit.prevent="submit" class="space-y-4">
+            <form @submit.prevent="submit()" class="space-y-4">
                 <!-- Basic Invoice Information -->
                 <div class="overflow-hidden rounded-2xl border-2 border-slate-300 bg-white shadow-sm transition-all duration-200 hover:shadow-md">
                     <div class="border-b border-slate-200 bg-slate-50 px-5 py-3">
@@ -527,6 +531,15 @@ const submit = () => {
                 </div>
 
                 <div class="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
+                    <button
+                        v-if="!props.purchase"
+                        type="button"
+                        @click="submit(true)"
+                        :disabled="form.processing || !form.items.length"
+                        class="inline-flex items-center gap-2 rounded-xl border-2 border-emerald-700 bg-white px-6 py-3 text-sm font-bold text-emerald-800 shadow-sm transition-all hover:bg-emerald-50 disabled:opacity-60"
+                    >
+                        <Printer class="h-4 w-4" /> حفظ وطباعة
+                    </button>
                     <button
                         type="submit"
                         :disabled="form.processing || !form.items.length"

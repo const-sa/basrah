@@ -149,4 +149,20 @@ class PurchaseTaxChoiceTest extends TestCase
             ->post('/admin/purchases', $payload)
             ->assertSessionHasErrors('is_taxable');
     }
+
+    public function test_save_and_print_hands_back_the_purchase_sheet(): void
+    {
+        $this->actingAs($this->admin)
+            ->post('/admin/purchases', $this->payload(taxable: true) + ['print' => true])
+            ->assertRedirect('/admin/purchases');
+
+        $this->assertSame(route('purchases.show', Purchase::latest('id')->firstOrFail()), session('print'));
+    }
+
+    public function test_a_plain_purchase_save_prints_nothing(): void
+    {
+        $this->actingAs($this->admin)
+            ->post('/admin/purchases', $this->payload(taxable: true))
+            ->assertSessionMissing('print');
+    }
 }

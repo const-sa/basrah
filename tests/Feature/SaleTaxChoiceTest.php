@@ -249,4 +249,21 @@ class SaleTaxChoiceTest extends TestCase
 
         return Sale::latest('id')->firstOrFail();
     }
+
+    public function test_save_and_print_hands_back_the_invoice_sheet(): void
+    {
+        $this->actingAs($this->cashier)
+            ->post('/admin/pos/checkout', $this->payload(taxable: true) + ['print' => true]);
+
+        $sale = Sale::latest('id')->firstOrFail();
+
+        $this->assertSame(route('sales.index', ['invoice' => $sale->id]), session('print'));
+    }
+
+    public function test_a_plain_save_prints_nothing(): void
+    {
+        $this->actingAs($this->cashier)
+            ->post('/admin/pos/checkout', $this->payload(taxable: true))
+            ->assertSessionMissing('print');
+    }
 }

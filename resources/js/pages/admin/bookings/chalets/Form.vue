@@ -10,7 +10,7 @@ import { toHijri, weekdayName } from '@/lib/hijri';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { usePermissions } from '@/composables/usePermissions';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, CheckCircle2, FileText, Handshake, Loader2, LogIn, LogOut, Moon, ShieldCheck, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, CheckCircle2, FileText, Handshake, Loader2, LogIn, LogOut, Moon, Printer, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string; is_active: boolean }
@@ -197,6 +197,8 @@ const form = useForm({
     // العقد يُولَّد مع الحجز نفسه؛ وهذا الخيار يفتح صفحته بعد الحفظ بدل أن
     // يُحفظ الحجز ثم يُفتح سجل العقود ويُبحث فيه عن رقمه.
     open_contract: true,
+    // «حفظ وطباعة» — يضبطه زرّه عند الإرسال، فيعيد الخادم رابط الورقة لتُطبع.
+    print: false as boolean,
 });
 
 const { canActivity } = usePermissions();
@@ -824,10 +826,12 @@ const otherErrors = computed(() =>
         .map(([, message]) => message as string),
 );
 
-const submit = () => {
+const submit = (print = false) => {
     // الزرّ معطَّل في هذه الحال، لكن Enter داخل حقلٍ يُرسل النموذج من دونه —
     // فالحارس هنا لا في الزرّ وحده.
     if (dayUseBlocker.value !== null || hourlyBlocker.value !== null) return;
+
+    form.print = print;
 
     // The two shapes carry different fields, and the one that does not apply
     // is sent as null rather than left at whatever the hidden input still
@@ -854,7 +858,7 @@ const submit = () => {
     <Head :title="isEdit ? 'تعديل الحجز' : 'حجز جديد'" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <form @submit.prevent="submit" class="min-h-full space-y-5 bg-slate-100 p-5">
+        <form @submit.prevent="submit()" class="min-h-full space-y-5 bg-slate-100 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">
@@ -1409,6 +1413,15 @@ const submit = () => {
                         <div class="flex gap-2">
                             <button type="submit" :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights)) || dayUseBlocker !== null || hourlyBlocker !== null" class="flex-1 rounded-md bg-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:opacity-50">
                                 {{ isEdit ? 'حفظ التعديل' : isStay ? 'حفظ الإقامة' : 'حفظ الحجز' }}
+                            </button>
+                            <button
+                                v-if="!isEdit"
+                                type="button"
+                                @click="submit(true)"
+                                :disabled="form.processing || blocked || (isStay && (nights < 1 || overMaxNights)) || dayUseBlocker !== null || hourlyBlocker !== null"
+                                class="inline-flex items-center gap-1.5 rounded-md border-2 border-teal-600 bg-white px-4 py-2.5 text-sm font-bold text-teal-700 shadow-sm transition hover:bg-teal-50 disabled:opacity-50"
+                            >
+                                <Printer class="h-4 w-4" /> حفظ وطباعة
                             </button>
                             <Link href="/admin/bookings/chalets" class="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
                                 إلغاء

@@ -95,7 +95,7 @@ class QuotationController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($data, $request) {
+            $quotation = DB::transaction(function () use ($data, $request) {
                 // Generate a quotation number
                 $last = Quotation::latest('id')->first();
                 $number = 'QT-' . str_pad(($last ? $last->id + 1 : 1), 6, '0', STR_PAD_LEFT);
@@ -125,12 +125,21 @@ class QuotationController extends Controller
                 foreach ($lines as $line) {
                     QuotationItem::create($line + ['quotation_id' => $quotation->id]);
                 }
+
+                return $quotation;
             });
         } catch (RuntimeException $e) {
             return back()->with('warning', $e->getMessage());
         }
 
-        return redirect()->route('quotations.index')->with('success', 'تم حفظ عرض السعر بنجاح');
+        $done = redirect()->route('quotations.index')->with('success', 'تم حفظ عرض السعر بنجاح');
+
+        // «حفظ وطباعة»: ورقة المستند تُطبع في إطار خفي والموظف على شاشته.
+        if ($request->boolean('print') && $request->user()->hasPermission('quotations.view')) {
+            $done->with('print', route('quotations.show', $quotation));
+        }
+
+        return $done;
     }
 
     public function edit(Quotation $quotation): Response

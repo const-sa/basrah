@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { type GroupInsertion, type ItemGroupOption } from '@/types/item-groups';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { FileText, Trash2 } from 'lucide-vue-next';
+import { FileText, Printer, Trash2 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 // شاشة إدخال، فتتبع المفتاح وحده: لا عمود ضريبة ولا سطرها ما دامت مطفأة.
@@ -72,6 +72,8 @@ const form = useForm({
               tax_amount: i.tax_amount ?? i.quantity * i.unit_price * ((i.item?.tax_rate ?? 0) / 100),
           }))
         : ([] as FormLine[]),
+    // «حفظ وطباعة» — يضبطه زرّه عند الإرسال، فيعيد الخادم رابط الورقة لتُطبع.
+    print: false as boolean,
 });
 
 const selectedItemId = ref<number | string | null>(null);
@@ -162,7 +164,9 @@ const setAllTaxable = (taxable: boolean) => {
 };
 const grandTotal = computed(() => subtotal.value - form.discount_amount + totalTax.value);
 
-const submit = () => {
+const submit = (print = false) => {
+    form.print = print;
+
     if (props.quotation) {
         form.put(`/admin/quotations/${props.quotation.id}`, { preserveScroll: true });
     } else {
@@ -190,7 +194,7 @@ const submit = () => {
                 <Link href="/admin/quotations" class="text-sm font-bold text-slate-500 hover:text-slate-800"> العودة للسجل </Link>
             </div>
 
-            <form @submit.prevent="submit" class="space-y-4">
+            <form @submit.prevent="submit()" class="space-y-4">
                 <div class="grid gap-6 rounded-2xl border-2 border-slate-300 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
                     <div>
                         <label class="mb-2 block text-sm font-extrabold text-emerald-950">العميل</label>
@@ -399,6 +403,15 @@ const submit = () => {
                 </div>
 
                 <div class="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
+                    <button
+                        v-if="!props.quotation"
+                        type="button"
+                        @click="submit(true)"
+                        :disabled="form.processing || !form.items.length"
+                        class="inline-flex items-center gap-2 rounded-xl border-2 border-emerald-700 bg-white px-6 py-3 text-sm font-bold text-emerald-800 shadow-sm transition-all hover:bg-emerald-50 disabled:opacity-60"
+                    >
+                        <Printer class="h-4 w-4" /> حفظ وطباعة
+                    </button>
                     <button
                         type="submit"
                         :disabled="form.processing || !form.items.length"

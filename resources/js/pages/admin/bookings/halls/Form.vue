@@ -10,7 +10,7 @@ import { toHijri, weekdayName } from '@/lib/hijri';
 import { todayString } from '@/lib/dates';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Handshake, Info, Loader2, PartyPopper, ShieldCheck, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRight, Building2, CalendarDays, CheckCircle2, FileText, Handshake, Info, Loader2, PartyPopper, Printer, ShieldCheck, Wallet } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 interface SectionOption { id: number; name: string; gender: string }
@@ -183,6 +183,8 @@ const form = useForm({
     // العقد يُولَّد مع الحجز نفسه؛ وهذا الخيار يفتح صفحته بعد الحفظ بدل أن
     // يُحفظ الحجز ثم يُفتح سجل العقود ويُبحث فيه عن رقمه.
     open_contract: true,
+    // «حفظ وطباعة» — يضبطه زرّه عند الإرسال، فيعيد الخادم رابط الورقة لتُطبع.
+    print: false as boolean,
 });
 
 const { canActivity } = usePermissions();
@@ -479,7 +481,9 @@ watch(
     },
 );
 
-const submit = () => {
+const submit = (print = false) => {
+    form.print = print;
+
     // الحقل قد يُترك فارغًا أو بقيمة خارج الحد — يُرسل مشذَّبًا كما حُسب وعُرض.
     form.days_count = daysCount.value;
 
@@ -510,7 +514,7 @@ const eventBadge = (color: string) =>
     <Head :title="isEdit ? 'تعديل حجز القاعة' : 'حجز قاعة جديد'" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <form @submit.prevent="submit" class="min-h-full space-y-5 bg-slate-100 p-5">
+        <form @submit.prevent="submit()" class="min-h-full space-y-5 bg-slate-100 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-extrabold text-slate-900">
@@ -1097,6 +1101,15 @@ const eventBadge = (color: string) =>
                         <div class="flex gap-2">
                             <button type="submit" :disabled="form.processing || blocked" class="flex-1 rounded-md bg-blue-600 px-5 py-3 text-lg font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50">
                                 {{ isEdit ? 'حفظ التعديل' : 'حفظ الحجز' }}
+                            </button>
+                            <button
+                                v-if="!isEdit"
+                                type="button"
+                                @click="submit(true)"
+                                :disabled="form.processing || blocked"
+                                class="inline-flex items-center gap-1.5 rounded-md border-2 border-blue-600 bg-white px-4 py-3 text-lg font-bold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
+                            >
+                                <Printer class="h-5 w-5" /> حفظ وطباعة
                             </button>
                             <Link href="/admin/bookings/halls" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-lg font-bold text-slate-800 hover:bg-slate-50">
                                 إلغاء

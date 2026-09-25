@@ -131,13 +131,20 @@ class PosController extends Controller
 
         $message = "تمت الفاتورة {$sale->number} بمبلغ ".number_format((float) $sale->total_amount, 2);
 
+        // «حفظ وطباعة»: ورقة الفاتورة في سجل المبيعات تُطبع والكاشير باقٍ على شاشته.
+        $done = back();
+
+        if ($request->boolean('print') && $request->user()->hasPermission('sales.view')) {
+            $done = $done->with('print', route('sales.index', ['invoice' => $sale->id]));
+        }
+
         // المتبقي يُذكر صراحةً: الكاشير يحتاج أن يعرف أنّ على الفاتورة دَينًا.
         if ($sale->remainingAmount() > 0) {
-            return back()->with('warning', $message.' — المتبقي '.number_format($sale->remainingAmount(), 2)
+            return $done->with('warning', $message.' — المتبقي '.number_format($sale->remainingAmount(), 2)
                 .' ('.$sale->paymentStatusLabel().')');
         }
 
-        return back()->with('success', $message);
+        return $done->with('success', $message);
     }
 
     public function refund(Request $request, Sale $sale): RedirectResponse

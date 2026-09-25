@@ -4,6 +4,7 @@ import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import FlashToast from '@/components/FlashToast.vue';
+import PrintAfterSave from '@/components/PrintAfterSave.vue';
 import type { BreadcrumbItemType, SharedData } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -37,5 +38,6 @@ const version = computed(() => page.props.version);
             </footer>
         </AppContent>
         <FlashToast />
+        <PrintAfterSave />
     </AppShell>
 </template>

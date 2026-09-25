@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { StatPill } from '@/components/data-table';
+import { useAutoPrint } from '@/composables/useAutoPrint';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -211,6 +212,9 @@ const closeDetails = () => {
 
 /** الطباعة تخرج ورقة الفاتورة وحدها — قواعد @media print أسفل الملف تخفي ما عداها. */
 const printInvoice = () => window.print();
+
+// «حفظ وطباعة» من نقطة البيع: الفاتورة تُفتح هنا بـ ?print=1 وتُطبع ما إن تُجلب تفاصيلها.
+useAutoPrint(() => details.value !== null);
 
 // ── سند القبض ───────────────────────────────────────────────
 const settleSale = ref<SaleRow | null>(null);

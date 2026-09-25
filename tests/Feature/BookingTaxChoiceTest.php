@@ -269,4 +269,20 @@ class BookingTaxChoiceTest extends TestCase
         $this->assertTrue($booking->is_taxable);
         $this->assertGreaterThan(0, $booking->taxAmount());
     }
+
+    public function test_save_and_print_hands_back_the_booking_invoice(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->hallPayload(taxable: true) + ['print' => true])
+            ->assertSessionMissing('warning');
+
+        $this->assertSame(route('bookings.invoice', Booking::latest('id')->firstOrFail()), session('print'));
+    }
+
+    public function test_a_plain_booking_save_prints_nothing(): void
+    {
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/halls', $this->hallPayload(taxable: true))
+            ->assertSessionMissing('print');
+    }
 }

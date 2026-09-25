@@ -251,6 +251,11 @@ abstract class BaseBookingsController extends Controller
 
         $done = $redirect()->with('success', "تم إنشاء الحجز {$booking->reference} — {$state}{$security}{$paper}");
 
+        // «حفظ وطباعة»: فاتورة الحجز تُطبع في إطار خفي والموظف على وجهته.
+        if ($request->boolean('print')) {
+            $done->with('print', route('bookings.invoice', $booking));
+        }
+
         // تعذّر التوليد لا يُبطل الحجز — يُحفظ ويُقال للموظف لماذا لا عقد معه.
         return is_string($contract) ? $done->with('warning', $contract) : $done;
     }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAutoPrint } from '@/composables/useAutoPrint';
 import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -59,6 +60,9 @@ const { shows } = useVat();
 const showsTax = computed(() => props.purchase.is_taxable && shows(props.purchase.tax_amount));
 
 const print = () => window.print();
+
+// «حفظ وطباعة»: الورقة تُفتح بـ ?print=1 في إطار خفي وتطبع نفسها.
+useAutoPrint();
 </script>
 
 <template>

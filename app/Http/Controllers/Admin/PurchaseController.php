@@ -124,7 +124,7 @@ class PurchaseController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($data, $inventory, $request) {
+            $purchase = DB::transaction(function () use ($data, $inventory, $request) {
                 // Generate a purchase number
                 $lastPurchase = Purchase::latest('id')->first();
                 $number = 'PUR-' . str_pad(($lastPurchase ? $lastPurchase->id + 1 : 1), 6, '0', STR_PAD_LEFT);
@@ -183,12 +183,21 @@ class PurchaseController extends Controller
                         "شراء بالفاتورة {$purchase->number}"
                     );
                 }
+
+                return $purchase;
             });
         } catch (RuntimeException $e) {
             return back()->with('warning', $e->getMessage());
         }
 
-        return redirect()->route('purchases.index')->with('success', 'تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
+        $done = redirect()->route('purchases.index')->with('success', 'تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
+
+        // «حفظ وطباعة»: ورقة المستند تُطبع في إطار خفي والموظف على شاشته.
+        if ($request->boolean('print') && $request->user()->hasPermission('purchases.view')) {
+            $done->with('print', route('purchases.show', $purchase));
+        }
+
+        return $done;
     }
 
     public function edit(Purchase $purchase): Response

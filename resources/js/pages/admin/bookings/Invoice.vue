@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAutoPrint } from '@/composables/useAutoPrint';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
@@ -100,6 +101,9 @@ const statusTone = computed(
 );
 
 const print = () => window.print();
+
+// «حفظ وطباعة»: الورقة تُفتح بـ ?print=1 في إطار خفي وتطبع نفسها.
+useAutoPrint();
 
 const { can, canBooking } = usePermissions();
 
