@@ -31,6 +31,12 @@ Schedule::command('bookings:send-reminders')
     ->dailyAt('09:00')
     ->withoutOverlapping();
 
+// تصريف الطابور: ما تجاوز حدّ الإرسال الفوري (الجماعي) أو ما بقي عالقًا —
+// بلا عامل دائم، فالاستضافة المشتركة لا تُبقيه حيًّا.
+Schedule::command('queue:work --stop-when-empty --tries=3 --max-time=50')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 // A day late, not on send: the gateway still has to fetch the file by URL.
 Schedule::command('pdf:prune')
     ->dailyAt('03:00')

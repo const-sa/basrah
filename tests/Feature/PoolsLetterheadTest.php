@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SendWhatsappMessage;
 use App\Models\Client;
 use App\Models\ContractTemplate;
 use App\Models\Department;
@@ -23,6 +24,7 @@ use Database\Seeders\RolesSeeder;
 use Database\Seeders\SettingsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -415,6 +417,26 @@ class PoolsLetterheadTest extends TestCase
         $this->assertStringNotContainsString('ديوان المسرة', $message->body);
         // من رقم المسابح لا من رقم الديوان.
         $this->assertSame(app(WhatsappAccounts::class)->for($quotation)?->id, $message->whatsapp_account_id);
+    }
+
+    /**
+     * No queue worker is needed: by default the message leaves right after
+     * the page is answered, in the same request.
+     */
+    public function test_the_quotation_is_sent_right_after_the_response_without_a_worker(): void
+    {
+        Storage::fake('public');
+        Bus::fake();
+        config(['whatsapp.dispatch' => 'after_response']);
+
+        $quotation = $this->poolsQuotation();
+        app(WhatsappAccounts::class)->for($quotation)->update(['instance_id' => 'POOLS-1', 'access_token' => 'token']);
+        app(WhatsappAccounts::class)->forget();
+
+        $this->actingAs($this->owner)->post("/admin/quotations/{$quotation->id}/send")
+            ->assertSessionHas('success');
+
+        Bus::assertDispatchedAfterResponse(SendWhatsappMessage::class);
     }
 
     /**

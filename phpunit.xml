@@ -34,6 +34,8 @@
         <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <!-- الاختبارات ترصد مهام الإرسال في الطابور ولا تبلغ البوابة -->
+        <env name="WHATSAPP_DISPATCH" value="queue" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
     </php>

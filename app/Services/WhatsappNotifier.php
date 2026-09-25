@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\Log;
  */
 class WhatsappNotifier
 {
+    /** ما أُرسل فوريًا في هذا الطلب — ما زاد على الحدّ يذهب إلى الطابور. */
+    private static int $immediate = 0;
+
     /**
      * تسجيل رسالة ودفعها للطابور.
      */
@@ -74,7 +77,18 @@ class WhatsappNotifier
         ]);
 
         // Stays queued until the gateway answers — marking it sent here reads as delivered.
-        SendWhatsappMessage::dispatch($number, $body, $mediaUrl, $message->id, $account?->id);
+        //
+        // Sent right after the response by default: shared hosting keeps no
+        // queue worker alive, and a message waiting on one never leaves. Past
+        // the per-request limit (a bulk send), the rest go to the queue, which
+        // the scheduler drains every minute.
+        if (config('whatsapp.dispatch') === 'after_response'
+            && self::$immediate < (int) config('whatsapp.immediate_limit', 20)) {
+            self::$immediate++;
+            SendWhatsappMessage::dispatchAfterResponse($number, $body, $mediaUrl, $message->id, $account?->id);
+        } else {
+            SendWhatsappMessage::dispatch($number, $body, $mediaUrl, $message->id, $account?->id);
+        }
 
         return $message;
     }
