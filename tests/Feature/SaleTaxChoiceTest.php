@@ -9,6 +9,7 @@ use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Role;
 use App\Models\Sale;
+use App\Models\Setting;
 use App\Models\User;
 use Database\Seeders\AccountsSeeder;
 use Database\Seeders\CatalogSeeder;
@@ -147,6 +148,9 @@ class SaleTaxChoiceTest extends TestCase
 
     public function test_the_taxed_sheet_keeps_its_tax_number_and_qr(): void
     {
+        // الفاتورة في قسم المسابح، فرقمها رقم مؤسستها لا رقم الديوان.
+        Setting::current()->update(['pools_tax_number' => '300000000000003']);
+
         $this->actingAs($this->cashier)->post('/admin/pos/checkout', $this->payload(taxable: true));
 
         $sale = Sale::latest('id')->firstOrFail();

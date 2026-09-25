@@ -11,10 +11,18 @@ interface SettingsData {
     business_name: string | null;
     logo_url: string | null;
     favicon_url: string | null;
-    /** The pools activity's own letterhead — blank follows the business's. */
+    /** The pools activity's own letterhead — a separate business: blank stays blank, never the Diwan's. */
     pools_name: string | null;
     pools_logo_url: string | null;
     pools_phone: string | null;
+    pools_whatsapp: string | null;
+    pools_email: string | null;
+    pools_address: string | null;
+    pools_tax_number: string | null;
+    pools_commercial_register: string | null;
+    pools_manager_name: string | null;
+    pools_signature_url: string | null;
+    pools_stamp_url: string | null;
     phone: string | null;
     whatsapp: string | null;
     email: string | null;
@@ -43,11 +51,19 @@ const faviconPreview = ref<string | null>(props.settings.favicon_url);
 const managerSignaturePreview = ref<string | null>(props.settings.manager_signature_url);
 const financeSignaturePreview = ref<string | null>(props.settings.finance_manager_signature_url);
 const stampPreview = ref<string | null>(props.settings.stamp_url);
+const poolsSignaturePreview = ref<string | null>(props.settings.pools_signature_url);
+const poolsStampPreview = ref<string | null>(props.settings.pools_stamp_url);
 
 const form = useForm({
     business_name: props.settings.business_name ?? '',
     pools_name: props.settings.pools_name ?? '',
     pools_phone: props.settings.pools_phone ?? '',
+    pools_whatsapp: props.settings.pools_whatsapp ?? '',
+    pools_email: props.settings.pools_email ?? '',
+    pools_address: props.settings.pools_address ?? '',
+    pools_tax_number: props.settings.pools_tax_number ?? '',
+    pools_commercial_register: props.settings.pools_commercial_register ?? '',
+    pools_manager_name: props.settings.pools_manager_name ?? '',
     phone: props.settings.phone ?? '',
     whatsapp: props.settings.whatsapp ?? '',
     email: props.settings.email ?? '',
@@ -64,6 +80,8 @@ const form = useForm({
     manager_signature: null as File | null,
     finance_manager_signature: null as File | null,
     stamp: null as File | null,
+    pools_signature: null as File | null,
+    pools_stamp: null as File | null,
 });
 
 const onLogoChange = (e: Event) => {
@@ -102,6 +120,18 @@ const onStampChange = (e: Event) => {
     if (file) stampPreview.value = URL.createObjectURL(file);
 };
 
+const onPoolsSignatureChange = (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+    form.pools_signature = file;
+    if (file) poolsSignaturePreview.value = URL.createObjectURL(file);
+};
+
+const onPoolsStampChange = (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+    form.pools_stamp = file;
+    if (file) poolsStampPreview.value = URL.createObjectURL(file);
+};
+
 const submit = () => {
     form.post('/admin/settings/general', {
         preserveScroll: true,
@@ -113,6 +143,8 @@ const submit = () => {
             form.manager_signature = null;
             form.finance_manager_signature = null;
             form.stamp = null;
+            form.pools_signature = null;
+            form.pools_stamp = null;
         },
     });
 };
@@ -293,7 +325,7 @@ const submit = () => {
                     <h2 class="text-lg font-bold text-slate-800">هوية نشاط المسابح</h2>
                 </div>
                 <p class="mb-4 text-sm font-medium text-slate-500">
-                    تُطبع على عقود التمديد والتركيب والصيانة وسجل عقود المسابح. اتركها فارغة ليتبع النشاط هوية المنشأة.
+                    المسابح جهة مستقلة عن الديوان: تُطبع هذه البيانات وحدها على فواتير المسابح وعروض أسعارها ومشترياتها وعقودها. ما يُترك فارغًا يُحذف من الورقة، ولا يُستعار من بيانات الديوان.
                 </p>
                 <div class="grid gap-5 sm:grid-cols-2">
                     <div>
@@ -301,7 +333,6 @@ const submit = () => {
                         <input
                             v-model="form.pools_name"
                             type="text"
-                            :placeholder="form.business_name"
                             class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                         />
                         <p v-if="form.errors.pools_name" class="mt-1 text-xs text-red-500">{{ form.errors.pools_name }}</p>
@@ -311,7 +342,6 @@ const submit = () => {
                             v-model="form.pools_phone"
                             type="text"
                             dir="ltr"
-                            :placeholder="form.phone"
                             class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                         />
                         <p v-if="form.errors.pools_phone" class="mt-1 text-xs text-red-500">{{ form.errors.pools_phone }}</p>
@@ -333,6 +363,67 @@ const submit = () => {
                             </label>
                         </div>
                         <p v-if="form.errors.pools_logo" class="mt-1 text-xs text-red-500">{{ form.errors.pools_logo }}</p>
+                    </div>
+                </div>
+                <div class="mt-5 grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">واتساب</label>
+                        <input v-model="form.pools_whatsapp" type="text" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_whatsapp" class="mt-1 text-xs text-red-500">{{ form.errors.pools_whatsapp }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">البريد الإلكتروني</label>
+                        <input v-model="form.pools_email" type="email" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_email" class="mt-1 text-xs text-red-500">{{ form.errors.pools_email }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">الرقم الضريبي</label>
+                        <input v-model="form.pools_tax_number" type="text" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_tax_number" class="mt-1 text-xs text-red-500">{{ form.errors.pools_tax_number }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">السجل التجاري</label>
+                        <input v-model="form.pools_commercial_register" type="text" dir="ltr" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_commercial_register" class="mt-1 text-xs text-red-500">{{ form.errors.pools_commercial_register }}</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-sm font-bold text-slate-700">العنوان</label>
+                        <input v-model="form.pools_address" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_address" class="mt-1 text-xs text-red-500">{{ form.errors.pools_address }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">اسم المدير</label>
+                        <input v-model="form.pools_manager_name" type="text" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+                        <p v-if="form.errors.pools_manager_name" class="mt-1 text-xs text-red-500">{{ form.errors.pools_manager_name }}</p>
+                    </div>
+                    <div></div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">توقيع المدير</label>
+                        <div class="flex items-center gap-4">
+                            <div class="flex h-20 w-28 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 p-1">
+                                <img v-if="poolsSignaturePreview" :src="poolsSignaturePreview" alt="" class="h-full w-full object-contain" />
+                                <Image v-else class="h-6 w-6 text-slate-300" />
+                            </div>
+                            <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                                <Upload class="h-4 w-4" /> اختيار صورة
+                                <input type="file" accept="image/*" class="hidden" @change="onPoolsSignatureChange" />
+                            </label>
+                        </div>
+                        <p v-if="form.errors.pools_signature" class="mt-1 text-xs text-red-500">{{ form.errors.pools_signature }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">ختم المؤسسة</label>
+                        <div class="flex items-center gap-4">
+                            <div class="flex h-20 w-28 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 p-1">
+                                <img v-if="poolsStampPreview" :src="poolsStampPreview" alt="" class="h-full w-full object-contain" />
+                                <Image v-else class="h-6 w-6 text-slate-300" />
+                            </div>
+                            <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                                <Upload class="h-4 w-4" /> اختيار صورة
+                                <input type="file" accept="image/*" class="hidden" @change="onPoolsStampChange" />
+                            </label>
+                        </div>
+                        <p v-if="form.errors.pools_stamp" class="mt-1 text-xs text-red-500">{{ form.errors.pools_stamp }}</p>
                     </div>
                 </div>
             </div>

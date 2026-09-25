@@ -6,9 +6,10 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\Contract;
-use App\Models\Setting;
 use App\Models\WhatsappAccount;
 use App\Support\ActivityPermission;
+use App\Support\ActivitySegment;
+use App\Support\Letterhead;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
@@ -67,11 +68,16 @@ class WhatsappAccounts
             || $this->active()->contains(fn (WhatsappAccount $a) => $a->hasCredentials());
     }
 
-    /** الاسم الذي تُوقَّع به الرسالة ({business_name}). */
+    /**
+     * الاسم الذي تُوقَّع به الرسالة ({business_name}).
+     *
+     * بلا رقمٍ للقسم يُوقَّع باسم الجهة صاحبة السجلّ: رسالة المسابح باسم
+     * مؤسستها، لا باسم الديوان — جهتان مستقلتان.
+     */
     public function senderName(?Model $related): string
     {
         return $this->for($related)?->name
-            ?? (string) (Setting::current()->business_name ?? config('app.name'));
+            ?? Letterhead::raw($this->target($related)[1] === ActivitySegment::POOLS)['name'];
     }
 
     public function forget(): void
@@ -109,6 +115,14 @@ class WhatsappAccounts
 
         if ($related instanceof Client) {
             return [null, ActivityPermission::ofClient($related)];
+        }
+
+        // عقدٌ بلا حجز (عقود المسابح من عروض الأسعار ونماذجها): قسمه من
+        // ترويسته، وإلا من سجلّ عميله.
+        if ($related instanceof Contract) {
+            return [null, $related->underPoolsLetterhead()
+                ? ActivitySegment::POOLS
+                : ActivityPermission::ofClient($related->client)];
         }
 
         return [null, null];

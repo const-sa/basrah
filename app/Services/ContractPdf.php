@@ -6,6 +6,7 @@ use App\Models\Contract;
 use App\Models\Setting;
 use App\Services\Concerns\ResolvesPublicFiles;
 use App\Support\BookingPeriod;
+use App\Support\Letterhead;
 use App\Support\StayPeriod;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
@@ -76,7 +77,7 @@ class ContractPdf
             $mpdf->autoScriptToLang = true;
 
             $mpdf->SetTitle('عقد رقم '.$contract->number);
-            $mpdf->SetAuthor((string) (Setting::current()->business_name ?: config('app.name')));
+            $mpdf->SetAuthor(Letterhead::raw($contract->underPoolsLetterhead())['name']);
 
             // ترقيم الصفحات: عقدٌ من ورقتين بلا ترقيم لا يُعرف أنقصت ورقةٌ منه.
             $mpdf->SetHTMLFooter(
@@ -147,9 +148,11 @@ class ContractPdf
         $isStay = $contract->booking?->unit?->type === 'chalet'
             || ($contract->booking?->period === StayPeriod::PERIOD);
 
-        // A pools sheet is printed under that activity's own letterhead.
+        // A pools sheet is printed under that activity's own letterhead — the
+        // whole of it, nothing borrowed from the Diwan's.
         $pools = $contract->underPoolsLetterhead();
-        $letterhead = $settings->poolsLetterhead();
+        $letterhead = Letterhead::raw($pools, $settings);
+        $issuer = Letterhead::contract($data['org_name'] ?? null, $pools);
 
         return [
             'contract' => $contract,
@@ -180,28 +183,16 @@ class ContractPdf
             // العقود المولّدة قبل فصل الشروط تحمل نصها كاملًا في body.
             'terms' => $contract->terms ?: $contract->body,
             'unitCode' => $contract->booking?->unit?->code,
-            'issuer' => [
-                'business_name' => $data['org_name'] ?? ($pools
-                    ? $letterhead['name']
-                    : ($settings->business_name ?: config('app.name'))),
-                'phone' => $pools ? $letterhead['phone'] : $settings->phone,
-                // The rental form's header carries two numbers — shown only
-                // when the second is genuinely a different one.
-                'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
-                'address' => $settings->address,
-                'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
-                // The maintenance sheet's letterhead carries the CR number
-                // where the installation pad carries the tax number.
-                'commercial_register' => $settings->commercial_register,
-                'manager_name' => $settings->manager_name,
-            ],
+            'issuer' => collect($issuer)
+                ->only(['business_name', 'phone', 'whatsapp', 'address', 'tax_number', 'commercial_register', 'manager_name'])
+                ->all(),
             // الصور تُمرَّر بمساراتها على القرص لا بروابطها: mpdf يقرأ الملف
             // مباشرةً، وتحميله عبر HTTP من الخادم نفسه يعلّق التوليد إذا كان
             // العامل الوحيد مشغولًا بالطلب الذي يولّده.
             'logoPath' => $this->localPath($contract->booking?->unit?->logo_path)
-                ?? $this->localPath($pools ? $letterhead['logo_path'] : $settings->logo_path),
-            'signaturePath' => $this->localPath($settings->manager_signature_path),
-            'stampPath' => $this->localPath($settings->stamp_path),
+                ?? $this->localPath($letterhead['logo_path']),
+            'signaturePath' => $this->localPath($letterhead['signature_path']),
+            'stampPath' => $this->localPath($letterhead['stamp_path']),
         ];
     }
 

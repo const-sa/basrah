@@ -3,8 +3,9 @@
 namespace App\Services;
 
 use App\Models\Quotation;
-use App\Models\Setting;
 use App\Services\Concerns\ResolvesPublicFiles;
+use App\Support\Letterhead;
+use App\Support\Vat;
 use Illuminate\Support\Facades\View;
 use Mpdf\Mpdf;
 use Mpdf\MpdfException;
@@ -17,8 +18,6 @@ use RuntimeException;
 class QuotationPdf
 {
     use ResolvesPublicFiles;
-
-    public function __construct(private readonly ZatcaQr $zatcaQr) {}
 
     /**
      * PDF content as a string of bytes.
@@ -46,11 +45,10 @@ class QuotationPdf
             $mpdf->autoLangToFont = true;
             $mpdf->autoScriptToLang = true;
 
-            $settings = Setting::current();
             $title = 'عرض سعر - '.$quotation->number;
 
             $mpdf->SetTitle($title);
-            $mpdf->SetAuthor((string) ($settings->business_name ?: config('app.name')));
+            $mpdf->SetAuthor(Letterhead::raw($this->isPools($quotation))['name']);
 
             $mpdf->SetHTMLFooter(
                 '<div style="text-align:center;font-size:8pt;color:#64748b;border-top:1px solid #e2e8f0;padding-top:3px;">'
@@ -72,27 +70,21 @@ class QuotationPdf
      */
     private function viewData(Quotation $quotation): array
     {
-        $quotation->loadMissing(['client', 'user', 'items.item']);
+        $quotation->loadMissing(['client', 'user', 'items.item', 'department']);
 
-        $settings = Setting::current();
-        
-        $qrDataUrl = null;
-        if ($settings->tax_enabled && $settings->tax_number) {
-            $qrDataUrl = $this->zatcaQr->generate(
-                sellerName: (string) $settings->business_name,
-                taxNumber: (string) $settings->tax_number,
-                timestamp: $quotation->created_at,
-                totalAmount: (float) $quotation->total_amount,
-                taxAmount: (float) $quotation->tax_amount,
-            );
-        }
+        // عرض المسابح يصدر باسم مؤسستها وحدها — جهةٌ مستقلة عن الديوان.
+        // ولا رمز زكاة هنا: العرض ليس فاتورة (راجع QuotationController::issuer).
+        $pools = $this->isPools($quotation);
 
         return [
             'quotation' => $quotation,
-            'settings' => $settings,
-            'qrDataUrl' => $qrDataUrl,
-            'logoPath' => $this->localPath($settings->logo_path),
+            'issuer' => Letterhead::issuer($pools, Vat::applies() || (float) $quotation->tax_amount > 0),
+            'logoPath' => $this->localPath(Letterhead::raw($pools)['logo_path']),
         ];
     }
 
+    private function isPools(Quotation $quotation): bool
+    {
+        return (bool) $quotation->department?->isPools();
+    }
 }

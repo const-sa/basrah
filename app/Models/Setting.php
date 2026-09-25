@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\BookingTimes;
+use App\Support\Letterhead;
 use App\Support\Vat;
 use Illuminate\Database\Eloquent\Model;
 
@@ -19,8 +20,10 @@ class Setting extends Model
         'phone', 'whatsapp', 'email', 'address',
         // Social accounts — a handle or a full profile link
         'instagram', 'tiktok', 'snapchat',
-        // هوية نشاط المسابح — يتاجر باسمه وشعاره وهاتفه
-        'pools_name', 'pools_logo_path', 'pools_phone',
+        // هوية نشاط المسابح — جهة مستقلة بكامل بياناتها (راجع App\Support\Letterhead)
+        'pools_name', 'pools_logo_path', 'pools_phone', 'pools_whatsapp', 'pools_email', 'pools_address',
+        'pools_tax_number', 'pools_commercial_register', 'pools_manager_name',
+        'pools_signature_path', 'pools_stamp_path',
         // أوقات الحجز — فترات اليوم وأوقات الشاليه
         'booking_periods', 'chalet_check_in_time', 'chalet_check_out_time', 'chalet_max_nights',
         // الضريبة والسجل
@@ -59,18 +62,15 @@ class Setting extends Model
     }
 
     /**
-     * The pools activity's letterhead — its own name, logo and phone, falling
-     * back to the business's wherever the activity has not been given one.
+     * The pools activity's letterhead — its own identity only. The activity is
+     * a separate business, so a blank field stays blank rather than borrowing
+     * the Diwan's; see App\Support\Letterhead.
      *
      * @return array{name: string, logo_path: string|null, phone: string|null}
      */
     public function poolsLetterhead(): array
     {
-        return [
-            'name' => $this->pools_name ?: ($this->business_name ?: config('app.name')),
-            'logo_path' => $this->pools_logo_path ?: $this->logo_path,
-            'phone' => $this->pools_phone ?: $this->phone,
-        ];
+        return Letterhead::raw(true, $this);
     }
 
     /**

@@ -21,10 +21,19 @@ class GeneralSettingsController extends Controller
                 'business_name' => $settings->business_name,
                 'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
                 'favicon_url' => $settings->favicon_path ? asset($settings->favicon_path) : null,
-                // هوية المسابح — تُترك فارغةً فتتبع هوية المنشأة
+                // هوية المسابح — جهة مستقلة: ما يُترك فارغًا يُحذف من أوراقها
+                // ولا يُستعار من بيانات الديوان.
                 'pools_name' => $settings->pools_name,
                 'pools_logo_url' => $settings->pools_logo_path ? asset($settings->pools_logo_path) : null,
                 'pools_phone' => $settings->pools_phone,
+                'pools_whatsapp' => $settings->pools_whatsapp,
+                'pools_email' => $settings->pools_email,
+                'pools_address' => $settings->pools_address,
+                'pools_tax_number' => $settings->pools_tax_number,
+                'pools_commercial_register' => $settings->pools_commercial_register,
+                'pools_manager_name' => $settings->pools_manager_name,
+                'pools_signature_url' => $settings->pools_signature_path ? asset($settings->pools_signature_path) : null,
+                'pools_stamp_url' => $settings->pools_stamp_path ? asset($settings->pools_stamp_path) : null,
                 'phone' => $settings->phone,
                 'whatsapp' => $settings->whatsapp,
                 'email' => $settings->email,
@@ -51,6 +60,12 @@ class GeneralSettingsController extends Controller
             'business_name' => ['nullable', 'string', 'max:255'],
             'pools_name' => ['nullable', 'string', 'max:255'],
             'pools_phone' => ['nullable', 'string', 'max:50'],
+            'pools_whatsapp' => ['nullable', 'string', 'max:50'],
+            'pools_email' => ['nullable', 'email', 'max:255'],
+            'pools_address' => ['nullable', 'string', 'max:500'],
+            'pools_tax_number' => ['nullable', 'string', 'max:50'],
+            'pools_commercial_register' => ['nullable', 'string', 'max:100'],
+            'pools_manager_name' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'whatsapp' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -69,6 +84,8 @@ class GeneralSettingsController extends Controller
             'manager_signature' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'finance_manager_signature' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'stamp' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'pools_signature' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
+            'pools_stamp' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
         ]);
 
         $settings = Setting::current();
@@ -77,6 +94,12 @@ class GeneralSettingsController extends Controller
             'business_name' => $data['business_name'] ?? null,
             'pools_name' => $data['pools_name'] ?? null,
             'pools_phone' => $data['pools_phone'] ?? null,
+            'pools_whatsapp' => $data['pools_whatsapp'] ?? null,
+            'pools_email' => $data['pools_email'] ?? null,
+            'pools_address' => $data['pools_address'] ?? null,
+            'pools_tax_number' => $data['pools_tax_number'] ?? null,
+            'pools_commercial_register' => $data['pools_commercial_register'] ?? null,
+            'pools_manager_name' => $data['pools_manager_name'] ?? null,
             'phone' => $data['phone'] ?? null,
             'whatsapp' => $data['whatsapp'] ?? null,
             'email' => $data['email'] ?? null,
@@ -95,6 +118,14 @@ class GeneralSettingsController extends Controller
 
         if ($request->hasFile('pools_logo')) {
             $settings->pools_logo_path = $this->storeUpload($request->file('pools_logo'), 'pools-logo');
+        }
+
+        if ($request->hasFile('pools_signature')) {
+            $settings->pools_signature_path = $this->storeUpload($request->file('pools_signature'), 'pools-signature');
+        }
+
+        if ($request->hasFile('pools_stamp')) {
+            $settings->pools_stamp_path = $this->storeUpload($request->file('pools_stamp'), 'pools-stamp');
         }
 
         if ($request->hasFile('favicon')) {

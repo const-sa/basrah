@@ -5,11 +5,16 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\ContractTemplate;
 use App\Models\Department;
+use App\Models\Purchase;
 use App\Models\Quotation;
 use App\Models\Role;
 use App\Models\Setting;
+use App\Models\Supplier;
 use App\Models\User;
+use App\Models\WhatsappAccount;
 use App\Services\ContractService;
+use App\Services\QuotationPdf;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Support\PoolMaintenanceContractTemplate;
 use App\Support\PoolsLetterhead;
 use Database\Seeders\ContractTemplateSeeder;
@@ -158,14 +163,16 @@ class PoolsLetterheadTest extends TestCase
      */
     public function test_an_older_draft_adopts_the_letterhead_when_refreshed(): void
     {
+        Setting::current()->update(['pools_name' => 'الاسم السابق للمسابح']);
+
         $contract = app(ContractService::class)->generateDirect($this->client, $this->maintenanceForm(), 900);
 
-        $this->assertSame('ديوان المسرة', $contract->data['org_name']);
+        $this->assertSame('الاسم السابق للمسابح', $contract->data['org_name']);
 
         $this->setPoolsIdentity();
 
         // Still the name it was drawn under: the settings do not rewrite paper.
-        $this->assertSame('ديوان المسرة', $contract->fresh()->data['org_name']);
+        $this->assertSame('الاسم السابق للمسابح', $contract->fresh()->data['org_name']);
 
         $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/refresh")->assertRedirect();
 
@@ -203,7 +210,8 @@ class PoolsLetterheadTest extends TestCase
 
         // Drawn before the activity was named — the business's name is frozen
         // onto the paper, and the letterhead alone does not reach it.
-        $this->assertSame('ديوان المسرة', $contract->data['org_name']);
+        $contract->update(['data' => ['org_name' => 'ديوان المسرة'] + $contract->data]);
+        $this->assertSame('ديوان المسرة', $contract->fresh()->data['org_name']);
 
         $this->setPoolsIdentity();
         $this->repairLetterheads();
@@ -237,20 +245,158 @@ class PoolsLetterheadTest extends TestCase
         $this->assertSame('ديوان المسرة', $contract->fresh()->data['org_name']);
     }
 
-    /** Left blank, the activity follows the business it belongs to. */
-    public function test_an_unset_pools_identity_falls_back_to_the_business(): void
+    /**
+     * Left blank, the activity borrows nothing from the Diwan — it is a
+     * separate business. Its registered name heads the sheet, and the blank
+     * fields are simply left off.
+     */
+    public function test_an_unset_pools_identity_borrows_nothing_from_the_diwan(): void
     {
         Setting::current()->update(['pools_name' => null, 'pools_logo_path' => null, 'pools_phone' => null]);
 
         $contract = app(ContractService::class)->generateDirect($this->client, $this->maintenanceForm(), 900);
 
-        $this->assertSame('ديوان المسرة', $contract->data['org_name']);
+        $this->assertSame(PoolsLetterhead::NAME, $contract->data['org_name']);
 
         $this->actingAs($this->owner)->get('/admin/pools/contracts')
             ->assertInertia(fn ($page) => $page
-                ->where('letterhead.business_name', 'ديوان المسرة')
-                ->where('letterhead.logo_url', asset('uploads/business-logo.png'))
+                ->where('letterhead.business_name', PoolsLetterhead::NAME)
+                ->where('letterhead.logo_url', null)
+                ->where('letterhead.phone', null)
                 ->etc());
+    }
+
+    /**
+     * The pools are a separate business: their quotation carries their own
+     * address and tax number, and whatever they have not been given is left
+     * off — never filled in from the Diwan's.
+     */
+    public function test_a_pools_quotation_carries_nothing_of_the_diwan(): void
+    {
+        $this->setDiwanRegistration();
+        $this->setPoolsIdentity();
+        Setting::current()->update(['pools_address' => 'الرياض — حي النرجس', 'pools_tax_number' => '311111111111113']);
+
+        $issuer = $this->actingAs($this->owner)
+            ->getJson('/admin/quotations/'.$this->poolsQuotation()->id)
+            ->assertOk()
+            ->json('issuer');
+
+        $this->assertSame(PoolsLetterhead::NAME, $issuer['business_name']);
+        $this->assertSame('الرياض — حي النرجس', $issuer['address']);
+        $this->assertSame('311111111111113', $issuer['tax_number']);
+        $this->assertNull($issuer['commercial_register']);
+        $this->assertNull($issuer['email']);
+    }
+
+    /** The quotation PDF is the pools' own too — and renders with tax on. */
+    public function test_the_pools_quotation_pdf_is_headed_by_the_pools(): void
+    {
+        $this->setDiwanRegistration();
+        $this->setPoolsIdentity();
+
+        $quotation = $this->poolsQuotation();
+
+        $this->actingAs($this->owner)->get("/admin/quotations/{$quotation->id}/pdf")
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+
+        $html = view('pdf.quotation', (fn () => $this->viewData($quotation))->call(app(QuotationPdf::class)))->render();
+
+        $this->assertStringContainsString(PoolsLetterhead::NAME, $html);
+        $this->assertStringNotContainsString('ديوان المسرة', $html);
+        $this->assertStringNotContainsString('399999999999993', $html);
+        $this->assertStringNotContainsString('البصرة — شارع الكورنيش', $html);
+    }
+
+    /** A pools purchase is the pools' paper, not the Diwan's. */
+    public function test_a_pools_purchase_is_headed_by_the_pools(): void
+    {
+        $this->setDiwanRegistration();
+        $this->setPoolsIdentity();
+
+        $purchase = Purchase::create([
+            'number' => 'PUR-000001',
+            'supplier_id' => Supplier::create(['name' => 'مورد المضخات'])->id,
+            'user_id' => $this->owner->id,
+            'department_id' => $this->poolsQuotation()->department_id,
+            'subtotal' => 100,
+            'total_amount' => 100,
+            'is_taxable' => false,
+            'paid_amount' => 0,
+        ]);
+
+        $issuer = $this->actingAs($this->owner)
+            ->getJson("/admin/purchases/{$purchase->id}")
+            ->assertOk()
+            ->json('issuer');
+
+        $this->assertSame(PoolsLetterhead::NAME, $issuer['business_name']);
+        $this->assertNull($issuer['address']);
+        $this->assertNull($issuer['tax_number']);
+        $this->assertNull($issuer['commercial_register']);
+    }
+
+    /** The pools contract is signed and stamped by the pools' own manager. */
+    public function test_a_pools_contract_is_signed_and_stamped_by_the_pools(): void
+    {
+        $this->setDiwanRegistration();
+        $this->setPoolsIdentity();
+        Setting::current()->update([
+            'manager_name' => 'مدير الديوان',
+            'manager_signature_path' => 'uploads/diwan-signature.png',
+            'stamp_path' => 'uploads/diwan-stamp.png',
+            'pools_manager_name' => 'إبراهيم العجلان',
+            'pools_stamp_path' => 'uploads/pools-stamp.png',
+        ]);
+
+        $contract = app(ContractService::class)->generateFromQuotation($this->poolsQuotation());
+
+        $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('issuer.business_name', PoolsLetterhead::NAME)
+                ->where('issuer.manager_name', 'إبراهيم العجلان')
+                ->where('issuer.stamp_url', asset('uploads/pools-stamp.png'))
+                ->where('issuer.manager_signature_url', null)
+                ->where('issuer.address', null)
+                ->where('issuer.tax_number', null)
+                ->where('issuer.commercial_register', null)
+                ->etc());
+    }
+
+    /** A pools message is signed with the pools' name, not the Diwan's. */
+    public function test_a_pools_contract_message_is_signed_by_the_pools(): void
+    {
+        $this->setPoolsIdentity();
+
+        $contract = app(ContractService::class)->generateFromQuotation($this->poolsQuotation());
+        $accounts = app(WhatsappAccounts::class);
+
+        // With the pools' own number, the message goes out under its name.
+        $poolsAccount = WhatsappAccount::active()->get()
+            ->first(fn (WhatsappAccount $a) => $accounts->for($contract)?->is($a));
+        $this->assertNotNull($poolsAccount, 'the pools contract is sent from the pools number');
+        $this->assertNotSame('ديوان المسرة', $accounts->senderName($contract));
+
+        // Without one, it is signed with the pools' letterhead — still not the Diwan's.
+        WhatsappAccount::query()->update(['is_active' => false]);
+        $accounts->forget();
+
+        $this->assertSame(PoolsLetterhead::NAME, $accounts->senderName($contract));
+        $this->assertSame(PoolsLetterhead::NAME, $accounts->senderName($this->client));
+    }
+
+    private function setDiwanRegistration(): void
+    {
+        Setting::current()->update([
+            'address' => 'البصرة — شارع الكورنيش',
+            'email' => 'info@diwan.test',
+            'tax_enabled' => true,
+            'tax_rate' => 15,
+            'tax_number' => '399999999999993',
+            'commercial_register' => '1010999999',
+        ]);
     }
 
     private function setPoolsIdentity(): void

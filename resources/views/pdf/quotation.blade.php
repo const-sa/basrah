@@ -60,18 +60,15 @@
                 @endif
             </div>
         </td>
-        <td class="qr">
-            @if ($qrDataUrl)
-                <img src="{{ $qrDataUrl }}" style="width: 80pt; height: 80pt;" alt="ZATCA QR">
-            @endif
-        </td>
+        <td class="qr"></td>
         <td>
             <div class="box">
                 <h3>بيانات المُصدر</h3>
-                <p><b>{{ $settings->business_name }}</b></p>
-                @if ($settings->address)<p>{{ $settings->address }}</p>@endif
-                @if ($settings->phone)<p><b>هاتف:</b> <span class="ltr">{{ $settings->phone }}</span></p>@endif
-                @if ($settings->tax_enabled && $settings->tax_number)<p><b>الرقم الضريبي:</b> <span class="ltr">{{ $settings->tax_number }}</span></p>@endif
+                <p><b>{{ $issuer['business_name'] }}</b></p>
+                @if ($issuer['address'])<p>{{ $issuer['address'] }}</p>@endif
+                @if ($issuer['phone'])<p><b>هاتف:</b> <span class="ltr">{{ $issuer['phone'] }}</span></p>@endif
+                @if ($issuer['tax_number'])<p><b>الرقم الضريبي:</b> <span class="ltr">{{ $issuer['tax_number'] }}</span></p>@endif
+                @if ($issuer['commercial_register'])<p><b>س.ت:</b> <span class="ltr">{{ $issuer['commercial_register'] }}</span></p>@endif
             </div>
         </td>
     </tr>

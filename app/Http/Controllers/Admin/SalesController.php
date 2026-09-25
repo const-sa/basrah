@@ -8,13 +8,13 @@ use App\Models\Department;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\Setting;
 use App\Models\Treasury;
 use App\Models\Voucher;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Services\SalesService;
 use App\Services\ZatcaQr;
+use App\Support\Letterhead;
 use App\Support\Vat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -257,7 +257,10 @@ class SalesController extends Controller
      */
     private function issuer(Sale $sale): array
     {
-        $settings = Setting::current();
+        // فاتورة المسابح تصدر باسم مؤسستها ورقمها الضريبي — جهةٌ مستقلة عن
+        // الديوان، فلا يُطبع عليها شيءٌ من بياناته، ولا في رمز الزكاة.
+        $letterhead = Letterhead::raw((bool) $sale->department?->isPools());
+
         // من القاعدة الواحدة: التفعيل وحده لا يكفي — رقمٌ بلا نسبةٍ سارية
         // يطبع رمزًا لفاتورةٍ ضريبتها صفر، وهو ما يرفضه تطبيق الهيئة.
         //
@@ -268,9 +271,8 @@ class SalesController extends Controller
         // carrying zero tax is rejected by the authority's app, and the switch
         // being on does not make a tax invoice out of one issued to an exempt
         // buyer.
-        $taxNumber = ($sale->is_taxable && Vat::applies()) || (float) $sale->tax_amount > 0
-            ? $settings->tax_number
-            : null;
+        $showsTax = ($sale->is_taxable && Vat::applies()) || (float) $sale->tax_amount > 0;
+        $taxNumber = $showsTax ? $letterhead['tax_number'] : null;
 
         $qr = null;
 
@@ -278,7 +280,7 @@ class SalesController extends Controller
             $zatca = app(ZatcaQr::class);
 
             $qr = $zatca->dataUri($zatca->payload(
-                $settings->business_name ?: config('app.name'),
+                $letterhead['name'],
                 $taxNumber,
                 $sale->created_at->toIso8601String(),
                 (float) $sale->total_amount,
@@ -286,20 +288,10 @@ class SalesController extends Controller
             ));
         }
 
-        // A pools sale is headed by that activity's own letterhead, as its
-        // contracts are — not by the halls business that owns the system.
-        $letterhead = $sale->department?->isPools()
-            ? $settings->poolsLetterhead()
-            : ['name' => $settings->business_name ?: config('app.name'), 'logo_path' => $settings->logo_path, 'phone' => $settings->phone];
-
         return [
-            'business_name' => $letterhead['name'],
-            'logo_url' => $letterhead['logo_path'] ? asset($letterhead['logo_path']) : null,
-            'address' => $settings->address,
-            'phone' => $letterhead['phone'],
-            'email' => $settings->email,
-            'tax_number' => $taxNumber,
-            'commercial_register' => $settings->commercial_register,
+            ...collect(Letterhead::issuer((bool) $sale->department?->isPools(), $showsTax))
+                ->only(['business_name', 'logo_url', 'address', 'phone', 'email', 'tax_number', 'commercial_register'])
+                ->all(),
             'activity' => $sale->department?->name,
             'qr' => $qr,
         ];

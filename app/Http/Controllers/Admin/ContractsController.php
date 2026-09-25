@@ -10,7 +10,6 @@ use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\PaymentMethod;
 use App\Models\Quotation;
-use App\Models\Setting;
 use App\Models\Treasury;
 use App\Models\Voucher;
 use App\Services\Accounting\ContractReceipts;
@@ -23,6 +22,7 @@ use App\Support\ChaletContractTemplate;
 use App\Support\ClientType;
 use App\Support\HallRentalContractTemplate;
 use App\Support\HallServicesContractTemplate;
+use App\Support\Letterhead;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -674,32 +674,7 @@ class ContractsController extends Controller
      */
     private function issuer(?string $orgName = null, bool $pools = false): array
     {
-        $settings = Setting::current();
-
-        // A pools sheet is headed by that activity's own letterhead, which
-        // falls back to the business's wherever it has not been given one.
-        $letterhead = $settings->poolsLetterhead();
-
-        return [
-            'business_name' => $orgName ?: ($pools
-                ? $letterhead['name']
-                : ($settings->business_name ?: config('app.name'))),
-            'logo_url' => ($logo = $pools ? $letterhead['logo_path'] : $settings->logo_path)
-                ? asset($logo)
-                : null,
-            'phone' => $pools ? $letterhead['phone'] : $settings->phone,
-            'whatsapp' => $settings->whatsapp !== $settings->phone ? $settings->whatsapp : null,
-            'address' => $settings->address,
-            'tax_number' => $settings->tax_enabled ? $settings->tax_number : null,
-            // The maintenance sheet's letterhead carries the CR number where
-            // the installation pad carries the tax number.
-            'commercial_register' => $settings->commercial_register,
-            'manager_name' => $settings->manager_name,
-            'manager_signature_url' => $settings->manager_signature_path
-                ? asset($settings->manager_signature_path)
-                : null,
-            'stamp_url' => $settings->stamp_path ? asset($settings->stamp_path) : null,
-        ];
+        return Letterhead::contract($orgName, $pools);
     }
 
     /**

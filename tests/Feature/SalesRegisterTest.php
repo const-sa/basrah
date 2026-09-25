@@ -242,16 +242,21 @@ class SalesRegisterTest extends TestCase
         $this->assertSame(58.5, $props['stats']['tax_total']);
     }
 
-    public function test_printable_invoice_carries_the_business_identity(): void
+    public function test_printable_invoice_carries_the_pools_identity_and_nothing_of_the_diwan(): void
     {
         $settings = Setting::current();
         $settings->update([
             'business_name' => 'مؤسسة ديوان البصرة',
             'logo_path' => 'storage/branding/logo.png',
             'address' => 'البصرة',
+            'commercial_register' => '1010000000',
+            'pools_name' => 'مؤسسة العجلان',
+            'pools_logo_path' => 'storage/branding/pools.png',
+            'pools_address' => 'الرياض',
             'tax_enabled' => false,
         ]);
 
+        // فاتورة قسم المسابح — جهةٌ مستقلة عن الديوان.
         $sale = $this->accountSale();
 
         $issuer = $this->actingAs($this->cashier)
@@ -259,9 +264,12 @@ class SalesRegisterTest extends TestCase
             ->assertOk()
             ->json('issuer');
 
-        $this->assertSame('مؤسسة ديوان البصرة', $issuer['business_name']);
+        $this->assertSame('مؤسسة العجلان', $issuer['business_name']);
         $this->assertSame('المسابح', $issuer['activity']);
-        $this->assertStringContainsString('branding/logo.png', $issuer['logo_url']);
+        $this->assertStringContainsString('branding/pools.png', $issuer['logo_url']);
+        $this->assertSame('الرياض', $issuer['address']);
+        // ما لم يُضبط للمسابح يُحذف — لا يُستعار سجلّ الديوان.
+        $this->assertNull($issuer['commercial_register']);
         // بلا تسجيل ضريبي لا رمز — رمزٌ برقم فارغ لا يقرؤه تطبيق الهيئة.
         $this->assertNull($issuer['qr']);
     }
@@ -271,7 +279,10 @@ class SalesRegisterTest extends TestCase
         Setting::current()->update([
             'business_name' => 'مؤسسة ديوان البصرة',
             'tax_enabled' => true,
-            'tax_number' => '300000000000003',
+            'tax_number' => '399999999999993',
+            // رمز فاتورة المسابح يحمل اسم مؤسستها ورقمها، لا الديوان.
+            'pools_name' => 'مؤسسة العجلان',
+            'pools_tax_number' => '300000000000003',
         ]);
 
         $sale = $this->accountSale(); // 747.50 منها 97.50 ضريبة
@@ -281,10 +292,17 @@ class SalesRegisterTest extends TestCase
             ->json('issuer');
 
         $this->assertStringStartsWith('data:image/svg+xml;base64,', $issuer['qr']);
+        $this->assertSame('300000000000003', $issuer['tax_number']);
+
+        $zatca = app(ZatcaQr::class);
+        $this->assertSame(
+            $zatca->dataUri($zatca->payload('مؤسسة العجلان', '300000000000003', $sale->created_at->toIso8601String(), 747.5, 97.5)),
+            $issuer['qr'],
+        );
 
         // الرمز نفسه TLV: يُبنى بالخدمة ذاتها فيُتحقق من حقوله مباشرة.
         $tlv = base64_decode(app(ZatcaQr::class)->payload(
-            'مؤسسة ديوان البصرة',
+            'مؤسسة العجلان',
             '300000000000003',
             $sale->created_at->toIso8601String(),
             747.5,

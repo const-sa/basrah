@@ -14,6 +14,7 @@ use App\Models\PurchaseItem;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Services\InventoryService;
+use App\Support\Letterhead;
 use App\Support\Vat;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -339,7 +340,8 @@ class PurchaseController extends Controller
         $purchase->load([
             'items.item:id,name,code',
             'supplier:id,name',
-            'department:id,name',
+            // الرمز يقرّر الترويسة: مشتريات المسابح باسم مؤسستها.
+            'department:id,name,code',
             'user:id,name',
             'paymentMethod:id,name'
         ]);
@@ -390,19 +392,13 @@ class PurchaseController extends Controller
      */
     private function issuer(Purchase $purchase): array
     {
-        $settings = Setting::current();
-
+        // مشتريات المسابح باسم مؤسستها — جهةٌ مستقلة عن الديوان.
+        // من القاعدة الواحدة، ويبقى الرقم الضريبي على ورقةٍ حملت ضريبةً حُصّلت.
         return [
-            'business_name' => $settings->business_name ?: config('app.name'),
-            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
-            'address' => $settings->address,
-            'phone' => $settings->phone,
-            'email' => $settings->email,
-            // من القاعدة الواحدة، ويبقى على ورقةٍ حملت ضريبةً حُصّلت.
-            'tax_number' => Vat::applies() || (float) $purchase->tax_amount > 0
-                ? $settings->tax_number
-                : null,
-            'commercial_register' => $settings->commercial_register,
+            ...collect(Letterhead::issuer(
+                (bool) $purchase->department?->isPools(),
+                Vat::applies() || (float) $purchase->tax_amount > 0,
+            ))->only(['business_name', 'logo_url', 'address', 'phone', 'email', 'tax_number', 'commercial_register'])->all(),
             'activity' => $purchase->department?->name,
         ];
     }

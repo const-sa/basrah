@@ -265,7 +265,7 @@ class PoolInstallationContractTest extends TestCase
     public function test_the_sheet_is_drawn_under_the_name_set_in_the_settings(): void
     {
         config(['app.name' => 'Admin13']);
-        Setting::current()->update(['business_name' => 'العجلان لبرك السباحة']);
+        Setting::current()->update(['pools_name' => 'العجلان لبرك السباحة']);
 
         $client = Client::create(['name' => 'ماجد العتيبي', 'mobile' => '0533333333', 'type' => 'pool']);
         $direct = app(ContractService::class)->generateDirect($client, $this->form(), 1000);

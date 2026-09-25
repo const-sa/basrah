@@ -132,13 +132,29 @@ class WhatsappNotifier
     {
         $contract->loadMissing(['client', 'booking']);
 
-        $body = $this->fromTemplate('contract', $contract->booking, ['contract_number' => (string) $contract->number])
+        // عقدٌ بلا حجز (عقود المسابح): قالبه قالب قسمه، ويُوقَّع باسم جهته
+        // وعميلُه عميلُ العقد — لا قالب «عام» ولا اسم الديوان.
+        $pools = ! $contract->booking && $contract->underPoolsLetterhead();
+
+        $extra = ['contract_number' => (string) $contract->number];
+
+        if (! $contract->booking) {
+            $extra += [
+                'name' => (string) ($contract->client?->name ?? ''),
+                'mobile' => (string) ($contract->client?->mobile ?? ''),
+                'business_name' => app(WhatsappAccounts::class)->senderName($contract),
+            ];
+        }
+
+        $body = $this->fromTemplate('contract', $contract->booking, $extra, $pools ? 'pool' : null)
             ?? implode("\n", array_filter([
                 'مرحبًا '.($contract->client?->name ?? '').'،',
-                $pdfUrl
-                    ? 'مرفق عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.'
-                    : 'صدر عقد الحجز رقم '.($contract->booking?->reference ?? '—').'.',
-                'رقم العقد: '.$contract->number,
+                match (true) {
+                    ! $contract->booking => ($pdfUrl ? 'مرفق العقد رقم ' : 'صدر العقد رقم ').$contract->number.'.',
+                    (bool) $pdfUrl => 'مرفق عقد الحجز رقم '.$contract->booking->reference.'.',
+                    default => 'صدر عقد الحجز رقم '.$contract->booking->reference.'.',
+                },
+                $contract->booking ? 'رقم العقد: '.$contract->number : null,
                 'نرجو الاطلاع والتأكيد.',
             ]));
 
@@ -292,9 +308,9 @@ class WhatsappNotifier
      *
      * @param  array<string, string>  $extra
      */
-    private function fromTemplate(string $event, ?Booking $booking, array $extra = []): ?string
+    private function fromTemplate(string $event, ?Booking $booking, array $extra = [], ?string $category = null): ?string
     {
-        $category = NotificationCatalog::categoryForUnitType($booking?->unit?->type);
+        $category ??= NotificationCatalog::categoryForUnitType($booking?->unit?->type);
 
         $template = NotificationTemplate::resolve($event, $category);
 

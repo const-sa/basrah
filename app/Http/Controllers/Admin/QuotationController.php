@@ -10,9 +10,9 @@ use App\Models\Client;
 use App\Models\PaymentMethod;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
-use App\Models\Setting;
 use App\Services\QuotationPdf;
 use App\Services\SalesService;
+use App\Support\Letterhead;
 use App\Support\Vat;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -274,25 +274,12 @@ class QuotationController extends Controller
      */
     private function issuer(?Quotation $quotation = null): array
     {
-        $settings = Setting::current();
-
-        // A pools quotation carries the pools letterhead, as its contract will.
-        $letterhead = $quotation?->department?->isPools()
-            ? $settings->poolsLetterhead()
-            : ['name' => $settings->business_name ?: config('app.name'), 'logo_path' => $settings->logo_path, 'phone' => $settings->phone];
-
-        return [
-            'business_name' => $letterhead['name'],
-            'logo_url' => $letterhead['logo_path'] ? asset($letterhead['logo_path']) : null,
-            'address' => $settings->address,
-            'phone' => $letterhead['phone'],
-            'email' => $settings->email,
-            // من القاعدة الواحدة، ويبقى على عرضٍ حمل ضريبةً حُسبت.
-            'tax_number' => Vat::applies() || (float) ($quotation?->tax_amount ?? 0) > 0
-                ? $settings->tax_number
-                : null,
-            'commercial_register' => $settings->commercial_register,
-        ];
+        // عرض المسابح يصدر باسم مؤسستها وحدها، كما سيصدر عقده.
+        // من القاعدة الواحدة، ويبقى الرقم الضريبي على عرضٍ حمل ضريبةً حُسبت.
+        return collect(Letterhead::issuer(
+            (bool) $quotation?->department?->isPools(),
+            Vat::applies() || (float) ($quotation?->tax_amount ?? 0) > 0,
+        ))->only(['business_name', 'logo_url', 'address', 'phone', 'email', 'tax_number', 'commercial_register'])->all();
     }
 
     public function convert(Request $request, Quotation $quotation, SalesService $sales): RedirectResponse
