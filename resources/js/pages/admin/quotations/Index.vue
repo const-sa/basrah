@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { StatPill } from '@/components/data-table';
+import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -135,6 +136,17 @@ const closeDetails = () => {
 
 /** Printing emits the quotation sheet alone — the @media print rules below hide everything else. */
 const printQuotation = () => window.print();
+
+// ── إرسال العرض على واتساب ─────────────────────
+// الخادم يولّد الملف PDF ويرسله مرفقًا من رقم قسم العرض (المسابح من رقم المسابح).
+const sending = ref<number | null>(null);
+
+const sendWhatsapp = (q: { id: number; number: string }) => {
+    if (!confirm(`إرسال عرض السعر ${q.number} (PDF) على واتساب العميل؟`)) return;
+
+    sending.value = q.id;
+    router.post(`/admin/quotations/${q.id}/send`, {}, { preserveScroll: true, onFinish: () => (sending.value = null) });
+};
 
 const destroy = (q: QuotationRow) => {
     if (confirm(`هل أنت متأكد من حذف عرض السعر رقم ${q.number}؟`)) {
@@ -340,6 +352,16 @@ const changeStatus = (status: string) => {
                                         >
                                             <Printer class="h-3.5 w-3.5" />
                                         </a>
+                                        <button
+                                            v-if="can('whatsapp.send')"
+                                            type="button"
+                                            @click="sendWhatsapp(q)"
+                                            :disabled="sending === q.id"
+                                            title="إرسال على واتساب (PDF)"
+                                            class="rounded-lg bg-[#25D366] p-1.5 text-white hover:bg-[#1ebe5b] disabled:opacity-50"
+                                        >
+                                            <WhatsappIcon class="h-3.5 w-3.5" />
+                                        </button>
                                         <Link
                                             v-if="q.invoice"
                                             :href="`/admin/sales?invoice=${q.invoice.id}`"
@@ -412,6 +434,15 @@ const changeStatus = (status: string) => {
                                 class="rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
                                 >تحميل PDF</a
                             >
+                            <button
+                                v-if="can('whatsapp.send')"
+                                type="button"
+                                @click="sendWhatsapp(activeQuotation)"
+                                :disabled="sending === activeQuotation.id"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-[#25D366] px-4 py-2 text-sm font-bold text-white hover:bg-[#1ebe5b] disabled:opacity-60"
+                            >
+                                <WhatsappIcon class="h-4 w-4" /> واتساب
+                            </button>
                             <button type="button" @click="closeDetails" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
                         </div>
                     </div>

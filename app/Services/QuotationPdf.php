@@ -6,7 +6,9 @@ use App\Models\Quotation;
 use App\Services\Concerns\ResolvesPublicFiles;
 use App\Support\Letterhead;
 use App\Support\Vat;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\Str;
 use Mpdf\Mpdf;
 use Mpdf\MpdfException;
 use Mpdf\Output\Destination;
@@ -22,6 +24,33 @@ class QuotationPdf
     /**
      * PDF content as a string of bytes.
      */
+    public const DISK = 'public';
+
+    public const DIRECTORY = 'quotations';
+
+    /**
+     * يولّد الملف ويحفظه، ويعيد مساره — بوابة الواتساب تحمّله من رابطه
+     * لترسله مرفقًا (كما يُرسل العقد).
+     *
+     * في الاسم مقطعٌ عشوائي: الرابط عامّ، وأرقام العروض متتالية، فاسمٌ
+     * برقمها وحده يفتح عروض العملاء كلها لمن يخمّن.
+     */
+    public function store(Quotation $quotation): string
+    {
+        $path = self::DIRECTORY.'/quotation-'.str_replace(['/', '\\', ' '], '-', $quotation->number)
+            .'-'.Str::lower(Str::random(16)).'.pdf';
+
+        Storage::disk(self::DISK)->put($path, $this->render($quotation));
+
+        return $path;
+    }
+
+    /** رابط عام للملف — asset لا Storage::url، لنفس سبب ContractPdf::publicUrl. */
+    public function publicUrl(string $path): string
+    {
+        return asset('storage/'.ltrim($path, '/'));
+    }
+
     public function render(Quotation $quotation): string
     {
         $html = View::make('pdf.quotation', $this->viewData($quotation))->render();

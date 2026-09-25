@@ -23,6 +23,7 @@ class WhatsappMessage extends Model
         'reminder' => 'تذكير بالموعد',
         'balance_reminder' => 'تذكير بالمتبقي',
         'contract' => 'عقد',
+        'quotation' => 'عرض سعر',
         'invoice' => 'فاتورة',
         'payment' => 'إشعار سداد',
         'receipt' => 'سند قبض',

@@ -345,6 +345,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::delete('quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('perm:quotations.delete')->name('quotations.destroy');
         Route::get('quotations/{quotation}', [QuotationController::class, 'show'])->middleware('perm:quotations.view')->name('quotations.show');
         Route::get('quotations/{quotation}/pdf', [QuotationController::class, 'pdf'])->middleware('perm:quotations.view')->name('quotations.pdf');
+        // إرسال العرض (PDF) على واتساب العميل.
+        Route::post('quotations/{quotation}/send', [QuotationController::class, 'send'])->middleware(['perm:quotations.view', 'perm:whatsapp.send'])->name('quotations.send');
         Route::post('quotations/{quotation}/status', [QuotationController::class, 'changeStatus'])->middleware('perm:quotations.edit')->name('quotations.status');
         Route::post('quotations/{quotation}/invoice', [QuotationController::class, 'convert'])->middleware('perm:sales.create')->name('quotations.invoice');
 

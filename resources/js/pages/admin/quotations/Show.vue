@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import { useAutoPrint } from '@/composables/useAutoPrint';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVat } from '@/composables/useVat';
@@ -65,6 +66,17 @@ const print = () => window.print();
 
 // «حفظ وطباعة»: الورقة تُفتح بـ ?print=1 في إطار خفي وتطبع نفسها.
 useAutoPrint();
+
+// ── إرسال العرض على واتساب ─────────────────────
+// الخادم يولّد الملف PDF ويرسله مرفقًا من رقم قسم العرض (المسابح من رقم المسابح).
+const sending = ref<number | null>(null);
+
+const sendWhatsapp = (q: { id: number; number: string }) => {
+    if (!confirm(`إرسال عرض السعر ${q.number} (PDF) على واتساب العميل؟`)) return;
+
+    sending.value = q.id;
+    router.post(`/admin/quotations/${q.id}/send`, {}, { preserveScroll: true, onFinish: () => (sending.value = null) });
+};
 
 // ── إصدار الفاتورة من العرض ───────────────────
 /**
@@ -138,6 +150,16 @@ const submitInvoice = () => {
                     >
                         <Printer class="h-4 w-4 text-slate-500" />
                         <span>طباعة</span>
+                    </button>
+                    <button
+                        v-if="can('whatsapp.send')"
+                        type="button"
+                        @click="sendWhatsapp(quotation)"
+                        :disabled="sending === quotation.id"
+                        class="inline-flex items-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-[#1ebe5b] disabled:opacity-60"
+                    >
+                        <WhatsappIcon class="h-4 w-4" />
+                        <span>إرسال واتساب</span>
                     </button>
                     <Link
                         :href="`/admin/quotations/${quotation.id}/edit`"

@@ -12,6 +12,7 @@ use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Services\QuotationPdf;
 use App\Services\SalesService;
+use App\Services\WhatsappNotifier;
 use App\Support\Letterhead;
 use App\Support\Vat;
 use Illuminate\Http\JsonResponse;
@@ -351,6 +352,35 @@ class QuotationController extends Controller
         $quotation->update(['status' => $data['status']]);
 
         return back()->with('success', 'تم تحديث حالة عرض السعر');
+    }
+
+    /**
+     * إرسال العرض على واتساب العميل مرفقًا بملفه PDF.
+     *
+     * الملف يُبنى ويُحفظ قبل الإرسال: الرسالة تقول «مرفق عرض السعر»، ولا
+     * يصحّ أن تقولها بلا مرفق — وفشل التوليد يوقف الإرسال.
+     */
+    public function send(Request $request, Quotation $quotation, QuotationPdf $pdfService, WhatsappNotifier $whatsapp): RedirectResponse
+    {
+        $quotation->loadMissing('client');
+
+        if (blank($quotation->client?->mobile)) {
+            return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
+        }
+
+        try {
+            $path = $pdfService->store($quotation);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        $message = $whatsapp->quotation($quotation, $request->user()?->id, $pdfService->publicUrl($path));
+
+        if (! $message) {
+            return back()->with('warning', 'رقم جوال العميل غير صالح — لم يُرسل العرض.');
+        }
+
+        return back()->with('success', "تم إرسال عرض السعر {$quotation->number} (PDF) على واتساب العميل");
     }
 
     public function pdf(Request $request, Quotation $quotation, QuotationPdf $pdfService): HttpResponse

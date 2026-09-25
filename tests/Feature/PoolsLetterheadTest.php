@@ -12,6 +12,7 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WhatsappAccount;
+use App\Models\WhatsappMessage;
 use App\Services\ContractService;
 use App\Services\QuotationPdf;
 use App\Services\Whatsapp\WhatsappAccounts;
@@ -23,6 +24,7 @@ use Database\Seeders\SettingsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -385,6 +387,44 @@ class PoolsLetterheadTest extends TestCase
 
         $this->assertSame(PoolsLetterhead::NAME, $accounts->senderName($contract));
         $this->assertSame(PoolsLetterhead::NAME, $accounts->senderName($this->client));
+    }
+
+    /** The pools quotation goes out on WhatsApp with its PDF, from the pools. */
+    public function test_a_pools_quotation_is_sent_on_whatsapp_with_its_pdf(): void
+    {
+        Storage::fake('public');
+        $this->setPoolsIdentity();
+
+        $quotation = $this->poolsQuotation();
+
+        $this->actingAs($this->owner)->post("/admin/quotations/{$quotation->id}/send")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $files = Storage::disk('public')->files('quotations');
+        $this->assertCount(1, $files);
+        $this->assertStringStartsWith('quotations/quotation-QT-000001-', $files[0]);
+
+        $message = WhatsappMessage::latest('id')->firstOrFail();
+        $this->assertSame('quotation', $message->purpose);
+        $this->assertSame(Quotation::class, $message->related_type);
+        $this->assertSame($quotation->id, $message->related_id);
+        $this->assertStringContainsString('QT-000001', $message->body);
+        $this->assertStringNotContainsString('ديوان المسرة', $message->body);
+        // من رقم المسابح لا من رقم الديوان.
+        $this->assertSame(app(WhatsappAccounts::class)->for($quotation)?->id, $message->whatsapp_account_id);
+    }
+
+    public function test_a_quotation_without_a_mobile_is_not_sent(): void
+    {
+        Storage::fake('public');
+        $this->client->update(['mobile' => null]);
+
+        $this->actingAs($this->owner)->post('/admin/quotations/'.$this->poolsQuotation()->id.'/send')
+            ->assertSessionHas('warning');
+
+        $this->assertSame(0, WhatsappMessage::count());
+        $this->assertSame([], Storage::disk('public')->files('quotations'));
     }
 
     private function setDiwanRegistration(): void

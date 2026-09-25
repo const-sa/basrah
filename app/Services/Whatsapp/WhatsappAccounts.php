@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\Contract;
+use App\Models\Quotation;
 use App\Models\WhatsappAccount;
 use App\Support\ActivityPermission;
 use App\Support\ActivitySegment;
@@ -115,6 +116,13 @@ class WhatsappAccounts
 
         if ($related instanceof Client) {
             return [null, ActivityPermission::ofClient($related)];
+        }
+
+        // عرض السعر: قسمه من قسم العرض — عرض المسابح يخرج من رقم المسابح.
+        if ($related instanceof Quotation) {
+            return [null, $related->department?->isPools()
+                ? ActivitySegment::POOLS
+                : ActivityPermission::ofClient($related->client)];
         }
 
         // عقدٌ بلا حجز (عقود المسابح من عروض الأسعار ونماذجها): قسمه من

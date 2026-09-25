@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\Contract;
 use App\Models\NotificationTemplate;
+use App\Models\Quotation;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
 use App\Services\Whatsapp\WhatsappAccounts;
@@ -159,6 +160,40 @@ class WhatsappNotifier
             ]));
 
         return $this->send($contract->client?->mobile, $body, 'contract', $contract, $userId, $pdfUrl);
+    }
+
+    /**
+     * إرسال عرض السعر مرفقًا بملفه PDF.
+     *
+     * يخرج من رقم قسم العرض ويُوقَّع باسم جهته: عرض المسابح باسم مؤسستها
+     * وقالب المسابح، لا باسم الديوان.
+     */
+    public function quotation(Quotation $quotation, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
+    {
+        $quotation->loadMissing(['client', 'department']);
+
+        $client = $quotation->client;
+        $total = number_format((float) $quotation->total_amount, 2);
+        $validUntil = $quotation->valid_until?->format('Y-m-d');
+
+        $body = $this->fromTemplate('quotation', null, [
+            'name' => (string) ($client?->name ?? ''),
+            'mobile' => (string) ($client?->mobile ?? ''),
+            'business_name' => app(WhatsappAccounts::class)->senderName($quotation),
+            'quotation_number' => (string) $quotation->number,
+            'total' => $total,
+            'valid_until' => (string) ($validUntil ?? ''),
+        ], $quotation->department?->isPools() ? 'pool' : null)
+            ?? implode("\n", array_filter([
+                'مرحبًا '.($client?->name ?? '').'،',
+                ($pdfUrl ? 'مرفق عرض السعر رقم ' : 'عرض السعر رقم ').$quotation->number.'.',
+                'الإجمالي: '.$total.' ر.س',
+                $validUntil ? 'صالح حتى: '.$validUntil : null,
+                'يسعدنا تواصلكم لأي استفسار.',
+                app(WhatsappAccounts::class)->senderName($quotation),
+            ]));
+
+        return $this->send($client?->mobile, $body, 'quotation', $quotation, $userId, $pdfUrl);
     }
 
     /**

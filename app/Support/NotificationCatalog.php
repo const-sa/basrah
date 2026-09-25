@@ -42,6 +42,7 @@ class NotificationCatalog
             'receipt' => ['label' => 'سند القبض', 'hint' => 'عند إرسال سند دفعة إلى العميل', 'auto' => true],
             'cancellation' => ['label' => 'إشعار إلغاء', 'hint' => 'عند إلغاء الحجز', 'auto' => true],
             'contract' => ['label' => 'إرسال العقد', 'hint' => 'عند إصدار العقد', 'auto' => true],
+            'quotation' => ['label' => 'إرسال عرض السعر', 'hint' => 'عند إرسال عرض السعر (PDF) إلى العميل', 'auto' => true],
             'custom' => ['label' => 'رسالة حرّة', 'hint' => 'إرسال يدوي من المكتبة', 'auto' => false],
         ];
     }
@@ -76,6 +77,7 @@ class NotificationCatalog
             'welcome' => $client,
             'custom' => $client,
             'contract' => $booking + ['contract_number' => 'رقم العقد'],
+            'quotation' => $client + ['quotation_number' => 'رقم العرض', 'total' => 'إجمالي العرض', 'valid_until' => 'صالح حتى'],
             'payment' => $booking + ['amount' => 'مبلغ الدفعة'],
             'receipt' => $booking + ['amount' => 'مبلغ السند', 'method' => 'طريقة الدفع', 'payment_type' => 'نوع الدفعة'],
             'cancellation' => $booking + ['reason' => 'سبب الإلغاء'],
