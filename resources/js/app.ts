@@ -45,12 +45,20 @@ declare module 'vite/client' {
     }
 }
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+// اسم المشروع في عنوان التبويب: من هوية الموقع (brand) ثم اسم التطبيق، مع تحديثه عند كل تنقّل.
+// القيمة الأولية هي عنوان Blade الذي يُطبع مسبقًا باسم الهوية قبل أن يستبدله Inertia.
+let appName = document.title || import.meta.env.VITE_APP_NAME || 'ديوان المسرة';
+const syncAppName = (pageProps: Record<string, any>) => {
+    appName = pageProps?.brand?.name || pageProps?.name || appName;
+};
+
+router.on('navigate', (event) => syncAppName(event.detail.page.props));
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {
+        syncAppName(props.initialPage.props);
         createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)
