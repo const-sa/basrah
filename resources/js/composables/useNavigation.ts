@@ -33,6 +33,7 @@ import {
     Percent,
     PieChart,
     Receipt,
+    RefreshCw,
     Ruler,
     ScrollText,
     Settings,
@@ -295,6 +296,7 @@ export function useNavigation() {
                 { title: t('nav.settings_booking_times'), href: '/admin/settings/booking-times', icon: Clock, perm: 'settings.view' },
                 // إعدادات البوابة انتقلت إلى مجموعة «الواتساب» أعلاه مع قوالبها وسجلّها.
                 { title: t('nav.backups'), href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
+                { title: t('nav.system_update'), href: '/admin/settings/system-update', icon: RefreshCw, perm: 'settings.edit' },
                 { title: t('nav.departments'), href: '/admin/departments', icon: Building2, perm: 'departments.view' },
                 { title: t('nav.cities'), href: '/admin/cities', icon: MapPin, perm: 'cities.view' },
                 // Shared by both booking forms, so it sits with the common

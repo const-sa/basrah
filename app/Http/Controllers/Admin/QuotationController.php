@@ -267,11 +267,16 @@ class QuotationController extends Controller
     {
         $settings = Setting::current();
 
+        // A pools quotation carries the pools letterhead, as its contract will.
+        $letterhead = $quotation?->department?->isPools()
+            ? $settings->poolsLetterhead()
+            : ['name' => $settings->business_name ?: config('app.name'), 'logo_path' => $settings->logo_path, 'phone' => $settings->phone];
+
         return [
-            'business_name' => $settings->business_name ?: config('app.name'),
-            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
+            'business_name' => $letterhead['name'],
+            'logo_url' => $letterhead['logo_path'] ? asset($letterhead['logo_path']) : null,
             'address' => $settings->address,
-            'phone' => $settings->phone,
+            'phone' => $letterhead['phone'],
             'email' => $settings->email,
             // من القاعدة الواحدة، ويبقى على عرضٍ حمل ضريبةً حُسبت.
             'tax_number' => Vat::applies() || (float) ($quotation?->tax_amount ?? 0) > 0

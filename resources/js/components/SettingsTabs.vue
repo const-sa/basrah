@@ -8,7 +8,7 @@
  */
 import { usePermissions } from '@/composables/usePermissions';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Clock, DatabaseBackup, SlidersHorizontal } from 'lucide-vue-next';
+import { Clock, DatabaseBackup, RefreshCw, SlidersHorizontal } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const page = usePage();
@@ -18,6 +18,7 @@ const tabs = [
     { label: 'الإعدادات العامة', href: '/admin/settings/general', icon: SlidersHorizontal, perm: 'settings.view' },
     { label: 'أوقات الحجز', href: '/admin/settings/booking-times', icon: Clock, perm: 'settings.view' },
     { label: 'النسخ الاحتياطي', href: '/admin/backups', icon: DatabaseBackup, perm: 'backups.view' },
+    { label: 'تحديث النظام', href: '/admin/settings/system-update', icon: RefreshCw, perm: 'settings.edit' },
 ];
 
 const visible = computed(() => tabs.filter((t) => can(t.perm)));

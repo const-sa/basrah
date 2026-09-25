@@ -58,6 +58,7 @@ use App\Http\Controllers\Admin\UnitsController;
 use App\Http\Controllers\Admin\UnitWorkspaceController;
 use App\Http\Controllers\Admin\UsersController;
 use App\Http\Controllers\Admin\WhatsappLogController;
+use App\Http\Controllers\Admin\SystemUpdateController;
 use App\Http\Controllers\Admin\WhatsappAccountsController;
 use App\Http\Controllers\Admin\WhatsappSettingsController;
 use App\Http\Controllers\Site\OnlineBookingController;
@@ -623,6 +624,11 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/general', [GeneralSettingsController::class, 'update'])->middleware('perm:settings.edit')->name('settings.general.update');
 
     // أوقات الحجز — فترات اليوم وأوقات إقامة الشاليه
+    // تحديث النظام من GitHub.
+    Route::get('settings/system-update', [SystemUpdateController::class, 'edit'])->middleware('perm:settings.view')->name('settings.system_update.edit');
+    Route::post('settings/system-update', [SystemUpdateController::class, 'update'])->middleware('perm:settings.edit')->name('settings.system_update.update');
+    Route::get('settings/system-update/check', [SystemUpdateController::class, 'check'])->middleware('perm:settings.edit')->name('settings.system_update.check');
+    Route::post('settings/system-update/run', [SystemUpdateController::class, 'run'])->middleware('perm:settings.edit')->name('settings.system_update.run');
     Route::get('settings/booking-times', [BookingTimesController::class, 'edit'])->middleware('perm:settings.view')->name('settings.booking_times.edit');
     Route::post('settings/booking-times', [BookingTimesController::class, 'update'])->middleware('perm:settings.edit')->name('settings.booking_times.update');
     Route::post('settings/booking-times/reset', [BookingTimesController::class, 'reset'])->middleware('perm:settings.edit')->name('settings.booking_times.reset');

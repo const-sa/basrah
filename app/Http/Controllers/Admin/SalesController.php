@@ -191,7 +191,7 @@ class SalesController extends Controller
         $sale->load([
             'lines.item:id,name,code',
             'client:id,name,mobile',
-            'department:id,name',
+            'department:id,name,code',
             'user:id,name',
             'originalSale:id,number',
             'returns' => fn ($q) => $q->with('lines')->latest('id'),
@@ -286,11 +286,17 @@ class SalesController extends Controller
             ));
         }
 
+        // A pools sale is headed by that activity's own letterhead, as its
+        // contracts are — not by the halls business that owns the system.
+        $letterhead = $sale->department?->isPools()
+            ? $settings->poolsLetterhead()
+            : ['name' => $settings->business_name ?: config('app.name'), 'logo_path' => $settings->logo_path, 'phone' => $settings->phone];
+
         return [
-            'business_name' => $settings->business_name ?: config('app.name'),
-            'logo_url' => $settings->logo_path ? asset($settings->logo_path) : null,
+            'business_name' => $letterhead['name'],
+            'logo_url' => $letterhead['logo_path'] ? asset($letterhead['logo_path']) : null,
             'address' => $settings->address,
-            'phone' => $settings->phone,
+            'phone' => $letterhead['phone'],
             'email' => $settings->email,
             'tax_number' => $taxNumber,
             'commercial_register' => $settings->commercial_register,
