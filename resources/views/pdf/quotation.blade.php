@@ -1,5 +1,5 @@
 <style>
-    body { font-family: xbriyaz, sans-serif; color: #0f172a; font-size: 10pt; line-height: 1.6; }
+    body { font-family: cairo, sans-serif; color: #0f172a; font-size: 10pt; line-height: 1.6; }
     .head { border-bottom: 1.2pt solid #0f172a; padding-bottom: 6pt; margin-bottom: 10pt; }
     .head h1 { font-size: 14pt; font-weight: bold; margin: 0 0 3pt; color: #1e3a8a; }
     table { width: 100%; border-collapse: collapse; }
