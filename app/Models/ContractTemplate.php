@@ -23,6 +23,10 @@ class ContractTemplate extends Model
         // Gregorian key carries a Hijri twin.
         'contract_date_hijri' => 'تاريخ العقد هجريًا',
         'org_name' => 'اسم المؤسسة',
+        // المؤجِّر في عقد الحجز هو الوحدة المحجوزة، وفي العقد اليدوي — إذ لا
+        // وحدة فيه — هو المنشأة. مفتاحٌ واحد يقرؤه القالب فلا يحتاج أن يعرف
+        // أيّهما بين يديه.
+        'lessor_name' => 'اسم المؤجِّر (الوحدة، وإلا المنشأة)',
         'client_name' => 'اسم العميل',
         'client_mobile' => 'جوال العميل',
         'client_id_number' => 'رقم هوية العميل',

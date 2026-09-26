@@ -181,7 +181,7 @@ class ContractService
             'client_address' => (string) ($client->tax_address ?: $client->city ?: '—'),
             'subject' => $this->subjectFor($template, null),
             'form' => self::formFor($template),
-            ...$this->blankBookingFields(),
+            ...$this->blankBookingFields($this->orgNameFor($settings, $template)),
             'quotation_number' => '—',
             'quotation_date' => '—',
             'valid_until' => '—',
@@ -205,13 +205,17 @@ class ContractService
      * own fields, and the pool measurements that are taken at the site and
      * typed onto the contract afterwards.
      *
+     * @param  string  $orgName  الاسم الذي يُوقَّع به، ليقوم مقام الوحدة الغائبة
      * @return array<string, string>
      */
-    private function blankBookingFields(): array
+    private function blankBookingFields(string $orgName): array
     {
         return [
             ...array_fill_keys(self::DIMENSIONS, '—'),
             'unit_name' => '—',
+            // لا وحدة خلف هذا العقد، فالمؤجِّر هو المنشأة نفسها. وحيث يكون
+            // خلفه حجزٌ يصير المؤجِّر وحدتَه المحجوزة.
+            'lessor_name' => $orgName,
             'booking_reference' => '—',
             'sections' => '—',
             'booking_date' => '—',
@@ -278,7 +282,7 @@ class ContractService
             // A quotation has no booked date or period. Its validity date is the
             // deadline for accepting it, not a term of the contract, so it is
             // carried under its own key rather than dressed up as a booking date.
-            ...$this->blankBookingFields(),
+            ...$this->blankBookingFields($this->orgNameFor($settings, $template, $quotation)),
             'quotation_number' => (string) $quotation->number,
             'quotation_date' => $quotation->created_at?->toDateString() ?? '—',
             'valid_until' => $quotation->valid_until?->toDateString() ?? '—',
@@ -720,6 +724,9 @@ class ContractService
             'form' => self::formFor($template),
             'booking_reference' => $booking->reference,
             'unit_name' => (string) ($booking->unit?->name ?? '—'),
+            // المؤجِّر هو الوحدة المحجوزة: عقد القاعة يُحرَّر على القاعة،
+            // وترويسته وتوقيع طرفه الأول يحملان اسمها.
+            'lessor_name' => (string) ($booking->unit?->name ?: ($settings->business_name ?: config('app.name'))),
             'sections' => $booking->scope === 'whole'
                 ? 'الوحدة كاملة'
                 : ($booking->sections->pluck('name')->implode('، ') ?: '—'),

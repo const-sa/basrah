@@ -12,7 +12,7 @@
 @endphp
 
 <style>
-    body { font-family: xbriyaz, sans-serif; color: #16215b; font-size: 10pt; line-height: 1.5; }
+    body { font-family: cairo, sans-serif; color: #16215b; font-size: 10pt; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
     .num { direction: ltr; unicode-bidi: embed; }
     .rtl { direction: rtl; unicode-bidi: embed; }
@@ -34,7 +34,8 @@
     /* One table per LINE so each label is only as wide as its own text. */
     table.ln { margin: 0; }
     table.ln td { padding: 3pt 1pt 1pt; vertical-align: bottom; font-size: 10pt; }
-    table.ln td.k { font-weight: bold; padding-left: 4pt; }
+    /* A label keeps to one line; the dotted run beside it takes what is left. */
+    table.ln td.k { font-weight: bold; padding-left: 4pt; white-space: nowrap; }
     table.ln td.v { border-bottom: 0.5pt dotted #6b6b6b; }
 
     /* The two section boxes and the day box, as the paper rules them. */
@@ -43,7 +44,7 @@
     .tick { border: 0.8pt solid #16215b; padding: 2pt 8pt; text-align: center; }
     .daybox { border: 0.8pt solid #16215b; border-radius: 10pt; padding: 3pt 18pt; text-align: center; }
 
-    .terms { margin-top: 7pt; font-size: 9pt; line-height: 1.7; white-space: pre-wrap; text-align: justify; }
+    .terms { margin-top: 7pt; font-size: 9pt; line-height: 1.7; text-align: justify; }
 
     /* Signatures stay one block: a signature split from its name proves nothing. */
     .sign { margin-top: 10pt; }
@@ -84,13 +85,14 @@
     </tr>
 </table>
 
-<div class="lead">تم الاتفاق بين {{ $issuer['business_name'] }} للاحتفالات والمناسبات</div>
+{{-- المؤجِّر هو القاعة المحجوزة لا المنشأة — كما في الترويسة وسطر الطرف الأول. --}}
+<div class="lead">تم الاتفاق بين {{ $unitName ?? $issuer['business_name'] }} للاحتفالات والمناسبات</div>
 
 <table class="ln"><tr>
-    <td class="k" style="width: 20%;">الطرف الثاني المستأجر/</td>
-    <td class="v" style="width: 46%;">{{ $fill($contract->client?->name ?? ($data['client_name'] ?? null)) }}</td>
-    <td class="k" style="width: 10%; padding-right: 8pt;">سجل مدني</td>
-    <td class="v num" style="width: 24%;">{{ $fill($data['client_id_number'] ?? null) }}</td>
+    <td class="k" style="width: 22%;">الطرف الثاني المستأجر/</td>
+    <td class="v" style="width: 40%;">{{ $fill($contract->client?->name ?? ($data['client_name'] ?? null)) }}</td>
+    <td class="k" style="width: 12%; padding-right: 8pt;">سجل مدني</td>
+    <td class="v num" style="width: 26%;">{{ $fill($data['client_id_number'] ?? null) }}</td>
 </tr></table>
 
 <table class="ln"><tr>
@@ -104,7 +106,7 @@
     <td class="k" style="width: 11%;">تاريخ الدخول</td>
     <td class="v num" style="width: 21%;">{{ $fill($data['booking_date'] ?? null) }}</td>
     <td class="k" style="width: 6%;">الموافق</td>
-    <td class="v num" style="width: 18%;">{{ $fill($data['booking_date_hijri'] ?? null) }} هـ</td>
+    <td class="v" style="width: 18%;">{{ $fill($data['booking_date_hijri'] ?? null) }}</td>
     <td class="k" style="width: 10%; padding-right: 8pt;">قيمة الإيجار</td>
     <td class="v" style="width: 16%;"><b class="num">{{ $fill($data['total_amount'] ?? null) }}</b></td>
     <td class="k" style="width: 6%; padding-right: 8pt;">واصل</td>
@@ -112,12 +114,12 @@
 </tr></table>
 
 <table class="ln"><tr>
-    <td class="k" style="width: 8%;">باقي</td>
-    <td class="v" style="width: 20%;"><b class="num">{{ $fill($data['remaining_amount'] ?? null) }}</b></td>
-    <td class="k" style="width: 10%; padding-right: 8pt;">عدد الضيوف</td>
-    <td class="v" style="width: 14%;">{{ $fill($data['guests_count'] ?? null) }}</td>
-    <td class="k" style="width: 10%; padding-right: 8pt;">وقت الدخول</td>
-    <td class="v" style="width: 38%;">{{ $fill($data['check_in_time'] ?? null) }}</td>
+    <td class="k" style="width: 6%;">باقي</td>
+    <td class="v" style="width: 18%;"><b class="num">{{ $fill($data['remaining_amount'] ?? null) }}</b></td>
+    <td class="k" style="width: 13%; padding-right: 8pt;">عدد الضيوف</td>
+    <td class="v" style="width: 13%;">{{ $fill($data['guests_count'] ?? null) }}</td>
+    <td class="k" style="width: 13%; padding-right: 8pt;">وقت الدخول</td>
+    <td class="v" style="width: 37%;">{{ $fill($data['check_in_time'] ?? null) }}</td>
 </tr></table>
 
 <table class="boxes">
@@ -133,7 +135,7 @@
 
 {{-- الشروط تمتدّ على ما تحتاجه من أوراق، فلا تُقيَّد بكتلة واحدة --}}
 @if ($terms)
-    <div class="terms">{{ $terms }}</div>
+    <div class="terms">@include('pdf.partials.terms', ['terms' => $terms, 'color' => '#16215b'])</div>
 @endif
 
 <table class="sign">

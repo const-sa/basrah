@@ -110,7 +110,8 @@ class ContractPdfTest extends TestCase
     {
         $bytes = app(ContractPdf::class)->render($this->contract());
 
-        $this->assertStringContainsString('XBRiyaz', $bytes);
+        // Cairo — the system's own face, and the one its quotations print in.
+        $this->assertStringContainsString('Cairo', $bytes);
     }
 
     public function test_pdf_route_streams_the_document_inline(): void

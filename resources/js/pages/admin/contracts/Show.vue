@@ -149,6 +149,16 @@ const send = () => {
 
 const print = () => window.print();
 
+const sendReceipt = (r: Receipt) => {
+    if (!props.contract.client_mobile) {
+        alert('لا يوجد رقم جوال للعميل.');
+        return;
+    }
+    if (confirm(`إرسال السند ${r.number} على واتساب ${props.contract.client_mobile}؟`)) {
+        router.post(`/admin/contracts/${props.contract.id}/receipts/${r.id}/send`, {}, { preserveScroll: true });
+    }
+};
+
 /**
  * سند قبض على العقد.
  *
@@ -363,7 +373,8 @@ const submitReceipt = () => {
                             <th class="px-3 py-2">المبلغ</th>
                             <th class="px-3 py-2">الطريقة</th>
                             <th class="px-3 py-2">الخزينة</th>
-                            <th class="px-5 py-2">الحالة</th>
+                            <th class="px-3 py-2">الحالة</th>
+                            <th class="px-5 py-2"></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -378,6 +389,28 @@ const submitReceipt = () => {
                                     class="rounded-full px-2 py-0.5 text-[11px] font-bold"
                                     :class="r.status === 'posted' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'"
                                 >{{ r.status_label }}</span>
+                            </td>
+                            <!-- طباعة السند وإرساله — للمرحّل وحده: المسوّدة ليست سندًا بعد. -->
+                            <td class="px-5 py-2">
+                                <div v-if="r.status === 'posted'" class="flex items-center justify-end gap-1.5">
+                                    <a
+                                        :href="`/admin/contracts/${contract.id}/receipts/${r.id}/pdf`"
+                                        target="_blank"
+                                        title="طباعة السند (PDF)"
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-800 text-white hover:bg-slate-900"
+                                    >
+                                        <Printer class="h-4 w-4" />
+                                    </a>
+                                    <button
+                                        v-if="may.send"
+                                        type="button"
+                                        title="إرسال السند (PDF) على واتساب"
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#25D366] text-white hover:bg-[#1ebe5b]"
+                                        @click="sendReceipt(r)"
+                                    >
+                                        <WhatsappIcon class="h-4 w-4" />
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>

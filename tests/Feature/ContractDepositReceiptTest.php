@@ -262,14 +262,17 @@ class ContractDepositReceiptTest extends TestCase
     }
 
     /** The عربون box is offered for the chalet form as it is for the pools'. */
-    public function test_the_screen_offers_the_deposit_box_on_the_chalet_template(): void
+    public function test_the_pools_screen_offers_only_its_own_forms_with_the_deposit_box(): void
     {
         $this->actingAs($this->owner)->get('/admin/pools/contracts')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where(
                 'templates',
-                fn ($templates) => collect($templates)
-                    ->firstWhere('name', ChaletContractTemplate::NAME)['takes_deposit'] === true,
+                fn ($templates) => collect($templates)->pluck('name')->sort()->values()->all() === collect([
+                    PoolInstallationContractTemplate::NAME,
+                    PoolMaintenanceContractTemplate::NAME,
+                ])->sort()->values()->all()
+                    && collect($templates)->every(fn ($t) => $t['takes_deposit'] === true),
             ));
     }
 

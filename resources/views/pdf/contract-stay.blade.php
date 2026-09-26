@@ -11,7 +11,7 @@
 @endphp
 
 <style>
-    body { font-family: xbriyaz, sans-serif; color: #141414; font-size: 10pt; line-height: 1.5; }
+    body { font-family: cairo, sans-serif; color: #141414; font-size: 10pt; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
     .num { direction: ltr; unicode-bidi: embed; }
     .rtl { direction: rtl; unicode-bidi: embed; }
@@ -39,12 +39,13 @@
        instead of every row sharing one column grid. */
     table.ln { margin: 0; }
     table.ln td { padding: 2.5pt 1pt 1pt; vertical-align: bottom; font-size: 10pt; }
-    table.ln td.k { font-weight: bold; padding-left: 4pt; }
+    /* A label keeps to one line; the dotted run beside it takes what is left. */
+    table.ln td.k { font-weight: bold; padding-left: 4pt; white-space: nowrap; }
     table.ln td.g { font-weight: bold; padding: 2.5pt 8pt 1pt 4pt; }
     table.ln td.v { border-bottom: 0.5pt dotted #6b6b6b; }
     table.ln.tight td { font-size: 8.5pt; }
 
-    .terms { font-size: 8.5pt; line-height: 1.5; white-space: pre-wrap; text-align: justify; margin-top: 7pt; }
+    .terms { font-size: 8.5pt; line-height: 1.5; text-align: justify; margin-top: 7pt; }
 
     .note { margin-top: 7pt; }
     .note .lbl { font-size: 10pt; font-weight: bold; }
@@ -197,7 +198,7 @@
 
 {{-- Terms run over as many pages as they need, so they are not kept together. --}}
 @if ($terms)
-    <div class="terms">{{ $terms }}</div>
+    <div class="terms">@include('pdf.partials.terms', ['terms' => $terms, 'color' => '#141414', 'compact' => true])</div>
 @endif
 
 <div class="note">

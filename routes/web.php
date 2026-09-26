@@ -275,6 +275,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         // سند قبض على عقد مسابح — العربون وما تلاه من دفعات. القبض تحرير
         // للعقد لا محاسبة مستقلة، فيمرّ من باب العقود نفسه.
         Route::post('contracts/{contract}/receipt', [ContractsController::class, 'receipt'])->name('contracts.receipt');
+        Route::get('contracts/{contract}/receipts/{voucher}/pdf', [ContractsController::class, 'receiptPdf'])->name('contracts.receipts.pdf');
+        Route::post('contracts/{contract}/receipts/{voucher}/send', [ContractsController::class, 'sendReceipt'])->name('contracts.receipts.send');
         Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->name('contracts.status');
         Route::delete('contracts/{contract}', [ContractsController::class, 'destroy'])->name('contracts.destroy');
 

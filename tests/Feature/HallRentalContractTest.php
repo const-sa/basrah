@@ -10,6 +10,7 @@ use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\JournalEntry;
 use App\Models\Role;
+use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BookingService;
@@ -76,6 +77,48 @@ class HallRentalContractTest extends TestCase
                 ->where('contract.is_hall_form', true));
 
         $this->assertStringStartsWith('%PDF-', app(ContractPdf::class)->render($contract));
+    }
+
+    /**
+     * المؤجِّر في عقد القاعة هو القاعة المحجوزة لا المنشأة.
+     *
+     * الورقة تُحرَّر على القاعة: ترويستها اسمُها، وسطر «الطرف الأول المؤجر»
+     * أسفلها اسمُها، وكان سطر «تم الاتفاق بين» وحده يحمل اسم المنشأة — فيقرأ
+     * المستأجر في الورقة الواحدة اسمين، ويوقّع على أنه استأجر من جهةٍ غير
+     * التي كُتبت في أعلى العقد.
+     */
+    public function test_the_rental_sheet_is_agreed_with_the_booked_hall_not_the_business(): void
+    {
+        $hall = $this->hall();
+
+        Setting::current()->fill(['business_name' => 'شركة ديوان المسرة'])->save();
+
+        $contract = $this->contractFor($hall);
+
+        $this->assertStringContainsString("تم الاتفاق بين {$hall->name} للاحتفالات والمناسبات", $contract->body);
+        $this->assertStringNotContainsString('تم الاتفاق بين شركة ديوان المسرة', $contract->body);
+
+        // والاسم يصل إلى الشاشة والطباعة من unit_name المجمَّد مع العقد.
+        $this->assertSame($hall->name, $contract->data['unit_name'] ?? null);
+        $this->assertSame($hall->name, $contract->data['lessor_name'] ?? null);
+    }
+
+    /**
+     * والعقد اليدوي — لا حجز خلفه ولا وحدة — يبقى على اسم المنشأة، وإلا
+     * خرجت ورقة بلا مؤجِّر.
+     */
+    public function test_a_contract_without_a_booking_is_agreed_with_the_business(): void
+    {
+        Setting::current()->fill(['business_name' => 'شركة ديوان المسرة'])->save();
+
+        $data = app(ContractService::class)->buildDirectData(
+            Client::create(['name' => 'أبو سعد', 'mobile' => '0559988776']),
+            'CT-2026-0001',
+            null,
+            ContractTemplate::where('name', HallRentalContractTemplate::NAME)->first(),
+        );
+
+        $this->assertSame('شركة ديوان المسرة', $data['lessor_name']);
     }
 
     public function test_a_chalet_keeps_its_own_daily_rental_form(): void

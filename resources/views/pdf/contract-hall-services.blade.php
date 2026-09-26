@@ -16,7 +16,7 @@
 @endphp
 
 <style>
-    body { font-family: xbriyaz, sans-serif; color: #16215b; font-size: 10pt; line-height: 1.5; }
+    body { font-family: cairo, sans-serif; color: #16215b; font-size: 10pt; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
     .num { direction: ltr; unicode-bidi: embed; }
 
@@ -35,7 +35,8 @@
     /* One table per LINE so each label is only as wide as its own text. */
     table.ln { margin: 0; }
     table.ln td { padding: 3pt 1pt 1pt; vertical-align: bottom; font-size: 10pt; }
-    table.ln td.k { font-weight: bold; padding-left: 4pt; }
+    /* A label keeps to one line; the dotted run beside it takes what is left. */
+    table.ln td.k { font-weight: bold; padding-left: 4pt; white-space: nowrap; }
     table.ln td.v { border-bottom: 0.5pt dotted #6b6b6b; }
 
     .boxes { margin-top: 4pt; }
@@ -102,7 +103,7 @@
     <td class="k" style="width: 10%; padding-right: 8pt;">تاريخ العقد</td>
     <td class="v num" style="width: 17%;">{{ $fill($data['contract_date'] ?? null) }}</td>
     <td class="k" style="width: 6%; padding-right: 8pt;">الموافق</td>
-    <td class="v num" style="width: 15%;">{{ $fill($data['contract_date_hijri'] ?? null) }} هـ</td>
+    <td class="v" style="width: 15%;">{{ $fill($data['contract_date_hijri'] ?? null) }}</td>
 </tr></table>
 
 <table class="ln"><tr>

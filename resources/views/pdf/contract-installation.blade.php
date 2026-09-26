@@ -28,7 +28,7 @@
 @endphp
 
 <style>
-    body { font-family: xbriyaz, sans-serif; color: #14224a; font-size: 10pt; line-height: 1.45; }
+    body { font-family: cairo, sans-serif; color: #14224a; font-size: 10pt; line-height: 1.45; }
     table { width: 100%; border-collapse: collapse; }
     .num { direction: ltr; unicode-bidi: embed; }
     .rtl { direction: rtl; unicode-bidi: embed; }
@@ -43,7 +43,8 @@
     /* One table per LINE so each label is only as wide as its own text. */
     table.ln { margin: 0; }
     table.ln td { padding: 3pt 1pt 1pt; vertical-align: bottom; font-size: 10pt; }
-    table.ln td.k { font-weight: bold; padding-left: 4pt; }
+    /* A label keeps to one line; the dotted run beside it takes what is left. */
+    table.ln td.k { font-weight: bold; padding-left: 4pt; white-space: nowrap; }
     table.ln td.v { border-bottom: 0.5pt dotted #6b6b6b; }
     /* The English half of a bilingual label, under its Arabic. */
     .en { display: block; font-size: 7pt; font-weight: normal; color: #6b7a99; }
@@ -105,8 +106,8 @@
     <td class="k" style="width: 11%;">رقم العقد<span class="en">Cont. No.</span></td>
     <td class="v serial num" style="width: 21%;">{{ $contract->number }}</td>
     <td class="k" style="width: 12%; padding-right: 10pt;">تاريخ العقد<span class="en">Cont. Date</span></td>
-    <td class="v num" style="width: 24%;">{{ $fill($data['contract_date_hijri'] ?? null) }}</td>
-    <td class="k" style="width: 8%;">هـ الموافق</td>
+    <td class="v" style="width: 24%;">{{ $fill($data['contract_date_hijri'] ?? null) }}</td>
+    <td class="k" style="width: 8%;">الموافق</td>
     <td class="v num" style="width: 24%;">{{ $fill($data['contract_date'] ?? $contract->created_at?->toDateString()) }}</td>
 </tr></table>
 

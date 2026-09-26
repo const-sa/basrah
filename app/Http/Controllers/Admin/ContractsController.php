@@ -14,6 +14,7 @@ use App\Models\Treasury;
 use App\Models\Voucher;
 use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
+use App\Services\ContractReceiptPdf;
 use App\Services\ContractService;
 use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\WhatsappNotifier;
@@ -24,6 +25,8 @@ use App\Support\ClientType;
 use App\Support\HallRentalContractTemplate;
 use App\Support\HallServicesContractTemplate;
 use App\Support\Letterhead;
+use App\Support\PoolInstallationContractTemplate;
+use App\Support\PoolMaintenanceContractTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -58,6 +61,7 @@ class ContractsController extends Controller
         private readonly ContractPdf $pdf,
         private readonly WhatsappNotifier $whatsapp,
         private readonly ContractReceipts $receipts,
+        private readonly ContractReceiptPdf $receiptPdf,
     ) {}
 
     /**
@@ -164,6 +168,9 @@ class ContractsController extends Controller
             ->with([
                 'booking:id,reference,unit_id,booking_date', 'booking.unit:id,name',
                 'quotation:id,number', 'client:id,name,mobile',
+                // سندات القبض في صف العقد — للطباعة والإرسال من السجلّ مباشرةً.
+                'vouchers' => fn ($q) => $q->where('type', 'receipt')->where('status', 'posted')
+                    ->with('paymentMethod:id,name')->latest('id'),
             ])
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
             ->when($request->string('search')->toString(), fn ($q, $term) => $q->where(
@@ -211,6 +218,15 @@ class ContractsController extends Controller
                         'remaining_amount' => $c->takesReceipts() && $c->remainingAmount() !== null
                             ? number_format($c->remainingAmount(), 2)
                             : null,
+                        'receipts' => $c->takesReceipts()
+                            ? $c->vouchers->map(fn (Voucher $v) => [
+                                'id' => $v->id,
+                                'number' => $v->number,
+                                'date' => $v->voucher_date->toDateString(),
+                                'amount' => number_format((float) $v->amount, 2),
+                                'method' => $v->methodLabel(),
+                            ])->values()
+                            : [],
                         'sent_at' => $c->sent_at?->format('Y-m-d H:i'),
                         'created_at' => $c->created_at->toDateString(),
                         'services_contract' => $services ? [
@@ -319,6 +335,7 @@ class ContractsController extends Controller
         $own = $templates->whereIn('name', match ($scope) {
             'chalet' => [ChaletContractTemplate::NAME],
             'hall' => [HallRentalContractTemplate::NAME, HallServicesContractTemplate::NAME],
+            'quotation' => [PoolInstallationContractTemplate::NAME, PoolMaintenanceContractTemplate::NAME],
             default => [],
         })->values();
 
@@ -618,6 +635,75 @@ class ContractsController extends Controller
 
         return back()->with('success', "تم سند القبض {$voucher->number}"
             .($remaining === null ? '' : ' — المتبقي '.number_format($remaining, 2)));
+    }
+
+    /**
+     * ملف سند القبض PDF — للطباعة، ويُنزَّل بـ?download=1.
+     */
+    public function receiptPdf(Request $request, Contract $contract, Voucher $voucher): HttpResponse
+    {
+        $this->authorizeActivity($request, 'contracts', 'view', ActivityPermission::ofContract($contract));
+
+        $this->assertReceiptOf($contract, $voucher);
+
+        try {
+            $content = $this->receiptPdf->render($contract, $voucher);
+        } catch (RuntimeException $e) {
+            abort(500, $e->getMessage());
+        }
+
+        $disposition = $request->boolean('download') ? 'attachment' : 'inline';
+
+        return response($content, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => $disposition.'; filename="'.$this->receiptPdf->filename($voucher).'"',
+        ]);
+    }
+
+    /**
+     * إرسال سند القبض للعميل على واتساب — الملف نفسه مرفقًا.
+     */
+    public function sendReceipt(Request $request, Contract $contract, Voucher $voucher): RedirectResponse
+    {
+        $this->authorizeActivity($request, 'contracts', 'send', ActivityPermission::ofContract($contract));
+
+        $this->assertReceiptOf($contract, $voucher);
+
+        $contract->loadMissing('client');
+
+        if (blank($contract->client?->mobile)) {
+            return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
+        }
+
+        $accounts = app(WhatsappAccounts::class);
+
+        if (! $accounts->canSend($contract)) {
+            $account = $accounts->for($contract);
+
+            return back()->with('warning', $account
+                ? "رقم واتساب «{$account->name}» غير مربوط بالبوابة — اربطه من إعدادات واتساب ثم أعد الإرسال."
+                : 'بوابة واتساب غير مهيّأة — اضبطها من إعدادات واتساب ثم أعد الإرسال.');
+        }
+
+        // الرسالة تقول «مرفق السند»، فلا تُرسل بلا مرفق.
+        try {
+            $path = $this->receiptPdf->store($contract, $voucher);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        $this->whatsapp->contractReceipt($contract, $voucher, $request->user()?->id, $this->receiptPdf->publicUrl($path));
+
+        return back()->with('success', "تم إرسال السند {$voucher->number} (PDF) على واتساب العميل");
+    }
+
+    /** السند من سندات قبض هذا العقد المرحّلة — لا سند عقدٍ آخر برقمٍ مخمَّن. */
+    private function assertReceiptOf(Contract $contract, Voucher $voucher): void
+    {
+        abort_unless(
+            $voucher->contract_id === $contract->id && $voucher->type === 'receipt' && $voucher->isPosted(),
+            404,
+        );
     }
 
     /**

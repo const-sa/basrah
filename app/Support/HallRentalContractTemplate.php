@@ -32,7 +32,7 @@ class HallRentalContractTemplate
 عقد إيجار رقم: {{contract_number}}
 التاريخ: {{contract_date}}   الموافق: {{contract_date_hijri}} هـ
 
-تم الاتفاق بين {{org_name}} للاحتفالات والمناسبات
+تم الاتفاق بين {{lessor_name}} للاحتفالات والمناسبات
 والطرف الثاني (المستأجر): {{client_name}}
 سجل مدني: {{client_id_number}} — مكان الميلاد: {{client_birth_place}}
 جوال رقم: {{client_mobile}}

@@ -8,6 +8,7 @@ use App\Models\BookingPayment;
 use App\Models\Contract;
 use App\Models\NotificationTemplate;
 use App\Models\Quotation;
+use App\Models\Voucher;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
 use App\Services\Whatsapp\PhoneNumber;
@@ -182,6 +183,36 @@ class WhatsappNotifier
         ]));
 
         return $this->send($contract->client?->mobile, $body, 'contract', $contract, $userId, $pdfUrl);
+    }
+
+    /**
+     * سند قبضٍ على عقد، مرفقًا بملفه PDF.
+     *
+     * يخرج من رقم قسم العقد ويُوقَّع باسم جهته، كرسالة العقد نفسه.
+     */
+    public function contractReceipt(Contract $contract, Voucher $voucher, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
+    {
+        $contract->loadMissing('client');
+        $voucher->loadMissing('paymentMethod');
+
+        $remaining = $contract->remainingAmount();
+
+        $body = implode("\n", array_filter([
+            'مرحبًا '.($contract->client?->name ?? '').'،',
+            ($pdfUrl ? 'مرفق سند القبض رقم ' : 'سند القبض رقم ').$voucher->number.' على العقد '.$contract->number.'.',
+            'المبلغ: '.number_format((float) $voucher->amount, 2).' ريال',
+            'التاريخ: '.$voucher->voucher_date->toDateString(),
+            'الطريقة: '.$voucher->methodLabel(),
+            match (true) {
+                $remaining === null => null,
+                $remaining > 0 => 'المتبقي: '.number_format($remaining, 2).' ريال',
+                default => 'اكتمل السداد.',
+            },
+            'شكرًا لتعاملكم معنا.',
+            app(WhatsappAccounts::class)->senderName($contract),
+        ]));
+
+        return $this->send($contract->client?->mobile, $body, 'receipt', $contract, $userId, $pdfUrl);
     }
 
     /**

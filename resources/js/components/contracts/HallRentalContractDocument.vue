@@ -95,7 +95,13 @@ const termsText = computed(() => (props.editable ? terms.value : props.contract.
             </tr>
         </table>
 
-        <div class="lead">تم الاتفاق بين {{ issuer.business_name }} للاحتفالات والمناسبات</div>
+        <!--
+            المؤجِّر هو القاعة المحجوزة لا المنشأة: العقد يُحرَّر على القاعة،
+            وترويسته وسطر «الطرف الأول المؤجر» أسفله يحملان اسمها، فلا يصحّ أن
+            يفترق عنهما هذا السطر. والقاعةُ الغائبة — عقدٌ بلا حجز — تُرجعه إلى
+            اسم المنشأة.
+        -->
+        <div class="lead">تم الاتفاق بين {{ contract.unit_name ?? issuer.business_name }} للاحتفالات والمناسبات</div>
 
         <!-- One table per LINE, every cell explicitly sized — the same widths the
              PDF uses, so the screen and the generated file stay one document. -->

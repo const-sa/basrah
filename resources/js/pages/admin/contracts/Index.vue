@@ -5,7 +5,7 @@ import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, ClipboardList, Eye, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
+import { CheckCircle2, ClipboardList, Eye, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -16,10 +16,16 @@ interface Contract {
     booking_date: string | null; total_amount: string | null;
     /** ما قُبض وما بقي — لعقود المسابح وحدها، وإلا null. */
     paid_amount: string | null; remaining_amount: string | null;
+    /** سندات القبض المرحّلة على العقد — للطباعة والإرسال من السجلّ. */
+    receipts: Receipt[];
     sent_at: string | null; created_at: string;
     // عقد الخدمات الإضافية على نفس الحجز — سجل القاعات وحده يحمله، وغيابه
     // يعني أن العميل لم يطلب خدمات إضافية على هذا الحجز.
     services_contract: { id: number; number: string; status_label: string } | null;
+}
+
+interface Receipt {
+    id: number; number: string; date: string; amount: string; method: string;
 }
 
 interface QuotationOption {
@@ -224,6 +230,22 @@ const send = (c: Contract) => {
     }
 };
 
+// سندات العقد تُفتح سطرًا تحت صفّه — عقدٌ واحد مفتوح في كل مرة.
+const openReceipts = ref<number | null>(null);
+const toggleReceipts = (c: Contract) => (openReceipts.value = openReceipts.value === c.id ? null : c.id);
+
+const receiptPdf = (c: Contract, r: Receipt) => `/admin/contracts/${c.id}/receipts/${r.id}/pdf`;
+
+const sendReceipt = (c: Contract, r: Receipt) => {
+    if (!c.client_mobile) {
+        alert('لا يوجد رقم جوال للعميل.');
+        return;
+    }
+    if (confirm(`إرسال السند ${r.number} على واتساب ${c.client_mobile}؟`)) {
+        router.post(`/admin/contracts/${c.id}/receipts/${r.id}/send`, {}, { preserveScroll: true });
+    }
+};
+
 const markSigned = (c: Contract) => router.patch(`/admin/contracts/${c.id}/status`, { status: 'signed' }, { preserveScroll: true });
 
 const destroy = (c: Contract) => {
@@ -300,7 +322,8 @@ const statusClass = (s: string) =>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="c in contracts.data" :key="c.id" class="border-t border-slate-100 hover:bg-slate-50">
+                            <template v-for="c in contracts.data" :key="c.id">
+                            <tr class="border-t border-slate-100 hover:bg-slate-50">
                                 <td class="px-4 py-3">
                                     <div class="font-extrabold text-slate-800" dir="ltr">{{ c.number }}</div>
                                     <div class="text-[11px] text-slate-500" dir="ltr">{{ c.created_at }}</div>
@@ -352,6 +375,15 @@ const statusClass = (s: string) =>
                                             :title="`عقد الخدمات الإضافية ${c.services_contract.number} — ${c.services_contract.status_label}`"
                                             :href="`/admin/contracts/${c.services_contract.id}`"
                                         />
+                                        <!-- سندات القبض على العقد وعددها — تُفتح تحت الصف للطباعة والإرسال. -->
+                                        <TableActionButton
+                                            v-if="c.receipts.length"
+                                            variant="dark"
+                                            :icon="ReceiptText"
+                                            :label="String(c.receipts.length)"
+                                            title="سندات القبض"
+                                            @click="toggleReceipts(c)"
+                                        />
                                         <TableActionButton variant="view" :icon="Eye" title="عرض" :href="`/admin/contracts/${c.id}`" />
                                         <!-- A draft is still ours to correct; once sent it is the client's paper. -->
                                         <TableActionButton
@@ -379,6 +411,48 @@ const statusClass = (s: string) =>
                                     </div>
                                 </td>
                             </tr>
+                            <tr v-if="openReceipts === c.id" class="bg-slate-50">
+                                <td colspan="6" class="px-4 pb-4 pt-1">
+                                    <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        <div class="border-b border-slate-100 bg-slate-100 px-4 py-2 text-xs font-extrabold text-slate-700">
+                                            سندات القبض على العقد {{ c.number }}
+                                        </div>
+                                        <table class="w-full text-sm">
+                                            <tbody>
+                                                <tr v-for="r in c.receipts" :key="r.id" class="border-t border-slate-100 first:border-t-0">
+                                                    <td class="px-4 py-2 font-bold text-slate-800" dir="ltr">{{ r.number }}</td>
+                                                    <td class="px-4 py-2 text-xs text-slate-500" dir="ltr">{{ r.date }}</td>
+                                                    <td class="px-4 py-2 text-center">
+                                                        <span class="font-extrabold text-emerald-700" dir="ltr">{{ r.amount }}</span>
+                                                        <span class="text-[11px] text-slate-500"> ريال</span>
+                                                    </td>
+                                                    <td class="px-4 py-2 text-xs text-slate-500">{{ r.method }}</td>
+                                                    <td class="px-4 py-2">
+                                                        <div class="flex items-center justify-end gap-1.5">
+                                                            <a
+                                                                :href="receiptPdf(c, r)"
+                                                                target="_blank"
+                                                                title="طباعة السند (PDF)"
+                                                                class="table-action inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800 text-white shadow-sm hover:bg-slate-900"
+                                                            >
+                                                                <Printer class="h-4 w-4" />
+                                                            </a>
+                                                            <TableActionButton
+                                                                v-if="may.send"
+                                                                variant="whatsapp"
+                                                                :icon="WhatsappIcon"
+                                                                title="إرسال السند (PDF) على واتساب"
+                                                                @click="sendReceipt(c, r)"
+                                                            />
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                            </template>
                             <tr v-if="!contracts.data.length">
                                 <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">{{ emptyText }}</td>
                             </tr>

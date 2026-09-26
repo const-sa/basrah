@@ -59,15 +59,14 @@ class ContractPdf
 
         $html = View::make($view, $data)->render();
 
-        // The maintenance sheet is a priced offer, drawn like the quotation it
-        // comes from — in the system's own Cairo face.
-        $cairo = $data['isMaintenanceForm'];
 
         try {
             $mpdf = new Mpdf([
                 'mode' => 'ar',
                 'format' => 'A4',
-                ...($cairo ? $this->cairoConfig() : ['default_font' => 'xbriyaz']),
+                // Every sheet in Cairo — the system's own face, and the one its
+                // quotations and receipts are printed in.
+                ...$this->cairoConfig(),
                 'default_font_size' => 10.5,
                 'margin_top' => 12,
                 'margin_bottom' => 14,
@@ -81,7 +80,7 @@ class ContractPdf
             $mpdf->SetDirectionality('rtl');
             // Cairo carries Arabic and Latin alike; switching by language
             // would put xbriyaz back over it.
-            $mpdf->autoLangToFont = ! $cairo;
+            $mpdf->autoLangToFont = false;
             $mpdf->autoScriptToLang = true;
 
             $mpdf->SetTitle('عقد رقم '.$contract->number);
