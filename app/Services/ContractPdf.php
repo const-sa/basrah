@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Contract;
 use App\Models\Setting;
 use App\Services\Concerns\ResolvesPublicFiles;
+use App\Services\Concerns\UsesCairoFont;
 use App\Support\BookingPeriod;
 use App\Support\Letterhead;
 use App\Support\StayPeriod;
@@ -29,6 +30,7 @@ use RuntimeException;
 class ContractPdf
 {
     use ResolvesPublicFiles;
+    use UsesCairoFont;
 
     /** مجلد حفظ العقود على القرص العام. */
     public const DISK = 'public';
@@ -57,11 +59,15 @@ class ContractPdf
 
         $html = View::make($view, $data)->render();
 
+        // The maintenance sheet is a priced offer, drawn like the quotation it
+        // comes from — in the system's own Cairo face.
+        $cairo = $data['isMaintenanceForm'];
+
         try {
             $mpdf = new Mpdf([
                 'mode' => 'ar',
                 'format' => 'A4',
-                'default_font' => 'xbriyaz',
+                ...($cairo ? $this->cairoConfig() : ['default_font' => 'xbriyaz']),
                 'default_font_size' => 10.5,
                 'margin_top' => 12,
                 'margin_bottom' => 14,
@@ -73,7 +79,9 @@ class ContractPdf
             ]);
 
             $mpdf->SetDirectionality('rtl');
-            $mpdf->autoLangToFont = true;
+            // Cairo carries Arabic and Latin alike; switching by language
+            // would put xbriyaz back over it.
+            $mpdf->autoLangToFont = ! $cairo;
             $mpdf->autoScriptToLang = true;
 
             $mpdf->SetTitle('عقد رقم '.$contract->number);
@@ -184,7 +192,7 @@ class ContractPdf
             'terms' => $contract->terms ?: $contract->body,
             'unitCode' => $contract->booking?->unit?->code,
             'issuer' => collect($issuer)
-                ->only(['business_name', 'phone', 'whatsapp', 'address', 'tax_number', 'commercial_register', 'manager_name'])
+                ->only(['business_name', 'phone', 'whatsapp', 'email', 'address', 'tax_number', 'commercial_register', 'manager_name'])
                 ->all(),
             // الصور تُمرَّر بمساراتها على القرص لا بروابطها: mpdf يقرأ الملف
             // مباشرةً، وتحميله عبر HTTP من الخادم نفسه يعلّق التوليد إذا كان

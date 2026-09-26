@@ -4,13 +4,12 @@ namespace App\Services;
 
 use App\Models\Quotation;
 use App\Services\Concerns\ResolvesPublicFiles;
+use App\Services\Concerns\UsesCairoFont;
 use App\Support\Letterhead;
 use App\Support\Vat;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
-use Mpdf\Config\ConfigVariables;
-use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
 use Mpdf\MpdfException;
 use Mpdf\Output\Destination;
@@ -22,6 +21,7 @@ use RuntimeException;
 class QuotationPdf
 {
     use ResolvesPublicFiles;
+    use UsesCairoFont;
 
     public const DISK = 'public';
 
@@ -58,25 +58,10 @@ class QuotationPdf
         $html = View::make('pdf.quotation', $this->viewData($quotation))->render();
 
         try {
-            $defaults = (new ConfigVariables)->getDefaults();
-            $fonts = (new FontVariables)->getDefaults();
-
             $mpdf = new Mpdf([
                 'mode' => 'ar',
                 'format' => 'A4',
-                // خط Cairo من Google — خط واجهة النظام نفسه. نسختان ثابتتان
-                // (عادي وعريض) مستخرجتان من الخط المتغيّر، فـ mpdf لا يقرأ
-                // المحاور المتغيّرة. useOTL يفعّل تشكيل الحروف العربية.
-                'fontDir' => [...$defaults['fontDir'], resource_path('fonts/cairo')],
-                'fontdata' => $fonts['fontdata'] + [
-                    'cairo' => [
-                        'R' => 'Cairo-Regular.ttf',
-                        'B' => 'Cairo-Bold.ttf',
-                        'useOTL' => 0xFF,
-                        'useKashida' => 75,
-                    ],
-                ],
-                'default_font' => 'cairo',
+                ...$this->cairoConfig(),
                 'default_font_size' => 10,
                 'margin_top' => 10,
                 'margin_bottom' => 10,

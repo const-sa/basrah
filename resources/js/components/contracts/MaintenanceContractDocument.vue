@@ -3,6 +3,9 @@ import { computed, ref, watch } from 'vue';
 
 interface MaintenanceContract {
     number: string;
+    contract_date?: string | null;
+    quotation_number?: string | null;
+    client_mobile?: string | null;
     terms: string | null;
     body: string;
     client_name: string | null;
@@ -31,7 +34,11 @@ interface Issuer {
     logo_url: string | null;
     phone: string | null;
     whatsapp: string | null;
+    email?: string | null;
+    address?: string | null;
+    tax_number?: string | null;
     commercial_register: string | null;
+    manager_name?: string | null;
 }
 
 const props = withDefaults(
@@ -70,7 +77,7 @@ const qty = (value: number | string | null | undefined) => {
 // «الخصم 0.00» line, and a sheet with no VAT shows no VAT row.
 const carries = (value: string | null | undefined) => !!value && Number(String(value).replace(/,/g, '')) !== 0;
 
-const termsText = computed(() => (props.editable ? terms.value : props.contract.terms ?? props.contract.body));
+const termsText = computed(() => (props.editable ? terms.value : (props.contract.terms ?? props.contract.body)));
 
 // The notes are written one bullet per line, so they are printed as a list;
 // wording that is not bulleted is printed as it stands.
@@ -82,240 +89,349 @@ const bullets = computed(() =>
         .filter(Boolean),
 );
 
-// The pad is printed with room to write in, so a short sheet still rules
-// enough lines for the visits to be listed by hand.
-const rows = computed(() => {
-    const lines = (props.editable ? items.value : props.contract.items) ?? [];
-    return Array.from({ length: Math.max(lines.length, 4) }, (_, i) => lines[i] ?? null);
-});
+// Read as the PDF prints them; while editing, every line is a row to type into.
+const rows = computed(() => (props.editable ? items.value : props.contract.items) ?? []);
+
+const money = (value: string | null | undefined) => (value ? `${value} ريال` : '—');
 </script>
 
 <template>
     <div class="doc mx-auto max-w-4xl bg-white p-8 text-slate-900 shadow-sm print:max-w-none print:p-0 print:shadow-none">
-        <!-- Letterhead: emblem, name, phones and the CR number, all centred. -->
-        <div class="print-keep text-center">
-            <img
-                v-if="issuer.logo_url && !logoFailed"
-                :src="issuer.logo_url"
-                :alt="issuer.business_name"
-                class="mx-auto max-h-[110px] w-auto object-contain print:max-h-[80px]"
-                @error="logoFailed = true"
-            />
-            <div class="biz">{{ issuer.business_name }}</div>
-            <div v-if="issuer.phone || issuer.whatsapp" class="line">
-                رقم الجوال:
-                <span dir="ltr"
-                    >{{ issuer.phone }}<template v-if="issuer.whatsapp"> - {{ issuer.whatsapp }}</template></span
-                >
+        <!-- Header: the issuer on the right, the document's box on the left — as the quotation. -->
+        <div class="print-keep flex items-start justify-between gap-6">
+            <div class="flex min-w-0 items-center gap-3">
+                <img
+                    v-if="issuer.logo_url && !logoFailed"
+                    :src="issuer.logo_url"
+                    :alt="issuer.business_name"
+                    class="max-h-[80px] w-auto max-w-[140px] object-contain"
+                    @error="logoFailed = true"
+                />
+                <div class="min-w-0">
+                    <div class="brand">{{ issuer.business_name }}</div>
+                    <div v-if="issuer.address" class="muted">{{ issuer.address }}</div>
+                    <div v-if="issuer.phone || issuer.whatsapp" class="muted">
+                        هاتف:
+                        <span dir="ltr"
+                            >{{ issuer.phone
+                            }}<template v-if="issuer.whatsapp && issuer.whatsapp !== issuer.phone"> - {{ issuer.whatsapp }}</template></span
+                        >
+                    </div>
+                    <div v-if="issuer.email" class="muted">{{ issuer.email }}</div>
+                    <div v-if="issuer.tax_number" class="muted">الرقم الضريبي: {{ issuer.tax_number }}</div>
+                    <div v-if="issuer.commercial_register" class="muted">السجل التجاري: {{ issuer.commercial_register }}</div>
+                </div>
             </div>
-            <div v-if="issuer.commercial_register" class="line">
-                س ت: <span dir="ltr">{{ issuer.commercial_register }}</span>
+
+            <div class="w-[38%] shrink-0">
+                <div class="doc-title">
+                    <div class="t">عرض سعر صيانة مسابح شهريًا</div>
+                    <div class="sub">MONTHLY MAINTENANCE</div>
+                </div>
+                <table class="meta">
+                    <tr>
+                        <td class="k">رقم العقد</td>
+                        <td class="v" dir="ltr">{{ contract.number }}</td>
+                    </tr>
+                    <tr v-if="contract.contract_date">
+                        <td class="k">تاريخ العقد</td>
+                        <td class="v" dir="ltr">{{ contract.contract_date }}</td>
+                    </tr>
+                    <tr v-if="contract.quotation_number">
+                        <td class="k">عرض السعر</td>
+                        <td class="v" dir="ltr">{{ contract.quotation_number }}</td>
+                    </tr>
+                </table>
             </div>
         </div>
 
-        <div class="to">
-            إلى السـادة:
-            <input v-if="editable" v-model="fields.client_name" class="fillin to-input" />
-            <template v-else>{{ fill(contract.client_name) }}</template>
-        </div>
+        <div class="rule"></div>
 
-        <div class="subject">عرض سعر صيانة مسابح شهريًا</div>
+        <!-- The client card. -->
+        <div class="print-keep">
+            <div class="card-title">مقدَّم إلى</div>
+            <div class="card-body">
+                <div class="flex-1">
+                    <span class="muted">العميل:</span>
+                    <input v-if="editable" v-model="fields.client_name" class="fillin client-input" />
+                    <b v-else>{{ fill(contract.client_name) }}</b>
+                </div>
+                <div v-if="contract.client_mobile" class="flex-1">
+                    <span class="muted">الجوال:</span> <b dir="ltr">{{ contract.client_mobile }}</b>
+                </div>
+            </div>
+        </div>
 
         <table class="items print-keep">
             <thead>
                 <tr>
-                    <th style="width: 7%">م</th>
-                    <th style="width: 48%">البيان</th>
-                    <th style="width: 13%">العدد</th>
+                    <th style="width: 6%">#</th>
+                    <th style="width: 50%; text-align: right">البيان</th>
+                    <th style="width: 12%">العدد</th>
                     <th style="width: 16%">السعر</th>
-                    <th style="width: 16%">الاجمالي</th>
+                    <th style="width: 16%">الإجمالي</th>
                 </tr>
             </thead>
             <tbody>
-                <!-- While editing, every cell of the sheet is typed into directly,
-                     the empty rows included — that is how the pad is filled. -->
-                <tr v-for="(line, i) in rows" :key="i">
-                    <td dir="ltr">{{ line || editable ? i + 1 : ' ' }}</td>
-                    <td class="desc">
+                <!-- While editing, every cell is typed into directly, the empty rows included. -->
+                <tr v-for="(line, i) in rows" :key="i" :class="{ alt: i % 2 === 1 }">
+                    <td class="c">{{ i + 1 }}</td>
+                    <td>
                         <input v-if="editable" v-model="items[i].name" class="fillin" />
                         <template v-else>
-                            {{ fill(line?.name) }}
-                            <span v-if="line?.code" class="code" dir="ltr">({{ line.code }})</span>
+                            <b>{{ fill(line?.name) }}</b>
+                            <div v-if="line?.code" class="muted">{{ line.code }}</div>
                         </template>
                     </td>
-                    <td dir="ltr">
+                    <td class="c" dir="ltr">
                         <input v-if="editable" v-model="items[i].quantity" class="fillin center" dir="ltr" />
                         <template v-else>{{ qty(line?.quantity) }}</template>
                     </td>
-                    <td dir="ltr">
+                    <td class="c" dir="ltr">
                         <input v-if="editable" v-model="items[i].unit_price" class="fillin center" dir="ltr" />
                         <template v-else>{{ fill(line?.unit_price) }}</template>
                     </td>
-                    <td dir="ltr">
+                    <td class="c" dir="ltr">
                         <input v-if="editable" v-model="items[i].total_price" class="fillin center" dir="ltr" />
-                        <template v-else>{{ fill(line?.total_price) }}</template>
+                        <b v-else>{{ fill(line?.total_price) }}</b>
                     </td>
+                </tr>
+                <tr v-if="!rows.length">
+                    <td colspan="5" class="c muted">لا بنود</td>
                 </tr>
             </tbody>
         </table>
 
-        <!-- The totals sit alone at the left, as the paper has them. -->
-        <table class="totals print-keep">
-            <tr>
-                <td class="lbl">الاجمــــالي</td>
-                <td class="val" dir="ltr">
-                    <input v-if="editable" v-model="fields.subtotal" class="fillin center" dir="ltr" />
-                    <template v-else>{{ fill(contract.subtotal ?? contract.total_amount) }}</template>
-                </td>
-            </tr>
-            <!-- A zero row is not printed on the paper, but it is offered while
-                 editing — that is where a discount is written in. -->
-            <tr v-if="editable || carries(contract.discount_amount)">
-                <td class="lbl">الخصــــم</td>
-                <td class="val" dir="ltr">
-                    <input v-if="editable" v-model="fields.discount_amount" class="fillin center" dir="ltr" />
-                    <template v-else>{{ contract.discount_amount }}</template>
-                </td>
-            </tr>
-            <tr v-if="editable || carries(contract.tax_amount)">
-                <td class="lbl">ضريبة القيمة المضافة</td>
-                <td class="val" dir="ltr">
-                    <input v-if="editable" v-model="fields.tax_amount" class="fillin center" dir="ltr" />
-                    <template v-else>{{ contract.tax_amount }}</template>
-                </td>
-            </tr>
-            <tr>
-                <td class="lbl">الاجمالي المستحق</td>
-                <td class="val" dir="ltr">
-                    <input v-if="editable" v-model="fields.total_amount" class="fillin center" dir="ltr" />
-                    <template v-else>{{ fill(contract.total_amount) }}</template>
-                </td>
-            </tr>
-            <!-- المدفوع والمتبقي: دفتر سندات القبض، لا خانتان تُكتبان باليد —
-                 read-only even while the sheet is filled in: a typed figure
-                 here would print an amount the till never saw. -->
-            <tr v-if="carries(contract.deposit_amount)">
-                <td class="lbl">المدفـــوع</td>
-                <td class="val" dir="ltr">{{ contract.deposit_amount }}</td>
-            </tr>
-            <tr v-if="carries(contract.deposit_amount) && contract.remaining_amount">
-                <td class="lbl">المتبقـــي</td>
-                <td class="val" dir="ltr">{{ contract.remaining_amount }}</td>
-            </tr>
-        </table>
+        <!-- The totals, on the left of the sheet. -->
+        <div class="flex justify-end">
+            <table class="totals print-keep">
+                <tr>
+                    <td class="k">الإجمالي</td>
+                    <td class="v" dir="ltr">
+                        <input v-if="editable" v-model="fields.subtotal" class="fillin center" dir="ltr" />
+                        <template v-else>{{ money(contract.subtotal ?? contract.total_amount) }}</template>
+                    </td>
+                </tr>
+                <!-- A zero row is not printed, but it is offered while editing —
+                     that is where a discount is written in. -->
+                <tr v-if="editable || carries(contract.discount_amount)" class="discount">
+                    <td class="k">الخصم</td>
+                    <td class="v" dir="ltr">
+                        <input v-if="editable" v-model="fields.discount_amount" class="fillin center" dir="ltr" />
+                        <template v-else>{{ money(contract.discount_amount) }}</template>
+                    </td>
+                </tr>
+                <tr v-if="editable || carries(contract.tax_amount)">
+                    <td class="k">ضريبة القيمة المضافة</td>
+                    <td class="v" dir="ltr">
+                        <input v-if="editable" v-model="fields.tax_amount" class="fillin center" dir="ltr" />
+                        <template v-else>{{ money(contract.tax_amount) }}</template>
+                    </td>
+                </tr>
+                <tr class="grand">
+                    <td>الإجمالي المستحق</td>
+                    <td class="v" dir="ltr">
+                        <input v-if="editable" v-model="fields.total_amount" class="fillin center" dir="ltr" />
+                        <template v-else>{{ money(contract.total_amount) }}</template>
+                    </td>
+                </tr>
+                <!-- المدفوع والمتبقي: دفتر سندات القبض، لا خانتان تُكتبان باليد —
+                     read-only even while the sheet is filled in: a typed figure
+                     here would print an amount the till never saw. -->
+                <tr v-if="carries(contract.deposit_amount)" class="paid">
+                    <td class="k">المدفوع</td>
+                    <td class="v" dir="ltr">{{ money(contract.deposit_amount) }}</td>
+                </tr>
+                <tr v-if="carries(contract.deposit_amount) && contract.remaining_amount">
+                    <td class="k">المتبقي</td>
+                    <td class="v" dir="ltr">{{ money(contract.remaining_amount) }}</td>
+                </tr>
+            </table>
+        </div>
 
         <div v-if="editable || termsText" class="notes print-keep">
-            <span class="lbl">ملاحظـــات :</span>
+            <div class="notes-title">الشروط والملاحظات</div>
             <textarea v-if="editable" v-model="terms" rows="8" class="fillin notes-input"></textarea>
             <ul v-else-if="bulleted">
                 <li v-for="(bullet, i) in bullets" :key="i">{{ bullet }}</li>
             </ul>
             <pre v-else class="plain">{{ termsText }}</pre>
         </div>
+
+        <!-- Approval: the manager, the stamp and the client. -->
+        <div class="sign print-keep">
+            <div>{{ issuer.manager_name || 'المدير المسؤول' }}</div>
+            <div>الختم</div>
+            <div>العميل: {{ fill(editable ? fields.client_name : contract.client_name) }}</div>
+        </div>
     </div>
 </template>
 
 <style scoped>
-/* Mirrors resources/views/pdf/contract-maintenance.blade.php so the screen and
-   the generated PDF stay the same document. */
+/* Mirrors resources/views/pdf/contract-maintenance.blade.php — and through it
+   the quotation sheet — so the screen and the PDF stay the same document. */
 .doc {
-    color: #14224a;
+    --navy: #1e3a8a;
+    color: #0f172a;
     font-size: 13px;
     line-height: 1.6;
 }
-.biz {
+.brand {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1.4;
+}
+.muted {
+    color: #64748b;
+    font-size: 12px;
+}
+.doc-title {
+    background: var(--navy);
+    color: #ffffff;
+    text-align: center;
+    padding: 6px 10px;
+}
+.doc-title .t {
     font-size: 17px;
     font-weight: 700;
-    margin-top: 10px;
 }
-.line {
-    font-size: 15px;
-    font-weight: 700;
-    margin-top: 5px;
+.doc-title .sub {
+    font-size: 10px;
+    color: #c7d2fe;
+    letter-spacing: 3px;
 }
-.to {
-    font-size: 16px;
-    font-weight: 700;
-    margin: 20px 0 10px;
+.meta {
+    width: 100%;
+    border-collapse: collapse;
 }
-.subject {
-    text-align: center;
-    font-size: 16px;
+.meta td {
+    padding: 4px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 12px;
+}
+.meta .k {
+    color: #64748b;
+}
+.meta .v {
+    text-align: left;
     font-weight: 700;
-    margin-bottom: 18px;
+}
+.rule {
+    border-bottom: 2px solid var(--navy);
+    margin: 14px 0;
+}
+.card-title {
+    background: #f1f5f9;
+    color: var(--navy);
+    font-weight: 700;
+    padding: 5px 10px;
+    border: 1px solid #cbd5e1;
+}
+.card-body {
+    display: flex;
+    gap: 16px;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-top: 0;
+}
+.client-input {
+    width: 70%;
+    font-weight: 700;
 }
 .items {
     width: 100%;
+    margin-top: 16px;
     table-layout: fixed;
     border-collapse: collapse;
-    border: 1px solid #000000;
-}
-.items th,
-.items td {
-    border: 1px solid #000000;
-    padding: 5px 6px;
-    font-size: 13px;
-    text-align: center;
-    height: 26px;
 }
 .items th {
+    background: var(--navy);
+    color: #ffffff;
+    padding: 8px 6px;
+    font-size: 12px;
     font-weight: 700;
+    text-align: center;
+    border: 1px solid var(--navy);
 }
-.items td.desc {
-    text-align: right;
+.items td {
+    padding: 8px 6px;
+    border: 1px solid #cbd5e1;
+    font-size: 12px;
 }
-.code {
-    font-size: 10px;
-    color: #6b7a99;
+.items tr.alt td {
+    background: #f8fafc;
+}
+.c {
+    text-align: center;
 }
 .totals {
     width: 45%;
+    margin-top: 14px;
     table-layout: fixed;
     border-collapse: collapse;
-    border: 1px solid #000000;
-    /* Floated, because a plain table on an RTL page hugs the right margin. */
-    float: left;
-    margin-top: 12px;
 }
 .totals td {
-    border: 1px solid #000000;
-    padding: 5px 7px;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
     font-size: 13px;
-    height: 26px;
 }
-.totals td.lbl {
-    text-align: center;
+.totals .k {
+    color: #475569;
     font-weight: 700;
-    width: 55%;
 }
-.totals td.val {
-    text-align: center;
-    width: 45%;
+.totals .v {
+    text-align: left;
+    font-weight: 700;
+}
+.totals .discount td {
+    color: #b91c1c;
+}
+.totals .paid td {
+    color: #047857;
+}
+.totals .grand td {
+    background: var(--navy);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    border-color: var(--navy);
 }
 .notes {
-    clear: both;
-    padding-top: 34px;
+    margin-top: 18px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
 }
-.notes .lbl {
-    font-size: 16px;
+.notes-title {
+    color: var(--navy);
     font-weight: 700;
 }
 .notes ul {
-    margin: 10px 28px 0 0;
+    margin: 4px 18px 0 0;
     padding: 0;
     list-style: disc;
 }
-.notes li {
-    font-size: 14px;
-    margin-bottom: 8px;
-}
 .plain {
     font-family: inherit;
-    font-size: 14px;
     white-space: pre-wrap;
-    margin-top: 10px;
+    margin-top: 4px;
 }
-/* An input on the printed line: the paper's rule stays, the box does not. */
+.sign {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-top: 80px;
+    text-align: center;
+    font-size: 12px;
+    color: #475569;
+}
+.sign > div {
+    border-top: 1px solid #94a3b8;
+    padding-top: 5px;
+}
+/* An input on the printed line: the sheet's rule stays, the box does not. */
 .fillin {
     width: 100%;
     padding: 0 2px;
@@ -331,36 +447,34 @@ const rows = computed(() => {
 .fillin.center {
     text-align: center;
 }
-.to-input {
-    width: 60%;
+.grand .fillin {
+    background: rgba(255, 255, 255, 0.15);
 }
 .notes-input {
     display: block;
-    margin-top: 10px;
-    font-size: 14px;
+    margin-top: 6px;
     line-height: 1.7;
     resize: vertical;
 }
 
 @media print {
     .doc {
-        font-size: 10pt;
-    }
-    .biz,
-    .to,
-    .subject,
-    .notes .lbl {
-        font-size: 12pt;
-    }
-    .line,
-    .notes li,
-    .plain {
-        font-size: 11pt;
+        font-size: 9.5pt;
     }
     .items th,
     .items td,
-    .totals td {
-        font-size: 10pt;
+    .totals td,
+    .notes {
+        font-size: 9pt;
+    }
+    .doc-title,
+    .items th,
+    .items tr.alt td,
+    .card-title,
+    .notes,
+    .totals .grand td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 }
 </style>

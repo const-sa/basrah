@@ -1,10 +1,10 @@
 {{--
-    عرض سعر صيانة مسابح شهريًا — the pools' monthly-maintenance sheet, laid out
-    as the paper: centred letterhead, the addressee, the priced table, the
-    totals block on its left and the visit notes under them.
+    عرض سعر صيانة مسابح شهريًا — ورقة الصيانة الشهرية، مرسومةً كعرض السعر
+    الذي تُولَّد منه: الجهة وشعارها يمينًا ومربع المستند برقمه يسارًا، وبطاقة
+    العميل، وجدول البنود، والإجماليات، وملاحظات الزيارات، ثم الاعتماد.
 
-    Tables, not flex/grid: mpdf's layout engine collapses modern CSS into a
-    single column, and every cell carries an explicit width for the same reason.
+    كله جداول بحدود على الخلايا نفسها: mpdf يرسم خطًّا تحت كل سطر من div
+    داخل الخلايا، ولا يعرف flex/grid.
 --}}
 @php
     $fill = fn ($value) => filled($value) ? $value : "\u{00A0}";
@@ -20,160 +20,237 @@
     // «الخصم 0.00» line, and a sheet with no VAT shows no VAT row.
     $carries = fn ($value) => filled($value) && (float) str_replace(',', '', (string) $value) != 0.0;
 
-    // The pad is printed with room to write in, so a short sheet still rules
-    // enough lines for the visits to be listed by hand.
-    $rows = max(count($lines), 4);
+    $riyal = fn ($value) => filled($value) ? $value.' ريال' : '—';
+
+    $clientName = $contract->client?->name ?? ($data['client_name'] ?? null);
+    $clientMobile = $contract->client?->mobile ?? ($data['client_mobile'] ?? null);
+
+    $navy = '#1e3a8a';
 @endphp
-
 <style>
-    body { font-family: xbriyaz, sans-serif; color: #14224a; font-size: 10pt; line-height: 1.6; }
+    body { font-family: cairo, sans-serif; color: #0f172a; font-size: 9.5pt; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
-    .num { direction: ltr; unicode-bidi: embed; }
+    td, th { vertical-align: top; }
 
-    .head { text-align: center; margin-bottom: 10pt; }
-    .head .biz { font-size: 13pt; font-weight: bold; margin-top: 8pt; }
-    .head .line { font-size: 11.5pt; font-weight: bold; margin-top: 4pt; }
+    .brand-name { font-size: 13pt; font-weight: bold; color: {{ $navy }}; }
+    .muted { color: #64748b; font-size: 8.5pt; }
 
-    .to { font-size: 12pt; font-weight: bold; margin: 14pt 0 8pt; }
-    .subject { text-align: center; font-size: 12pt; font-weight: bold; margin-bottom: 14pt; }
+    .doc-title td { background: {{ $navy }}; color: #ffffff; text-align: center; padding: 5pt 8pt 1pt; font-size: 13pt; font-weight: bold; }
+    .doc-title td.sub { padding: 0 8pt 5pt; font-size: 7.5pt; font-weight: normal; color: #c7d2fe; letter-spacing: 2pt; }
+    .meta td { padding: 3pt 8pt; border-bottom: 0.5pt solid #e2e8f0; font-size: 9pt; }
+    .meta .k { color: #64748b; }
+    .meta .v { text-align: left; font-weight: bold; }
 
-    /* The priced table — thin black rules, as the paper is ruled. */
-    table.items { border: 0.7pt solid #000000; }
-    table.items th, table.items td { border: 0.5pt solid #000000; padding: 4pt 5pt;
-                                     font-size: 10pt; text-align: center; height: 14pt; }
-    table.items th { font-weight: bold; }
-    table.items td.desc { text-align: right; }
-    .code { font-size: 7.5pt; color: #6b7a99; }
+    .rule { border-bottom: 1.5pt solid {{ $navy }}; }
 
-    /* The totals sit alone at the left, under the table — floated, because
-       a plain table in an RTL page would hug the right margin instead. */
-    .totals { width: 45%; float: left; margin-top: 10pt; }
-    .totals table { border: 0.7pt solid #000000; }
-    .totals td { border: 0.5pt solid #000000; padding: 4pt 6pt; font-size: 10pt; height: 14pt; }
-    .totals td.lbl { text-align: center; font-weight: bold; width: 55%; }
-    .totals td.val { text-align: center; width: 45%; }
-    .clearfix::after { content: ""; clear: both; display: table; }
+    .card-title { background: #f1f5f9; color: {{ $navy }}; font-weight: bold; padding: 4pt 8pt; border: 0.6pt solid #cbd5e1; }
+    .card-body { padding: 6pt 8pt; border: 0.6pt solid #cbd5e1; border-top: none; }
 
-    .notes { margin-top: 26pt; }
-    .notes .lbl { font-size: 12pt; font-weight: bold; }
-    .notes ul { margin: 8pt 22pt 0 0; padding: 0; }
-    .notes li { font-size: 11pt; margin-bottom: 6pt; }
-    .notes .plain { font-size: 11pt; white-space: pre-wrap; margin-top: 8pt; }
+    .items th { background: {{ $navy }}; color: #ffffff; padding: 6pt 5pt; font-size: 9pt; font-weight: bold; text-align: center; border: 0.6pt solid {{ $navy }}; }
+    .items td { padding: 6pt 5pt; border: 0.6pt solid #cbd5e1; font-size: 9pt; }
+    .items tr.alt td { background: #f8fafc; }
+    .c { text-align: center; }
+
+    .totals td { padding: 5pt 8pt; font-size: 9.5pt; border: 0.6pt solid #cbd5e1; }
+    .totals .k { color: #475569; font-weight: bold; }
+    .totals .v { text-align: left; font-weight: bold; }
+    .totals .grand td { background: {{ $navy }}; color: #ffffff; font-size: 11pt; border-color: {{ $navy }}; }
+
+    .notes { padding: 7pt 9pt; background: #f8fafc; border: 0.6pt solid #e2e8f0; font-size: 9pt; }
+    .sign td { text-align: center; font-size: 9pt; color: #475569; }
+    .sign td.line { border-top: 0.6pt solid #94a3b8; padding-top: 4pt; }
 </style>
 
-<div class="head">
-    @if ($logoPath)
-        <img src="{{ $logoPath }}" style="max-height: 80pt; max-width: 65%;" alt="">
-    @endif
-    <div class="biz">{{ $issuer['business_name'] }}</div>
-    @if ($issuer['phone'] || $issuer['whatsapp'])
-        <div class="line">
-            رقم الجوال:
-            <span class="num">{{ $issuer['phone'] }}@if ($issuer['whatsapp']) - {{ $issuer['whatsapp'] }}@endif</span>
-        </div>
-    @endif
-    @if ($issuer['commercial_register'])
-        <div class="line">س ت: <span class="num">{{ $issuer['commercial_register'] }}</span></div>
-    @endif
-</div>
+{{-- ── الرأس: الجهة المُصدِرة يمينًا، ومربع المستند يسارًا ── --}}
+<table>
+    <tr>
+        <td style="width: 58%;">
+            <table>
+                <tr>
+                    @if ($logoPath)
+                        <td style="width: 32%; vertical-align: middle;">
+                            <img src="{{ $logoPath }}" style="max-height: 62pt; max-width: 100%;" alt="">
+                        </td>
+                    @endif
+                    <td style="vertical-align: middle; padding-right: 6pt;">
+                        <div class="brand-name">{{ $issuer['business_name'] }}</div>
+                        @if ($issuer['address'])<div class="muted">{{ $issuer['address'] }}</div>@endif
+                        @if ($issuer['phone'] || $issuer['whatsapp'])
+                            <div class="muted">هاتف: {{ $issuer['phone'] }}@if ($issuer['whatsapp'] && $issuer['whatsapp'] !== $issuer['phone']) - {{ $issuer['whatsapp'] }}@endif</div>
+                        @endif
+                        @if ($issuer['email'] ?? null)<div class="muted">{{ $issuer['email'] }}</div>@endif
+                        @if ($issuer['tax_number'])<div class="muted">الرقم الضريبي: {{ $issuer['tax_number'] }}</div>@endif
+                        @if ($issuer['commercial_register'])<div class="muted">السجل التجاري: {{ $issuer['commercial_register'] }}</div>@endif
+                    </td>
+                </tr>
+            </table>
+        </td>
+        <td style="width: 4%;"></td>
+        <td style="width: 38%;">
+            <table class="doc-title">
+                <tr><td>{{ \App\Support\PoolMaintenanceContractTemplate::HEADING }}</td></tr>
+                <tr><td class="sub">MONTHLY MAINTENANCE</td></tr>
+            </table>
+            <table class="meta">
+                <tr><td class="k">رقم العقد</td><td class="v">{{ $contract->number }}</td></tr>
+                <tr>
+                    <td class="k">تاريخ العقد</td>
+                    <td class="v">{{ $data['contract_date'] ?? $contract->created_at?->format('Y-m-d') }}</td>
+                </tr>
+                @if (!empty($data['quotation_number']))
+                    <tr><td class="k">عرض السعر</td><td class="v">{{ $data['quotation_number'] }}</td></tr>
+                @endif
+            </table>
+        </td>
+    </tr>
+</table>
 
-<div class="to">
-    إلى السـادة: {{ $fill($contract->client?->name ?? ($data['client_name'] ?? null)) }}
-</div>
+<table style="margin: 10pt 0;"><tr><td class="rule"></td></tr></table>
 
-<div class="subject">{{ \App\Support\PoolMaintenanceContractTemplate::HEADING }}</div>
+{{-- ── العميل ── --}}
+<table>
+    <tr><td class="card-title">مقدَّم إلى</td></tr>
+    <tr>
+        <td class="card-body">
+            <table>
+                <tr>
+                    <td style="width: 55%;"><span class="muted">العميل:</span> <b>{{ $clientName ?? '—' }}</b></td>
+                    <td style="width: 45%;">
+                        @if ($clientMobile)
+                            <span class="muted">الجوال:</span> <b>{{ $clientMobile }}</b>
+                        @endif
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
 
-<table class="items">
+{{-- ── البنود ── --}}
+<table class="items" style="margin-top: 12pt;">
     <thead>
         <tr>
-            <th style="width: 7%;">م</th>
-            <th style="width: 48%;">البيان</th>
-            <th style="width: 13%;">العدد</th>
+            <th style="width: 6%;">#</th>
+            <th style="width: 50%; text-align: right;">البيان</th>
+            <th style="width: 12%;">العدد</th>
             <th style="width: 16%;">السعر</th>
-            <th style="width: 16%;">الاجمالي</th>
+            <th style="width: 16%;">الإجمالي</th>
         </tr>
     </thead>
     <tbody>
-        @for ($i = 0; $i < $rows; $i++)
-            @php $line = $lines[$i] ?? null; @endphp
-            <tr>
-                <td class="num">{{ $line ? $i + 1 : "\u{00A0}" }}</td>
-                <td class="desc">
-                    {{ $fill($line['name'] ?? null) }}
-                    @if (!empty($line['code']))<span class="code num">({{ $line['code'] }})</span>@endif
+        @forelse ($lines as $index => $line)
+            <tr @class(['alt' => $index % 2 === 1])>
+                <td class="c">{{ $index + 1 }}</td>
+                <td>
+                    <b>{{ $fill($line['name'] ?? null) }}</b>
+                    @if (!empty($line['code']))
+                        <div class="muted">{{ $line['code'] }}</div>
+                    @endif
                 </td>
-                <td class="num">{{ $qty($line['quantity'] ?? null) }}</td>
-                <td class="num">{{ $fill($line['unit_price'] ?? null) }}</td>
-                <td class="num">{{ $fill($line['total_price'] ?? null) }}</td>
+                <td class="c">{{ $qty($line['quantity'] ?? null) }}</td>
+                <td class="c">{{ $fill($line['unit_price'] ?? null) }}</td>
+                <td class="c"><b>{{ $fill($line['total_price'] ?? null) }}</b></td>
             </tr>
-        @endfor
+        @empty
+            <tr><td colspan="5" class="c muted">لا بنود</td></tr>
+        @endforelse
     </tbody>
 </table>
 
-<div class="clearfix">
-    <div class="totals">
-        <table>
-            <tr>
-                <td class="lbl">الاجمــــالي</td>
-                <td class="val num">{{ $fill($data['subtotal'] ?? $data['total_amount'] ?? null) }}</td>
-            </tr>
-            @if ($carries($data['discount_amount'] ?? null))
+{{-- ── الإجماليات: في الجهة اليسرى من الورقة ── --}}
+<table style="margin-top: 10pt;">
+    <tr>
+        <td style="width: 55%;"></td>
+        <td style="width: 45%;">
+            <table class="totals">
                 <tr>
-                    <td class="lbl">الخصــــم</td>
-                    <td class="val num">{{ $data['discount_amount'] }}</td>
+                    <td class="k">الإجمالي</td>
+                    <td class="v">{{ $riyal($data['subtotal'] ?? $data['total_amount'] ?? null) }}</td>
                 </tr>
-            @endif
-            @if ($carries($data['tax_amount'] ?? null))
-                <tr>
-                    <td class="lbl">ضريبة القيمة المضافة</td>
-                    <td class="val num">{{ $data['tax_amount'] }}</td>
-                </tr>
-            @endif
-            <tr>
-                <td class="lbl">الاجمالي المستحق</td>
-                <td class="val num">{{ $fill($data['total_amount'] ?? null) }}</td>
-            </tr>
-            {{-- المدفوع والمتبقي: ما رحّلته سندات القبض على العقد --}}
-            @if ($carries($data['deposit_amount'] ?? null))
-                <tr>
-                    <td class="lbl">المدفـــوع</td>
-                    <td class="val num">{{ $data['deposit_amount'] }}</td>
-                </tr>
-                @if (!empty($data['remaining_amount']))
+                @if ($carries($data['discount_amount'] ?? null))
                     <tr>
-                        <td class="lbl">المتبقـــي</td>
-                        <td class="val num">{{ $data['remaining_amount'] }}</td>
+                        <td class="k" style="color: #b91c1c;">الخصم</td>
+                        <td class="v" style="color: #b91c1c;">{{ $riyal($data['discount_amount']) }}</td>
                     </tr>
                 @endif
-            @endif
-        </table>
-    </div>
-</div>
+                @if ($carries($data['tax_amount'] ?? null))
+                    <tr>
+                        <td class="k">ضريبة القيمة المضافة</td>
+                        <td class="v">{{ $riyal($data['tax_amount']) }}</td>
+                    </tr>
+                @endif
+                <tr class="grand">
+                    <td style="font-weight: bold;">الإجمالي المستحق</td>
+                    <td style="text-align: left; font-weight: bold;">{{ $riyal($data['total_amount'] ?? null) }}</td>
+                </tr>
+                {{-- المدفوع والمتبقي: ما رحّلته سندات القبض على العقد --}}
+                @if ($carries($data['deposit_amount'] ?? null))
+                    <tr>
+                        <td class="k" style="color: #047857;">المدفوع</td>
+                        <td class="v" style="color: #047857;">{{ $riyal($data['deposit_amount']) }}</td>
+                    </tr>
+                    @if (!empty($data['remaining_amount']))
+                        <tr>
+                            <td class="k">المتبقي</td>
+                            <td class="v">{{ $riyal($data['remaining_amount']) }}</td>
+                        </tr>
+                    @endif
+                @endif
+            </table>
+        </td>
+    </tr>
+</table>
 
 @if ($terms)
-    <div class="notes">
-        <span class="lbl">ملاحظـــات :</span>
-        {{--
-            The notes are written as one bullet per line, so they are printed as
-            a list; wording that is not bulleted is printed as it stands rather
-            than forced into bullets it was not written as.
-        --}}
-        @php
-            $bullets = collect(preg_split('/\R/', $terms))
-                ->map(fn ($line) => ltrim(trim($line), "•-–* \t"))
-                ->filter()
-                ->all();
-            $bulleted = str_contains($terms, '•');
-        @endphp
-
-        @if ($bulleted)
-            <ul>
-                @foreach ($bullets as $bullet)
-                    <li>{{ $bullet }}</li>
-                @endforeach
-            </ul>
-        @else
-            <div class="plain">{{ $terms }}</div>
-        @endif
-    </div>
+    {{--
+        The notes are written as one bullet per line, so they are printed as
+        a list; wording that is not bulleted is printed as it stands rather
+        than forced into bullets it was not written as.
+    --}}
+    @php
+        // «u» لازم: بدونه يعدّ \R البايت 0x85 سطرًا جديدًا، وهو نصف
+        // حرف «م» في UTF-8، فتنقطع الملاحظة عند كل ميم. والتقليم
+        // بتعبير لا بـltrim لأن «•» و«–» حروفٌ متعددة البايتات.
+        $bullets = collect(preg_split('/\R/u', $terms))
+            ->map(fn ($line) => preg_replace('/^[\s•\-–*]+/u', '', trim($line)))
+            ->filter()
+            ->all();
+        $bulleted = str_contains($terms, '•');
+    @endphp
+    <table style="margin-top: 14pt;">
+        <tr>
+            <td class="notes">
+                <b style="color: {{ $navy }};">الشروط والملاحظات</b><br>
+                @if ($bulleted)
+                    @foreach ($bullets as $bullet)
+                        • {{ $bullet }}<br>
+                    @endforeach
+                @else
+                    {!! nl2br(e($terms)) !!}
+                @endif
+            </td>
+        </tr>
+    </table>
 @endif
+
+{{-- ── الاعتماد: الختم والتوقيع إن ضُبطا للجهة، وتوقيع العميل ── --}}
+<table class="sign" style="margin-top: 26pt;">
+    <tr>
+        <td style="width: 30%; height: 60pt; vertical-align: bottom;">
+            @if ($signaturePath)<img src="{{ $signaturePath }}" style="max-height: 55pt; max-width: 100%;" alt="">@endif
+        </td>
+        <td style="width: 5%;"></td>
+        <td style="width: 30%; height: 60pt; vertical-align: bottom;">
+            @if ($stampPath)<img src="{{ $stampPath }}" style="max-height: 58pt; max-width: 100%;" alt="">@endif
+        </td>
+        <td style="width: 5%;"></td>
+        <td style="width: 30%; height: 60pt;"></td>
+    </tr>
+    <tr>
+        <td class="line">{{ $issuer['manager_name'] ?: 'المدير المسؤول' }}</td>
+        <td></td>
+        <td class="line">الختم</td>
+        <td></td>
+        <td class="line">العميل: {{ $clientName ?? '—' }}</td>
+    </tr>
+</table>
