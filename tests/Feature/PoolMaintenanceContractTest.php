@@ -13,8 +13,10 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
+use App\Services\WhatsappNotifier;
 use App\Support\PoolMaintenanceContractTemplate;
 use Database\Seeders\ContractTemplateSeeder;
+use Database\Seeders\NotificationTemplatesSeeder;
 use Database\Seeders\RolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -147,6 +149,16 @@ class PoolMaintenanceContractTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('contracts.data', 1)
                 ->where('contracts.data.0.number', $contract->number));
+    }
+
+    public function test_the_whatsapp_message_names_the_maintenance_contract(): void
+    {
+        $this->seed(NotificationTemplatesSeeder::class);
+
+        $body = app(WhatsappNotifier::class)->contract($this->draw())->body;
+
+        $this->assertStringContainsString('مرفق عقد صيانة مسابح شهريًا', $body);
+        $this->assertStringNotContainsString('عقد التمديد والتركيب', $body);
     }
 
     private function draw(): Contract

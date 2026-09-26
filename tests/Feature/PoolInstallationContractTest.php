@@ -7,6 +7,7 @@ use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\Department;
 use App\Models\Item;
+use App\Models\NotificationTemplate;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Role;
@@ -14,8 +15,10 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
+use App\Services\WhatsappNotifier;
 use App\Support\PoolInstallationContractTemplate;
 use Database\Seeders\ContractTemplateSeeder;
+use Database\Seeders\NotificationTemplatesSeeder;
 use Database\Seeders\RolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -392,6 +395,40 @@ class PoolInstallationContractTest extends TestCase
         ])->assertSessionHas('warning');
 
         $this->assertSame('1,000.00', $contract->fresh()->data['total_amount']);
+    }
+
+    public function test_the_whatsapp_message_names_the_installation_contract(): void
+    {
+        $this->seed(NotificationTemplatesSeeder::class);
+
+        $body = app(WhatsappNotifier::class)->contract($this->draw())->body;
+
+        $this->assertStringContainsString('مرفق عقد التمديد والتركيب', $body);
+        // Not the general, booking-shaped template with its blank fields.
+        $this->assertStringNotContainsString('عقد الحجز', $body);
+        $this->assertStringNotContainsString('الوحدة', $body);
+    }
+
+    public function test_the_whatsapp_message_names_the_quotation_a_standard_contract_came_from(): void
+    {
+        $contract = app(ContractService::class)->generateFromQuotation($this->quotation);
+
+        // With no library template at all, the built-in wording names it too.
+        $body = app(WhatsappNotifier::class)->contract($contract)->body;
+
+        $this->assertStringContainsString('عقد عرض السعر رقم QT-000010', $body);
+        $this->assertStringContainsString($contract->number, $body);
+    }
+
+    public function test_a_pools_contract_never_takes_the_general_booking_template(): void
+    {
+        $this->seed(NotificationTemplatesSeeder::class);
+        NotificationTemplate::where('category', 'pool')->where('event', 'contract')->delete();
+
+        $body = app(WhatsappNotifier::class)->contract($this->draw())->body;
+
+        $this->assertStringContainsString('عقد التمديد والتركيب', $body);
+        $this->assertStringNotContainsString('رقم الحجز', $body);
     }
 
     private function draw()

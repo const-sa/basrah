@@ -10,8 +10,8 @@ use App\Models\NotificationTemplate;
 use App\Models\Quotation;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
-use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\Whatsapp\PhoneNumber;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
@@ -145,33 +145,41 @@ class WhatsappNotifier
      */
     public function contract(Contract $contract, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
     {
-        $contract->loadMissing(['client', 'booking']);
+        $contract->loadMissing(['client', 'booking', 'quotation']);
 
-        // عقدٌ بلا حجز (عقود المسابح): قالبه قالب قسمه، ويُوقَّع باسم جهته
-        // وعميلُه عميلُ العقد — لا قالب «عام» ولا اسم الديوان.
-        $pools = ! $contract->booking && $contract->underPoolsLetterhead();
+        $title = $contract->title();
 
-        $extra = ['contract_number' => (string) $contract->number];
+        $extra = [
+            'contract_number' => (string) $contract->number,
+            'contract_title' => $title,
+        ];
 
-        if (! $contract->booking) {
+        if ($contract->booking) {
+            $body = $this->fromTemplate('contract', $contract->booking, $extra);
+        } else {
+            // عقدٌ بلا حجز (عقود المسابح): عميلُه عميلُ العقد ويُوقَّع باسم جهته.
+            // The general and unit templates are booking-shaped (unit, date,
+            // booking number), so only the pools' own template may word it —
+            // otherwise the built-in text below, which names the contract.
             $extra += [
                 'name' => (string) ($contract->client?->name ?? ''),
                 'mobile' => (string) ($contract->client?->mobile ?? ''),
                 'business_name' => app(WhatsappAccounts::class)->senderName($contract),
             ];
+
+            $body = $contract->underPoolsLetterhead()
+                ? $this->fromTemplate('contract', null, $extra, 'pool', orGeneral: false)
+                : null;
         }
 
-        $body = $this->fromTemplate('contract', $contract->booking, $extra, $pools ? 'pool' : null)
-            ?? implode("\n", array_filter([
-                'مرحبًا '.($contract->client?->name ?? '').'،',
-                match (true) {
-                    ! $contract->booking => ($pdfUrl ? 'مرفق العقد رقم ' : 'صدر العقد رقم ').$contract->number.'.',
-                    (bool) $pdfUrl => 'مرفق عقد الحجز رقم '.$contract->booking->reference.'.',
-                    default => 'صدر عقد الحجز رقم '.$contract->booking->reference.'.',
-                },
-                $contract->booking ? 'رقم العقد: '.$contract->number : null,
-                'نرجو الاطلاع والتأكيد.',
-            ]));
+        $body ??= implode("\n", array_filter([
+            'مرحبًا '.($contract->client?->name ?? '').'،',
+            ($pdfUrl ? 'مرفق ' : 'صدر ').$title.'.',
+            'رقم العقد: '.$contract->number,
+            $contract->booking ? 'رقم الحجز: '.$contract->booking->reference : null,
+            'نرجو الاطلاع والتأكيد.',
+            $contract->booking ? null : $extra['business_name'],
+        ]));
 
         return $this->send($contract->client?->mobile, $body, 'contract', $contract, $userId, $pdfUrl);
     }
@@ -357,11 +365,11 @@ class WhatsappNotifier
      *
      * @param  array<string, string>  $extra
      */
-    private function fromTemplate(string $event, ?Booking $booking, array $extra = [], ?string $category = null): ?string
+    private function fromTemplate(string $event, ?Booking $booking, array $extra = [], ?string $category = null, bool $orGeneral = true): ?string
     {
         $category ??= NotificationCatalog::categoryForUnitType($booking?->unit?->type);
 
-        $template = NotificationTemplate::resolve($event, $category);
+        $template = NotificationTemplate::resolve($event, $category, $orGeneral);
 
         if (! $template) {
             return null;

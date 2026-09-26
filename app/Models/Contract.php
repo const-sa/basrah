@@ -286,6 +286,35 @@ class Contract extends Model
     }
 
     /**
+     * What kind of contract this is, as the client should read it in a message.
+     *
+     * A pinned form names itself; a standard sheet drawn from a quotation is
+     * named by that quotation, since its subject is only the department and
+     * would read the same for every pools contract.
+     */
+    public function title(): string
+    {
+        $subject = match ($this->data['form'] ?? null) {
+            PoolInstallationContractTemplate::FORM => PoolInstallationContractTemplate::SUBJECT,
+            PoolMaintenanceContractTemplate::FORM => PoolMaintenanceContractTemplate::SUBJECT,
+            HallRentalContractTemplate::FORM => HallRentalContractTemplate::SUBJECT,
+            HallServicesContractTemplate::FORM => HallServicesContractTemplate::SUBJECT,
+            ChaletContractTemplate::FORM => 'إيجار شاليه',
+            default => null,
+        };
+
+        if ($subject === null && $this->quotation_id !== null) {
+            $number = $this->quotation?->number;
+
+            return $number ? 'عقد عرض السعر رقم '.$number : 'عقد عرض السعر';
+        }
+
+        $subject ??= $this->subject();
+
+        return $subject ? 'عقد '.$subject : 'عقد';
+    }
+
+    /**
      * The quotation's priced lines as frozen at generation time.
      *
      * @return list<array<string, mixed>>

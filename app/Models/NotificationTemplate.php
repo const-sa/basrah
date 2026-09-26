@@ -41,10 +41,13 @@ class NotificationTemplate extends Model
      *
      * يُجرَّب القسم الخاص أولاً ثم «عام»: قالب الشاليهات إن وُجد، وإلا
      * القالب العام — حتى لا يصمت النظام لأن قسمًا واحدًا لم يُملأ بعد.
+     *
+     * $orGeneral = false skips that fallback, for a message whose shape the
+     * general template does not fit (a contract with no booking behind it).
      */
-    public static function resolve(string $event, string $category = 'general'): ?self
+    public static function resolve(string $event, string $category = 'general', bool $orGeneral = true): ?self
     {
-        $candidates = $category === 'general' ? ['general'] : [$category, 'general'];
+        $candidates = $category === 'general' || ! $orGeneral ? [$category] : [$category, 'general'];
 
         foreach ($candidates as $candidate) {
             $template = static::query()

@@ -15,6 +15,7 @@ use App\Services\WhatsappNotifier;
 use Database\Seeders\AccountsSeeder;
 use Database\Seeders\BookingSetupSeeder;
 use Database\Seeders\ContractTemplateSeeder;
+use Database\Seeders\NotificationTemplatesSeeder;
 use Database\Seeders\RolesSeeder;
 use Database\Seeders\UnitsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -249,5 +250,16 @@ class ContractWhatsappTest extends TestCase
         $this->assertSame(Contract::class, $message->related_type);
         $this->assertSame($contract->id, $message->related_id);
         $this->assertStringContainsString($contract->number, $message->body);
+    }
+
+    public function test_contract_message_names_the_kind_of_contract(): void
+    {
+        $this->seed(NotificationTemplatesSeeder::class);
+
+        $contract = $this->contracts->generate($this->booking);
+        $body = $this->whatsapp->contract($contract)->body;
+
+        $this->assertStringContainsString('مرفق '.$contract->title(), $body);
+        $this->assertStringContainsString('رقم الحجز: '.$this->booking->reference, $body);
     }
 }

@@ -76,7 +76,7 @@ class NotificationCatalog
         return [
             'welcome' => $client,
             'custom' => $client,
-            'contract' => $booking + ['contract_number' => 'رقم العقد'],
+            'contract' => $booking + ['contract_number' => 'رقم العقد', 'contract_title' => 'نوع العقد'],
             'quotation' => $client + ['quotation_number' => 'رقم العرض', 'total' => 'إجمالي العرض', 'valid_until' => 'صالح حتى'],
             'payment' => $booking + ['amount' => 'مبلغ الدفعة'],
             'receipt' => $booking + ['amount' => 'مبلغ السند', 'method' => 'طريقة الدفع', 'payment_type' => 'نوع الدفعة'],

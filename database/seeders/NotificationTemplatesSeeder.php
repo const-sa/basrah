@@ -149,8 +149,9 @@ class NotificationTemplatesSeeder extends Seeder
                 'title' => 'إرسال العقد — عام',
                 'body' => implode("\n", [
                     'مرحباً {name} 👋',
-                    'مرفق عقد الحجز رقم {reference} 📄',
+                    'مرفق {contract_title} 📄',
                     'رقم العقد: {contract_number}',
+                    'رقم الحجز: {reference}',
                     'الوحدة: {unit}',
                     'التاريخ: {date} — {period}',
                     'نرجو الاطلاع والتأكيد.',
@@ -282,8 +283,9 @@ class NotificationTemplatesSeeder extends Seeder
                 'title' => 'إرسال عقد شاليه',
                 'body' => implode("\n", [
                     'مرحباً {name} 👋',
-                    'مرفق عقد حجز الشاليه رقم {reference} 📄',
+                    'مرفق {contract_title} 📄',
                     'رقم العقد: {contract_number}',
+                    'رقم الحجز: {reference}',
                     'الشاليه: {unit}',
                     'تاريخ الدخول: {date} — {period}',
                     'نرجو الاطلاع والتأكيد.',
@@ -415,8 +417,9 @@ class NotificationTemplatesSeeder extends Seeder
                 'title' => 'إرسال عقد قاعة',
                 'body' => implode("\n", [
                     'مرحباً {name} 👋',
-                    'مرفق عقد حجز القاعة رقم {reference} 📄',
+                    'مرفق {contract_title} 📄',
                     'رقم العقد: {contract_number}',
+                    'رقم الحجز: {reference}',
                     'القاعة: {unit}',
                     'تاريخ المناسبة: {date} — {period}',
                     'نرجو الاطلاع والتأكيد.',
@@ -469,6 +472,18 @@ class NotificationTemplatesSeeder extends Seeder
                     'المتبقي: {remaining}',
                     '——————————————',
                     'شكراً لاختياركم {business_name} 🏊',
+                ]),
+            ],
+            [
+                'category' => 'pool',
+                'event' => 'contract',
+                'title' => 'إرسال عقد مسابح',
+                'body' => implode("\n", [
+                    'مرحباً {name} 👋',
+                    'مرفق {contract_title} 📄',
+                    'رقم العقد: {contract_number}',
+                    'نرجو الاطلاع والتأكيد.',
+                    '{business_name} 🏊',
                 ]),
             ],
         ];
