@@ -125,8 +125,8 @@ const money = (value: string | null | undefined) => (value ? `${value} ريال`
 
             <div class="w-[38%] shrink-0">
                 <div class="doc-title">
-                    <div class="t">عرض سعر صيانة مسابح شهريًا</div>
-                    <div class="sub">MONTHLY MAINTENANCE</div>
+                    <div class="t">عقد صيانة مسابح شهريًا</div>
+                    <div class="sub">MONTHLY MAINTENANCE CONTRACT</div>
                 </div>
                 <table class="meta">
                     <tr>

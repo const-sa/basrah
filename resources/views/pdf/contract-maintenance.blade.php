@@ -1,5 +1,5 @@
 {{--
-    عرض سعر صيانة مسابح شهريًا — ورقة الصيانة الشهرية، مرسومةً كعرض السعر
+    عقد صيانة مسابح شهريًا — ورقة الصيانة الشهرية، مرسومةً كعرض السعر
     الذي تُولَّد منه: الجهة وشعارها يمينًا ومربع المستند برقمه يسارًا، وبطاقة
     العميل، وجدول البنود، والإجماليات، وملاحظات الزيارات، ثم الاعتماد.
 
@@ -89,7 +89,7 @@
         <td style="width: 38%;">
             <table class="doc-title">
                 <tr><td>{{ \App\Support\PoolMaintenanceContractTemplate::HEADING }}</td></tr>
-                <tr><td class="sub">MONTHLY MAINTENANCE</td></tr>
+                <tr><td class="sub">MONTHLY MAINTENANCE CONTRACT</td></tr>
             </table>
             <table class="meta">
                 <tr><td class="k">رقم العقد</td><td class="v">{{ $contract->number }}</td></tr>

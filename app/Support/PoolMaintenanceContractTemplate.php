@@ -3,7 +3,7 @@
 namespace App\Support;
 
 /**
- * The pools' monthly-maintenance sheet — «عرض سعر صيانة مسابح شهريًا».
+ * The pools' monthly-maintenance sheet — «عقد صيانة مسابح شهريًا».
  *
  * A single source for the text, read by the seeder that pins it and by any
  * screen that restores it; once seeded the database row is the reference and
@@ -30,7 +30,7 @@ class PoolMaintenanceContractTemplate
     public const SUBJECT = 'صيانة مسابح شهريًا';
 
     /** The heading the sheet itself prints, as the paper reads. */
-    public const HEADING = 'عرض سعر صيانة مسابح شهريًا';
+    public const HEADING = 'عقد صيانة مسابح شهريًا';
 
     public const DESCRIPTION = 'نموذج عرض سعر صيانة المسابح الشهرية — البنود والخصم والزيارات';
 
