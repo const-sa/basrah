@@ -123,11 +123,15 @@ class QuotationPdf
         // عرض المسابح يصدر باسم مؤسستها وحدها — جهةٌ مستقلة عن الديوان.
         // ولا رمز زكاة هنا: العرض ليس فاتورة (راجع QuotationController::issuer).
         $pools = $this->isPools($quotation);
+        $raw = Letterhead::raw($pools);
 
         return [
             'quotation' => $quotation,
             'issuer' => Letterhead::issuer($pools, Vat::applies() || (float) $quotation->tax_amount > 0),
-            'logoPath' => $this->localPath(Letterhead::raw($pools)['logo_path']),
+            // الصور بمساراتها على القرص: mpdf يقرأ الملف مباشرةً.
+            'logoPath' => $this->localPath($raw['logo_path']),
+            'stampPath' => $this->localPath($raw['stamp_path']),
+            'signaturePath' => $this->localPath($raw['signature_path']),
         ];
     }
 
