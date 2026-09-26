@@ -134,6 +134,43 @@ class BookingPaymentsTest extends TestCase
             ->where('related_type', $payment::class)->where('related_id', $payment->id)->count());
     }
 
+    public function test_the_halls_booking_manager_sends_the_receipt_without_the_whatsapp_permission(): void
+    {
+        Storage::fake('public');
+
+        $payment = $this->recordPayment();
+
+        $role = Role::create([
+            'name' => 'تنسيق القاعات', 'slug' => 'halls-coordination',
+            'permissions' => ['hall_bookings.view', 'hall_bookings.edit'],
+        ]);
+        $manager = User::factory()->create(['role_id' => $role->id, 'is_active' => true]);
+        $manager->units()->attach($this->booking->unit_id);
+
+        $this->actingAs($manager)
+            ->post("/admin/bookings/{$this->booking->id}/payments/{$payment->id}/send")
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, WhatsappMessage::where('purpose', 'receipt')->count());
+    }
+
+    public function test_a_booking_manager_cannot_send_the_receipt_of_a_unit_not_his(): void
+    {
+        $payment = $this->recordPayment();
+
+        $role = Role::create([
+            'name' => 'تنسيق القاعات', 'slug' => 'halls-coordination',
+            'permissions' => ['hall_bookings.view', 'hall_bookings.edit'],
+        ]);
+        $manager = User::factory()->create(['role_id' => $role->id, 'is_active' => true]);
+
+        $this->actingAs($manager)
+            ->post("/admin/bookings/{$this->booking->id}/payments/{$payment->id}/send")
+            ->assertForbidden();
+
+        $this->assertSame(0, WhatsappMessage::where('purpose', 'receipt')->count());
+    }
+
     public function test_the_sent_receipt_carries_the_bond_itself_as_a_pdf(): void
     {
         Storage::fake('public');

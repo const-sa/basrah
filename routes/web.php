@@ -226,7 +226,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('bookings/{booking}/bond', [BookingsController::class, 'bond'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.bond');
         // سند كل دفعة على حدتها — يُطبع ويُرسل بمعزل عن سند الحجز العام.
         Route::get('bookings/{booking}/payments/{payment}/bond', [BookingsController::class, 'paymentBond'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.payments.bond');
-        Route::post('bookings/{booking}/payments/{payment}/send', [BookingsController::class, 'sendPaymentReceipt'])->middleware('perm:whatsapp.send')->name('bookings.payments.send');
+        Route::post('bookings/{booking}/payments/{payment}/send', [BookingsController::class, 'sendPaymentReceipt'])->middleware('perm:whatsapp.send|hall_bookings.edit|chalet_bookings.edit')->name('bookings.payments.send');
         Route::get('bookings/{booking}/invoice', [BookingsController::class, 'invoice'])->middleware('perm:hall_bookings.view|chalet_bookings.view')->name('bookings.invoice');
         Route::delete('bookings/{booking}', [BookingsController::class, 'destroy'])->middleware('perm:hall_bookings.delete|chalet_bookings.delete')->name('bookings.destroy');
 

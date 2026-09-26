@@ -158,7 +158,7 @@ const props = defineProps<{
     totals: { page: LedgerTotals; all: LedgerTotals };
 }>();
 
-const { can, canActivity } = usePermissions();
+const { can, canAny, canActivity } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -1489,7 +1489,7 @@ const colorClass = statusChipClass;
                                                     visible but disabled, saying why.
                                                 -->
                                                 <button
-                                                    v-if="can('whatsapp.send')"
+                                                    v-if="canAny('whatsapp.send', 'hall_bookings.edit')"
                                                     type="button"
                                                     :disabled="sendingReceiptId === p.id || !payBooking.client?.mobile"
                                                     @click="sendReceipt(p)"

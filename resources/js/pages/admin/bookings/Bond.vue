@@ -82,7 +82,10 @@ const phones = computed(() =>
 
 const print = () => window.print();
 
-const { can } = usePermissions();
+const { can, canAny } = usePermissions();
+
+// السند يرسله من سجّل الدفعة: مسؤول الحجوزات لا يحتاج صلاحية واتساب العامة.
+const canSend = computed(() => canAny('whatsapp.send', 'hall_bookings.edit', 'chalet_bookings.edit'));
 
 const sending = ref(false);
 
@@ -125,13 +128,13 @@ const sendWhatsapp = () => {
                     <p class="mt-1 text-sm font-medium text-slate-600">
                         حجز <span dir="ltr">{{ bond.reference }}</span> · {{ bond.client_name ?? 'بلا عميل' }}
                     </p>
-                    <p v-if="can('whatsapp.send') && sendBlockedBecause" class="mt-1 text-xs font-bold text-amber-700">
+                    <p v-if="canSend && sendBlockedBecause" class="mt-1 text-xs font-bold text-amber-700">
                         {{ sendBlockedBecause }}
                     </p>
                 </div>
                 <div class="flex gap-2">
                     <button
-                        v-if="can('whatsapp.send')"
+                        v-if="canSend"
                         type="button"
                         :disabled="sending || !!sendBlockedBecause"
                         :title="sendBlockedBecause ?? 'إرسال السند (PDF) على واتساب العميل'"
