@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { StatPill, TableActionButton } from '@/components/data-table';
 import PageShortcuts from '@/components/PageShortcuts.vue';
+import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, ClipboardList, Eye, MessageCircle, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
+import { CheckCircle2, ClipboardList, Eye, Pencil, Plus, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -362,9 +363,9 @@ const statusClass = (s: string) =>
                                         />
                                         <TableActionButton
                                             v-if="may.send && c.status !== 'cancelled'"
-                                            variant="success"
-                                            :icon="MessageCircle"
-                                            title="إرسال واتساب"
+                                            variant="whatsapp"
+                                            :icon="WhatsappIcon"
+                                            title="إرسال العقد (PDF) على واتساب"
                                             @click="send(c)"
                                         />
                                         <TableActionButton

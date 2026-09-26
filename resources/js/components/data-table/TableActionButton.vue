@@ -2,7 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { computed, type Component } from 'vue';
 
-type Variant = 'danger' | 'edit' | 'view' | 'success' | 'primary' | 'warning' | 'dark' | 'muted';
+type Variant = 'danger' | 'edit' | 'view' | 'success' | 'primary' | 'warning' | 'dark' | 'muted' | 'whatsapp';
 
 const props = withDefaults(
     defineProps<{
@@ -35,6 +35,8 @@ const classes = computed(
             dark: 'bg-slate-800 hover:bg-slate-900',
             // إجراءٌ لم يُنفَّذ بعد (توليد العقد) — باهتٌ حتى يُنشأ المستند
             muted: 'bg-slate-400 hover:bg-slate-500',
+            // الإرسال على واتساب بلون العلامة — يُعرف من بين الأزرار بلا قراءة
+            whatsapp: 'bg-[#25D366] hover:bg-[#1ebe5b]',
         })[props.variant],
 );
 </script>

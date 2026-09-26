@@ -10,8 +10,10 @@ use App\Models\Role;
 use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
+use App\Models\WhatsappAccount;
 use App\Services\BookingService;
 use App\Services\ContractPdf;
+use App\Services\Whatsapp\WhatsappAccounts;
 use Database\Seeders\BookingSetupSeeder;
 use Database\Seeders\ContractTemplateSeeder;
 use Database\Seeders\RolesSeeder;
@@ -53,6 +55,36 @@ class ContractPdfTest extends TestCase
             'period' => 'evening',
             'booking_date' => '2026-09-10',
         ], $this->owner->id);
+    }
+
+    /**
+     * The contract's number not yet linked: the employee is told so at once,
+     * and the contract is not marked sent for a message the queue will drop.
+     */
+    public function test_an_unlinked_number_is_reported_and_the_contract_stays_unsent(): void
+    {
+        Storage::fake(ContractPdf::DISK);
+        Bus::fake();
+
+        $contract = $this->contract();
+
+        $this->actingAs($this->owner)
+            ->post("/admin/contracts/{$contract->id}/send")
+            ->assertSessionHas('warning', fn (string $w) => str_contains($w, 'غير مربوط') || str_contains($w, 'غير مهيّأة'));
+
+        Bus::assertNothingDispatched();
+        $this->assertNotSame('sent', $contract->fresh()->status);
+    }
+
+    /** Both the general gateway and every section number hold credentials. */
+    private function linkWhatsapp(): void
+    {
+        config([
+            'whatsapp.drivers.cwts.instance_id' => 'TEST-INSTANCE',
+            'whatsapp.drivers.cwts.access_token' => 'test-token',
+        ]);
+        WhatsappAccount::query()->update(['instance_id' => 'TEST-INSTANCE', 'access_token' => 'test-token']);
+        app(WhatsappAccounts::class)->forget();
     }
 
     private function contract(): Contract
@@ -120,6 +152,7 @@ class ContractPdfTest extends TestCase
         Bus::fake();
 
         $contract = $this->contract();
+        $this->linkWhatsapp();
 
         $this->actingAs($this->owner)
             ->post("/admin/contracts/{$contract->id}/send")

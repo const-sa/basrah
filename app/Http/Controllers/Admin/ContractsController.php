@@ -15,6 +15,7 @@ use App\Models\Voucher;
 use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
 use App\Services\ContractService;
+use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\WhatsappNotifier;
 use App\Support\ActivityPermission;
 use App\Support\ActivitySegment;
@@ -886,6 +887,18 @@ class ContractsController extends Controller
 
         if (blank($contract->client?->mobile)) {
             return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
+        }
+
+        // يُقال السبب هنا: رقم القسم غير المربوط يُسقط الرسالة في الخلفية
+        // بصمت، والعقد يُعلَّم «أُرسل» ولم يصل.
+        $accounts = app(WhatsappAccounts::class);
+
+        if (! $accounts->canSend($contract)) {
+            $account = $accounts->for($contract);
+
+            return back()->with('warning', $account
+                ? "رقم واتساب «{$account->name}» غير مربوط بالبوابة — اربطه من إعدادات واتساب ثم أعد الإرسال."
+                : 'بوابة واتساب غير مهيّأة — اضبطها من إعدادات واتساب ثم أعد الإرسال.');
         }
 
         // الملف يُبنى ويُحفظ قبل الإرسال: الرسالة تقول «مرفق العقد»، ولا

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import HallRentalContractDocument from '@/components/contracts/HallRentalContractDocument.vue';
 import HallServicesContractDocument from '@/components/contracts/HallServicesContractDocument.vue';
+import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import InstallationContractDocument from '@/components/contracts/InstallationContractDocument.vue';
 import MaintenanceContractDocument from '@/components/contracts/MaintenanceContractDocument.vue';
 import StandardContractDocument from '@/components/contracts/StandardContractDocument.vue';
@@ -8,7 +9,7 @@ import StayContractDocument from '@/components/contracts/StayContractDocument.vu
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowRight, FileDown, FileText, MessageCircle, Pencil, Plus, Printer, ReceiptText, RefreshCw, X } from 'lucide-vue-next';
+import { ArrowRight, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 /** سند قبض مرحّل على العقد — العربون وما تلاه من دفعات. */
@@ -226,9 +227,9 @@ const submitReceipt = () => {
                         v-if="may.send && contract.status !== 'cancelled'"
                         type="button"
                         @click="send"
-                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-[#25D366] px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#1ebe5b]"
                     >
-                        <MessageCircle class="h-4 w-4" /> إرسال عبر واتساب
+                        <WhatsappIcon class="h-4 w-4" /> إرسال عبر واتساب
                     </button>
                     <!-- تعديل العقد نفسه — بخلاف «تحديث من النموذج» الذي يعيد قراءة صياغته -->
                     <Link
