@@ -40,6 +40,8 @@ interface ExistingBooking {
     period: string;
     booking_date: string;
     days_count: number;
+    start_time: string | null;
+    end_time: string | null;
     last_day_date: string;
     status: string;
     discount_amount: number;
@@ -153,6 +155,9 @@ const form = useForm({
     // المناسبة يوم واحد في الغالب، والامتداد استثناء يطلبه الموظف صراحةً.
     days_count: props.booking?.days_count ?? 1,
     period: props.booking?.period ?? pre.period ?? 'full_day',
+    // ساعتا المناسبة حين تُتفق على غير ساعات الفترة — فارغتان = كما في الفترة.
+    start_time: props.booking?.start_time ?? '',
+    end_time: props.booking?.end_time ?? '',
     // The price agreed with this client. Left blank the hall is priced from
     // its table or from the event type; written, it is the price.
     agreed_amount: (props.booking?.agreed_amount ?? null) as number | string | null,
@@ -261,7 +266,53 @@ const addDays = (date: string, count: number): string => {
 };
 
 /** عدد الأيام بعد تشذيبه — الحقل قد يُفرَّغ أو يُكتب فيه صفر. */
-const daysCount = computed(() => Math.min(MAX_DAYS, Math.max(1, Math.floor(form.days_count || 1))));
+const daysCount = computed(() => (customHours.value ? 1 : Math.min(MAX_DAYS, Math.max(1, Math.floor(form.days_count || 1)))));
+
+// ── ساعتا المناسبة ─────────────────────────────────────────
+// القاعة تُباع يوماً كاملاً بساعات الإعدادات، والمناسبة قد تُتفق على غيرها.
+// والسعر لا يتغيّر بالساعات: هو سعر اليوم الكامل، ويُعدَّل من «السعر المتفق
+// عليه» إن اتُّفق على غيره.
+const customHours = ref(!!(props.booking?.start_time && props.booking?.end_time));
+
+/** دقائق ما بين الساعتين — والنهاية التي لا تتجاوز البداية تقع في الغد. */
+const customMinutes = computed(() => {
+    if (!form.start_time || !form.end_time) return 0;
+
+    const [sh, sm] = form.start_time.split(':').map(Number);
+    const [eh, em] = form.end_time.split(':').map(Number);
+    const minutes = eh * 60 + em - (sh * 60 + sm);
+
+    return minutes > 0 ? minutes : minutes + 24 * 60;
+});
+
+const customDuration = computed(() => {
+    const hours = Math.floor(customMinutes.value / 60);
+    const minutes = customMinutes.value % 60;
+
+    return [hours ? `${hours} ساعة` : '', minutes ? `${minutes} دقيقة` : ''].filter(Boolean).join(' و') || '—';
+});
+
+/** ما يمنع الحفظ من الساعتين، مقولاً قبل أن يُرسَل النموذج. */
+const hoursBlocker = computed<string | null>(() => {
+    if (!customHours.value) return null;
+    if (!form.start_time || !form.end_time) return 'اكتب ساعة البداية وساعة النهاية معاً.';
+    if (customMinutes.value < 30) return 'أقصر مناسبة نصف ساعة.';
+    if (customMinutes.value > 23 * 60) return 'ما تجاوز 23 ساعة يُحجز يوماً كاملاً أو أكثر.';
+
+    return null;
+});
+
+// إطفاء الساعات يعيد المناسبة إلى ساعات الفترة، وتشغيلها يحصرها في يومها.
+watch(customHours, (on) => {
+    if (on) {
+        form.days_count = 1;
+
+        return;
+    }
+
+    form.start_time = '';
+    form.end_time = '';
+});
 
 /**
  * تاريخ آخر يوم: البداية + (عدد الأيام − 1). يومان يعنيان اليوم وتاليه.
@@ -361,6 +412,8 @@ const refreshQuote = () => {
                     booking_date: form.booking_date,
                     days_count: daysCount.value,
                     period: form.period,
+                    start_time: customHours.value ? form.start_time : null,
+                    end_time: customHours.value ? form.end_time : null,
                     client_id: form.client_id,
                     event_type_id: form.event_type_id,
                     package_id: form.package_id,
@@ -393,14 +446,15 @@ const quoteFailure = (status: number) =>
     })[status] ?? `تعذّر احتساب السعر (${status}).`;
 
 watch(
-    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, daysCount.value, form.period, form.client_id, form.event_type_id, form.package_id, form.discount_amount, agreedAmount.value, form.is_taxable],
+    () => [form.unit_id, form.scope, [...form.section_ids], form.booking_date, daysCount.value, form.period, form.start_time, form.end_time, customHours.value, form.client_id, form.event_type_id, form.package_id, form.discount_amount, agreedAmount.value, form.is_taxable],
     refreshQuote,
     { deep: true },
 );
 
 onMounted(refreshQuote);
 
-const blocked = computed(() => quote.value !== null && !quote.value.availability.ok);
+// ساعتان غير صالحتين تمنعان الحفظ كما يمنعه وقتٌ غير متاح — والسبب مقول فوق الزرّ.
+const blocked = computed(() => hoursBlocker.value !== null || (quote.value !== null && !quote.value.availability.ok));
 
 // ── The security deposit: held, not charged ─────────────────
 
@@ -486,6 +540,12 @@ const submit = (print = false) => {
 
     // الحقل قد يُترك فارغًا أو بقيمة خارج الحد — يُرسل مشذَّبًا كما حُسب وعُرض.
     form.days_count = daysCount.value;
+
+    // ساعتان تُرسلان معاً أو لا تُرسل واحدة: نصف مدى لا يصلح مدًى.
+    if (!customHours.value) {
+        form.start_time = '';
+        form.end_time = '';
+    }
 
     // A cleared field is no agreement, not a zero price.
     form.agreed_amount = agreedAmount.value;
@@ -716,10 +776,12 @@ const eventBadge = (color: string) =>
                                 <input
                                     v-model.number="form.days_count"
                                     type="number" min="1" :max="MAX_DAYS" step="1"
-                                    class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px] font-bold"
+                                    :disabled="customHours"
+                                    class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px] font-bold disabled:bg-slate-100 disabled:text-slate-500"
                                 />
                                 <p class="mt-1 text-[13px] font-medium text-slate-700">
-                                    يوم واحد ما لم تمتد المناسبة — الحد الأعلى {{ MAX_DAYS }} يومًا.
+                                    <template v-if="customHours">المناسبة بساعاتٍ خاصّة تقع في يومها، فلا تمتدّ أياماً.</template>
+                                    <template v-else>يوم واحد ما لم تمتد المناسبة — الحد الأعلى {{ MAX_DAYS }} يومًا.</template>
                                 </p>
                                 <p v-if="form.errors.days_count" class="mt-1 text-sm text-red-700">{{ form.errors.days_count }}</p>
                             </div>
@@ -760,18 +822,57 @@ const eventBadge = (color: string) =>
 
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-[15px] font-bold text-slate-900">الفترة</label>
-                                <!-- القاعة تُباع بفترة واحدة، فتُعرض خبرًا لا قائمةً بخيار واحد -->
-                                <div
-                                    v-if="periods.length === 1"
-                                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] font-bold text-slate-700"
-                                >
-                                    {{ periods[0].label }}
-                                    <span class="text-sm font-medium text-slate-500" dir="ltr">({{ periods[0].start }}–{{ periods[0].end }})</span>
+                                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                                    <label class="text-[15px] font-bold text-slate-900">الفترة</label>
+
+                                    <!-- ساعات المناسبة قد تخالف ساعات الفترة، فتُكتب هنا لهذا الحجز وحده -->
+                                    <label class="inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-bold text-slate-700">
+                                        <input v-model="customHours" type="checkbox" class="h-4 w-4 rounded border-slate-400 text-emerald-600 focus:ring-emerald-500" />
+                                        تحديد الوقت من / إلى
+                                    </label>
                                 </div>
-                                <select v-else v-model="form.period" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
-                                    <option v-for="p in periods" :key="p.key" :value="p.key">{{ p.label }} ({{ p.start }}–{{ p.end }})</option>
-                                </select>
+
+                                <!--
+                                    ساعات الفترة من الإعدادات لا تُعرض وقد كُتبت للمناسبة ساعاتها:
+                                    صندوقان يقولان وقتين مختلفين للحجز الواحد يُقرأ أحدهما خطأً.
+                                -->
+                                <template v-if="!customHours">
+                                    <!-- القاعة تُباع بفترة واحدة، فتُعرض خبرًا لا قائمةً بخيار واحد -->
+                                    <div
+                                        v-if="periods.length === 1"
+                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[15px] font-bold text-slate-700"
+                                    >
+                                        {{ periods[0].label }}
+                                        <span class="text-sm font-medium text-slate-500" dir="ltr">({{ periods[0].start }}–{{ periods[0].end }})</span>
+                                    </div>
+                                    <select v-else v-model="form.period" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-[15px]">
+                                        <option v-for="p in periods" :key="p.key" :value="p.key">{{ p.label }} ({{ p.start }}–{{ p.end }})</option>
+                                    </select>
+                                </template>
+
+                                <div v-if="customHours" class="rounded-xl border border-slate-300 bg-slate-50 p-3">
+                                    <div class="grid gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <label class="mb-1 block text-[13px] font-bold text-slate-900">من الساعة</label>
+                                            <input v-model="form.start_time" type="time" dir="ltr" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-[15px] font-bold" />
+                                            <p v-if="form.errors.start_time" class="mt-1 text-sm text-red-700">{{ form.errors.start_time }}</p>
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-[13px] font-bold text-slate-900">إلى الساعة</label>
+                                            <input v-model="form.end_time" type="time" dir="ltr" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-[15px] font-bold" />
+                                            <p v-if="form.errors.end_time" class="mt-1 text-sm text-red-700">{{ form.errors.end_time }}</p>
+                                        </div>
+                                    </div>
+
+                                    <p v-if="hoursBlocker" class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-[13px] font-bold text-red-700">{{ hoursBlocker }}</p>
+                                    <p v-else class="mt-2 text-[13px] font-bold text-slate-700">
+                                        مدة المناسبة {{ customDuration }}
+                                        <span v-if="form.end_time <= form.start_time" class="text-amber-700">— تنتهي بعد منتصف الليل في اليوم التالي.</span>
+                                    </p>
+                                    <p class="mt-1 text-[12px] font-medium text-slate-600">
+                                        السعر يبقى سعر اليوم الكامل — عدّله من «السعر المتفق عليه» إن اتُّفق على غيره.
+                                    </p>
+                                </div>
                             </div>
                             <div>
                                 <label class="mb-1 block text-[15px] font-bold text-slate-900">عدد الضيوف</label>
@@ -1097,7 +1198,8 @@ const eventBadge = (color: string) =>
                     <p v-if="form.errors.availability" class="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ form.errors.availability }}</p>
 
                     <div class="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
-                        <p v-if="blocked" class="mb-2 text-[15px] font-bold text-red-700">لا يمكن الحفظ ما دام الوقت غير متاح</p>
+                        <p v-if="hoursBlocker" class="mb-2 text-[15px] font-bold text-red-700">{{ hoursBlocker }}</p>
+                        <p v-else-if="blocked" class="mb-2 text-[15px] font-bold text-red-700">لا يمكن الحفظ ما دام الوقت غير متاح</p>
                         <div class="flex gap-2">
                             <button type="submit" :disabled="form.processing || blocked" class="flex-1 rounded-md bg-blue-600 px-5 py-3 text-lg font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50">
                                 {{ isEdit ? 'حفظ التعديل' : 'حفظ الحجز' }}

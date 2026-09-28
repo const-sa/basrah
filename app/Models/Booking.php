@@ -95,6 +95,9 @@ class Booking extends Model
         'check_out_date',
         'nights',
         'days_count',
+        // ساعتا المناسبة حين تخالفان ساعات الفترة — فارغتان = كما في الفترة.
+        'start_time',
+        'end_time',
         'starts_at',
         'ends_at',
         'status',
@@ -366,6 +369,17 @@ class Booking extends Model
     }
 
     /**
+     * هل كُتبت لهذه المناسبة ساعتان تخالفان ساعات فترتها؟
+     *
+     * نصف مدى ليس مدًى، فالساعتان تُقرآن معاً أو لا تُقرأ واحدة منهما — وهو
+     * حكم BookingPeriod::window الذي بُني منه المدى المحفوظ.
+     */
+    public function hasCustomHours(): bool
+    {
+        return filled($this->start_time) && filled($this->end_time);
+    }
+
+    /**
      * عدد ساعات الحجز — من مداه المحفوظ لا من عمودٍ يجاوره.
      */
     public function hoursCount(): float
@@ -444,6 +458,14 @@ class Booking extends Model
 
         if (! $this->isStay()) {
             $days = $this->daysCount();
+
+            // ساعتان كُتبتا لهذه المناسبة تُذكران: هما ما اتُّفق عليه، وما
+            // يُراجَع عند التسليم — كما تُذكر ساعتا الحجز بالساعات.
+            if ($this->hasCustomHours()) {
+                return $this->periodLabel()
+                    .' — من '.HourlyPeriod::time($this->starts_at)
+                    .' إلى '.HourlyPeriod::time($this->ends_at);
+            }
 
             // اليوم الواحد هو الغالب فلا يُوسَم بعدده: «مسائي» أوضح من
             // «مسائي — يوم واحد». وما تجاوزه يُذكر عدده لأنه استثناء مؤثر.

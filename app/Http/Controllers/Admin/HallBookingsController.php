@@ -350,6 +350,10 @@ class HallBookingsController extends BaseBookingsController
             'booking_date' => ['required', 'date'],
             'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
             'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
+            // ساعتا المناسبة حين تُتفق على غير ساعات الفترة: تُكتبان معاً
+            // أو تُتركان معاً، فنصف مدى لا يصلح مدًى.
+            'start_time' => ['nullable', 'date_format:H:i', 'required_with:end_time'],
+            'end_time' => ['nullable', 'date_format:H:i', 'required_with:start_time'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'event_type_id' => ['nullable', $this->eventTypeBelongsToUnit($request)],
             'package_id' => ['nullable', 'exists:packages,id'],
@@ -366,7 +370,12 @@ class HallBookingsController extends BaseBookingsController
 
         $unit = Unit::with('sections')->findOrFail($data['unit_id']);
         $sectionIds = $data['scope'] === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
-        $days = BookingPeriod::days($data['days_count'] ?? null);
+
+        // مناسبةٌ بساعاتٍ خاصّة تقع في يومها، فلا تمتدّ أياماً.
+        $window = BookingPeriod::window(['start' => $data['start_time'] ?? null, 'end' => $data['end_time'] ?? null]);
+        $days = $window ? 1 : BookingPeriod::days($data['days_count'] ?? null);
+
+        [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days, $unit, $window);
 
         return response()->json([
             'availability' => $this->availability->check(
@@ -378,6 +387,7 @@ class HallBookingsController extends BaseBookingsController
                 isset($data['client_id']) ? (int) $data['client_id'] : null,
                 $data['ignore_booking_id'] ?? null,
                 $days,
+                $window,
             ),
             'pricing' => $this->pricing->quote(
                 $unit,
@@ -394,11 +404,14 @@ class HallBookingsController extends BaseBookingsController
                 (bool) ($data['is_taxable'] ?? true),
                 isset($data['agreed_amount']) ? (float) $data['agreed_amount'] : null,
             ),
-            // آخر يوم يُحسب في الخادم لا في المتصفح: هو ما سيُخزَّن فعلًا،
-            // فيرى الموظف قبل الحفظ ما سيُقفَل بالضبط.
+            // آخر يوم يُحسب في الخادم لا في المتصفح، ومعه المدى الذي سيُقفَل
+            // فعلاً — فيرى الموظف قبل الحفظ ما سيُحجز بالضبط.
             'schedule' => [
                 'days' => $days,
                 'last_day_date' => BookingPeriod::lastDay($data['booking_date'], $days),
+                'starts_at' => $startsAt->format('Y-m-d H:i'),
+                'ends_at' => $endsAt->format('Y-m-d H:i'),
+                'custom_hours' => $window !== null,
             ],
         ]);
     }
@@ -422,6 +435,10 @@ class HallBookingsController extends BaseBookingsController
             'days_count' => ['nullable', 'integer', 'min:1', 'max:'.BookingPeriod::MAX_DAYS],
             // فترة القاعة لا تشمل «المبيت»: تلك طريقة الشاليه وشاشته.
             'period' => ['required', Rule::in(BookingPeriod::hallKeys())],
+            // ساعتا المناسبة حين تُتفق على غير ساعات الفترة: تُكتبان معاً
+            // أو تُتركان معاً، فنصف مدى لا يصلح مدًى.
+            'start_time' => ['nullable', 'date_format:H:i', 'required_with:end_time'],
+            'end_time' => ['nullable', 'date_format:H:i', 'required_with:start_time'],
             'status' => ['nullable', Rule::in(array_keys(Booking::STATUSES))],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             // Left blank the hall is priced from its table; written, it is the

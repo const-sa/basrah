@@ -131,10 +131,16 @@ class BookingPeriod
      * @param  Unit|null  $unit  الوحدة المحجوزة — ساعاتها تتقدّم على ساعات الإعدادات
      * @return array{0: CarbonImmutable, 1: CarbonImmutable}
      */
-    public static function range(string $date, string $period, int $days = 1, ?Unit $unit = null): array
+    public static function range(string $date, string $period, int $days = 1, ?Unit $unit = null, ?array $window = null): array
     {
         $periods = self::periodsFor($unit);
         $meta = $periods[$period] ?? $periods['full_day'];
+
+        // ساعتان كُتبتا لهذه المناسبة وحدها تتقدّمان على ساعات الفترة، وتبيتان
+        // من عبورهما منتصف الليل كما تبيت الفترة من عبوره.
+        if ($custom = self::window($window)) {
+            $meta = [...$meta, 'start' => $custom['start'], 'end' => $custom['end'], 'overnight' => $custom['end'] <= $custom['start']];
+        }
 
         $day = CarbonImmutable::parse($date)->startOfDay();
         $starts = $day->setTimeFromTimeString($meta['start']);
@@ -146,6 +152,31 @@ class BookingPeriod
         }
 
         return [$starts, $ends];
+    }
+
+    /**
+     * الساعتان المخصّصتان بعد تشذيبهما، أو لا شيء.
+     *
+     * نصف مدى لا يصلح مدًى: من كتب البداية ولم يكتب النهاية تُقرأ مناسبته من
+     * ساعات الفترة كاملةً — وهو حكم Unit::periodHours نفسه على نصف الساعات.
+     *
+     * @param  array{start?: string|null, end?: string|null}|null  $window
+     * @return array{start: string, end: string}|null
+     */
+    public static function window(?array $window): ?array
+    {
+        $start = self::time($window['start'] ?? null);
+        $end = self::time($window['end'] ?? null);
+
+        return ($start === null || $end === null) ? null : ['start' => $start, 'end' => $end];
+    }
+
+    /** ساعةٌ بصيغة HH:MM، أو لا شيء إن لم تكن ساعةً أصلاً. */
+    private static function time(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+
+        return preg_match('/^([01]\d|2[0-3]):([0-5]\d)/', $value, $m) ? $m[1].':'.$m[2] : null;
     }
 
     /**

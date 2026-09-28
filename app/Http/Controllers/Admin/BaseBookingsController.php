@@ -331,6 +331,9 @@ abstract class BaseBookingsController extends Controller
             'check_out_date' => $b->check_out_date?->toDateString(),
             'nights' => $b->nights,
             'days_count' => $b->days_count,
+            // ساعتا المناسبة كما كُتبتا — فارغتان على حجز يقرأ ساعات فترته.
+            'start_time' => $b->hasCustomHours() ? substr((string) $b->start_time, 0, 5) : null,
+            'end_time' => $b->hasCustomHours() ? substr((string) $b->end_time, 0, 5) : null,
             'starts_at' => $b->starts_at->toDateTimeString(),
             'ends_at' => $b->ends_at->toDateTimeString(),
             'status' => $b->status,

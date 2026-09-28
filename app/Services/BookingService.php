@@ -136,9 +136,13 @@ class BookingService
 
             $scope = $data['scope'];
             $sectionIds = $scope === 'sections' ? array_map('intval', $data['section_ids'] ?? []) : [];
-            $days = BookingPeriod::days($data['days_count'] ?? null);
 
-            $this->guardAvailability($unit, $scope, [...$data, 'days_count' => $days], $sectionIds);
+            // الساعتان المكتوبتان لهذه المناسبة، إن كُتبتا: مناسبةٌ بساعاتٍ
+            // خاصّة تقع في يومها، فلا تمتدّ أياماً.
+            $window = BookingPeriod::window(['start' => $data['start_time'] ?? null, 'end' => $data['end_time'] ?? null]);
+            $days = $window ? 1 : BookingPeriod::days($data['days_count'] ?? null);
+
+            $this->guardAvailability($unit, $scope, [...$data, 'days_count' => $days, 'window' => $window], $sectionIds);
 
             // With tax unless told otherwise, which is the common case. A booking
             // coming from the public site is never asked, so it takes the common
@@ -164,7 +168,7 @@ class BookingService
                 $agreed,
             );
 
-            [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days, $unit);
+            [$startsAt, $endsAt] = BookingPeriod::range($data['booking_date'], $data['period'], $days, $unit, $window);
 
             $booking = Booking::create([
                 'reference' => $this->nextReference(),
@@ -180,6 +184,9 @@ class BookingService
                 'period' => $data['period'],
                 'booking_date' => $data['booking_date'],
                 'days_count' => $days,
+                // فارغتان = ساعات الفترة كما هي في الإعدادات.
+                'start_time' => $window['start'] ?? null,
+                'end_time' => $window['end'] ?? null,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 // الحجز يُسجَّل «مدفوع العربون»: هي حالة كل حجز جديد — قُبض
@@ -234,10 +241,18 @@ class BookingService
                 ? array_map('intval', $data['section_ids'] ?? $booking->sections->pluck('id')->all())
                 : [];
 
+            // التعديل يُبقي ساعات المناسبة إلا أن تُغيَّر: تغيير التاريخ وحده
+            // لا يردّ المناسبة إلى ساعات الفترة.
+            $window = BookingPeriod::window([
+                'start' => array_key_exists('start_time', $data) ? $data['start_time'] : $booking->start_time,
+                'end' => array_key_exists('end_time', $data) ? $data['end_time'] : $booking->end_time,
+            ]);
+
             $payload = [
                 'booking_date' => $data['booking_date'] ?? $booking->booking_date->toDateString(),
                 'period' => $data['period'] ?? $booking->period,
-                'days_count' => BookingPeriod::days($data['days_count'] ?? $booking->days_count),
+                'window' => $window,
+                'days_count' => $window ? 1 : BookingPeriod::days($data['days_count'] ?? $booking->days_count),
                 'client_id' => $data['client_id'] ?? $booking->client_id,
                 'event_type_id' => array_key_exists('event_type_id', $data) ? $data['event_type_id'] : $booking->event_type_id,
                 'package_id' => array_key_exists('package_id', $data) ? $data['package_id'] : $booking->package_id,
@@ -271,6 +286,7 @@ class BookingService
                 $payload['period'],
                 $payload['days_count'],
                 $unit,
+                $window,
             );
 
             $booking->update([
@@ -282,6 +298,8 @@ class BookingService
                 'period' => $payload['period'],
                 'booking_date' => $payload['booking_date'],
                 'days_count' => $payload['days_count'],
+                'start_time' => $window['start'] ?? null,
+                'end_time' => $window['end'] ?? null,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 'base_amount' => $quote['base_amount'],
@@ -339,6 +357,7 @@ class BookingService
             isset($data['client_id']) ? (int) $data['client_id'] : null,
             $ignoreId,
             BookingPeriod::days($data['days_count'] ?? null),
+            BookingPeriod::window($data['window'] ?? null),
         );
 
         if (! $result['ok']) {

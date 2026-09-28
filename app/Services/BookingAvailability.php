@@ -38,8 +38,11 @@ class BookingAvailability
         ?int $clientId = null,
         ?int $ignoreBookingId = null,
         int $days = 1,
+        ?array $window = null,
     ): array {
-        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days, $unit);
+        // الساعتان المخصّصتان جزءٌ من المدى، فالفحص يجري عليهما هما لا على
+        // ساعات الفترة — وإلا قيل «متاح» لمناسبةٍ تقع داخل حجزٍ قائم.
+        [$startsAt, $endsAt] = BookingPeriod::range($date, $period, $days, $unit, $window);
 
         return $this->checkRange($unit, $scope, $startsAt, $endsAt, $sectionIds, $clientId, $ignoreBookingId);
     }
