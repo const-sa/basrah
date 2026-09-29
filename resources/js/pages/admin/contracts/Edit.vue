@@ -153,6 +153,7 @@ const sheet = computed(() => ({
     booking_date_hijri: typed('booking_date_hijri'),
     check_in_day: typed('check_in_day'),
     check_in_time: typed('check_in_time'),
+    check_out_time: typed('check_out_time'),
     subject: typed('subject'),
     unit_name: typed('unit_name'),
     sections: typed('sections'),

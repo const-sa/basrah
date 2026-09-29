@@ -13,6 +13,7 @@ use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
 use App\Services\Whatsapp\PhoneNumber;
 use App\Services\Whatsapp\WhatsappAccounts;
+use App\Support\HourlyPeriod;
 use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
@@ -429,7 +430,11 @@ class WhatsappNotifier
             'reference' => (string) ($booking?->reference ?? ''),
             'unit' => (string) ($booking?->unit?->name ?? '—'),
             'date' => (string) ($booking?->booking_date?->toDateString() ?? ''),
-            'period' => (string) ($booking?->periodLabel() ?? ''),
+            // الفترة ومعها ساعتاها: «يوم كامل» وحدها لا تقول للعميل
+            // متى يدخل ومتى يخرج، وهو أول ما يُسأل عنه بعد التأكيد.
+            'period' => (string) ($booking?->periodWithHours() ?? ''),
+            'start_time' => (string) ($booking?->starts_at ? HourlyPeriod::time($booking->starts_at) : ''),
+            'end_time' => (string) ($booking?->ends_at ? HourlyPeriod::time($booking->ends_at) : ''),
             'total' => number_format((float) ($booking?->total_amount ?? 0), 2),
             'paid' => number_format((float) ($booking?->paid_amount ?? 0), 2),
             'remaining' => number_format((float) ($booking?->remainingAmount() ?? 0), 2),

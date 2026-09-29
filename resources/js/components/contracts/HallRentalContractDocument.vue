@@ -16,6 +16,7 @@ interface HallContract {
     booking_date_hijri: string | null;
     check_in_day: string | null;
     check_in_time: string | null;
+    check_out_time: string | null;
     guests_count: string | null;
     total_amount: string | null;
     deposit_amount: string | null;
@@ -166,9 +167,16 @@ const termsText = computed(() => (props.editable ? terms.value : props.contract.
                 <template v-else>{{ fill(contract.guests_count) }}</template>
             </td>
             <td class="k pr-2" style="width: 10%">وقت الدخول</td>
-            <td class="v" style="width: 38%">
+            <td class="v" style="width: 18%">
                 <input v-if="editable" v-model="fields.check_in_time" class="fillin" />
                 <template v-else>{{ fill(contract.check_in_time) }}</template>
+            </td>
+            <!-- ساعة الخروج مكتوبةٌ بجوار ساعة الدخول: هي ما يُراجَع عند
+                 التسليم، والبند 13 يحسب التأخّر عنها أجرة يوم. -->
+            <td class="k pr-2" style="width: 10%">وقت الخروج</td>
+            <td class="v" style="width: 18%">
+                <input v-if="editable" v-model="fields.check_out_time" class="fillin" />
+                <template v-else>{{ fill(contract.check_out_time) }}</template>
             </td>
         </tr></table>
 

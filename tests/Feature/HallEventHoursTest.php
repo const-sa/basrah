@@ -102,6 +102,16 @@ class HallEventHoursTest extends TestCase
         $this->assertSame((float) $full->base_amount, (float) $hourly->base_amount);
     }
 
+    /** رسالة العميل تقول متى يدخل ومتى يخرج، لا اسم الفترة وحده. */
+    public function test_the_period_variable_carries_its_hours(): void
+    {
+        $plain = $this->book([]);
+        $custom = $this->book(['start_time' => '16:00', 'end_time' => '22:00'], 'عميل ثانٍ', '2026-11-14');
+
+        $this->assertSame('يوم كامل — من 9:00 ص إلى 1:00 ص', $plain->periodWithHours());
+        $this->assertSame('يوم كامل — من 4:00 م إلى 10:00 م', $custom->periodWithHours());
+    }
+
     private function book(array $hours, string $client = 'عميل المناسبة', string $date = '2026-11-10'): Booking
     {
         return $this->service->create([

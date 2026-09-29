@@ -322,6 +322,25 @@ class Booking extends Model
             : BookingPeriod::label($this->period);
     }
 
+    /**
+     * الفترة ومعها ساعتاها — «يوم كامل — من 9:00 ص إلى 1:00 ص».
+     *
+     * اسم الفترة وحده لا يقول للعميل متى يدخل ومتى يخرج، وهو أول ما يُسأل عنه
+     * بعد التأكيد. والساعتان تُقرآن من مدى الحجز نفسه لا من الإعدادات، فتصفان
+     * هذا الحجز ولو كُتبت له ساعاتٌ خاصّة.
+     */
+    public function periodWithHours(): string
+    {
+        // هذان يحملان ساعتيهما في تسميتهما أصلاً، فلا تُكرَّران.
+        if ($this->isHourly() || $this->hasCustomHours()) {
+            return $this->scheduleLabel();
+        }
+
+        return $this->periodLabel()
+            .' — من '.HourlyPeriod::time($this->starts_at)
+            .' إلى '.HourlyPeriod::time($this->ends_at);
+    }
+
     public function sourceLabel(): string
     {
         return self::SOURCES[$this->source] ?? 'من الإدارة';
