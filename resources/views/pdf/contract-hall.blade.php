@@ -68,12 +68,9 @@
                 <img src="{{ $logoPath }}" style="max-height: 58pt; max-width: 100%;" alt="">
             @endif
         </td>
-        <td style="width: 36%; text-align: left;">
-            @if ($issuer['whatsapp'])
-                <div class="who">المحاسب</div>
-                <div class="tel num">{{ $issuer['whatsapp'] }}</div>
-            @endif
-        </td>
+        {{-- الخانة تبقى ليستقيم توسيط الشعار، ورقم المحاسب لا يُطبع على
+             ورقة يأخذها العميل. --}}
+        <td style="width: 36%; text-align: left;"></td>
     </tr>
 </table>
 

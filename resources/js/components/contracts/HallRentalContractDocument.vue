@@ -78,12 +78,9 @@ const termsText = computed(() => (props.editable ? terms.value : props.contract.
                         @error="logoFailed = true"
                     />
                 </td>
-                <td class="w-[36%] text-left align-top">
-                    <template v-if="issuer.whatsapp">
-                        <div class="who">المحاسب</div>
-                        <div class="tel" dir="ltr">{{ issuer.whatsapp }}</div>
-                    </template>
-                </td>
+                <!-- الخانة تبقى ليستقيم توسيط الشعار، ورقم المحاسب لا يُطبع
+                     على ورقة يأخذها العميل. -->
+                <td class="w-[36%] text-left align-top"></td>
             </tr>
         </table>
 
