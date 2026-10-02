@@ -353,6 +353,33 @@ class ExpenseUnitScopeTest extends TestCase
     }
 
     /**
+     * A unit ticked before anything moved on it has no centre yet — its
+     * employee may still record an expense on it.
+     */
+    public function test_a_ticked_unit_without_a_centre_yet_can_be_charged(): void
+    {
+        $chalet = $this->unitOfType('chalet');
+        CostCenter::where('unit_id', $chalet->id)->delete();
+
+        $user = $this->roleUser(['chalet_expenses.view', 'chalet_expenses.create']);
+        $user->units()->sync([$chalet->id]);
+
+        $center = CostCenter::where('unit_id', $chalet->id)->first();
+        $this->assertNull($center);
+
+        $this->actingAs($user)->get('/admin/chalets/expenses')
+            ->assertInertia(fn ($p) => $p->has('costCenters', 1));
+
+        $center = CostCenter::where('unit_id', $chalet->id)->firstOrFail();
+
+        $this->actingAs($user)
+            ->post('/admin/accounting/expenses', $this->payload($center->id))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Expense::where('cost_center_id', $center->id)->count());
+    }
+
+    /**
      * A ticked hall still narrows the halls to that hall.
      */
     public function test_a_ticked_unit_still_narrows_the_activity_to_it(): void

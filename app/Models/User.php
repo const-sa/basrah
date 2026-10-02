@@ -164,6 +164,7 @@ class User extends Authenticatable
         }
 
         $unitIds = array_values(array_unique([...$unitIds, ...$this->activityUnitIds($unitIds)]));
+        $this->ensureUnitCenters($unitIds);
 
         $departmentIds = array_values(array_filter([
             $this->employee?->department_id,
@@ -208,13 +209,24 @@ class User extends Authenticatable
             return [];
         }
 
-        // Each unit's centre is made if no movement has made it yet, so the
-        // form has it to offer — as the pools centre is made below.
-        return Unit::whereIn('type', $openTypes)->get()
-            ->each(fn (Unit $unit) => CostCenter::forUnit($unit))
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+        return Unit::whereIn('type', $openTypes)->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * A unit's centre is made by its first movement, so a unit ticked on the
+     * card before any booking or expense had none: its employee was told the
+     * account is tied to nothing and could not record a thing. Each unit in
+     * scope gets its centre here — as the pools centre is made below.
+     *
+     * @param  list<int>  $unitIds
+     */
+    private function ensureUnitCenters(array $unitIds): void
+    {
+        $missing = array_diff($unitIds, CostCenter::whereIn('unit_id', $unitIds)->pluck('unit_id')->all());
+
+        if ($missing) {
+            Unit::whereIn('id', $missing)->get()->each(fn (Unit $unit) => CostCenter::forUnit($unit));
+        }
     }
 
     /**
