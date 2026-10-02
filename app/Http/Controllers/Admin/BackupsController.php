@@ -201,6 +201,22 @@ class BackupsController extends Controller
     }
 
     /**
+     * حذف ما حُدِّد من النسخ دفعةً واحدة.
+     */
+    public function destroyMany(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:backups,id'],
+        ]);
+
+        $backups = Backup::whereIn('id', $data['ids'])->get();
+        $backups->each(fn (Backup $backup) => $this->backups->delete($backup));
+
+        return back()->with('success', "تم حذف {$backups->count()} نسخة احتياطية");
+    }
+
+    /**
      * أقصى حجم رفعٍ مقبول فعلًا: الأصغر من إعداد التطبيق وحدود PHP.
      */
     private function uploadLimitMb(): int

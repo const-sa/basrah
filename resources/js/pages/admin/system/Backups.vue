@@ -64,6 +64,27 @@ const remove = (backup: BackupRow) => {
     router.delete(`/admin/backups/${backup.id}`, { preserveScroll: true });
 };
 
+/* ── التحديد والحذف الجماعي ─────────────────────────────────────────── */
+
+const selected = ref<number[]>([]);
+
+const allSelected = computed(() => props.backups.data.length > 0 && selected.value.length === props.backups.data.length);
+
+const toggleAll = () => {
+    selected.value = allSelected.value ? [] : props.backups.data.map((b) => b.id);
+};
+
+const removeSelected = () => {
+    if (!selected.value.length) return;
+    if (!confirm(`حذف ${selected.value.length} نسخة احتياطية؟ لا يمكن التراجع.`)) return;
+
+    router.delete('/admin/backups/bulk', {
+        data: { ids: selected.value },
+        preserveScroll: true,
+        onSuccess: () => (selected.value = []),
+    });
+};
+
 /* ── رفع قاعدة بيانات من الخارج ─────────────────────────────────────── */
 
 const accept = computed(() => props.stats.extensions.map((e) => `.${e}`).join(','));
@@ -261,10 +282,39 @@ const statusClass = (status: string) =>
 
             <!-- السجل -->
             <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div
+                    v-if="can('backups.delete') && selected.length"
+                    class="flex items-center justify-between gap-3 border-b border-red-100 bg-red-50 px-4 py-2.5"
+                >
+                    <span class="text-sm font-bold text-red-800">تم تحديد {{ selected.length }} نسخة</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" @click="selected = []" class="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-white">
+                            إلغاء التحديد
+                        </button>
+                        <button
+                            type="button"
+                            @click="removeSelected"
+                            class="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
+                        >
+                            <Trash2 class="h-3.5 w-3.5" /> حذف المحدد
+                        </button>
+                    </div>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-slate-100">
                             <tr>
+                                <th v-if="can('backups.delete')" class="w-10 px-4 py-3">
+                                    <input
+                                        type="checkbox"
+                                        :checked="allSelected"
+                                        :indeterminate="selected.length > 0 && !allSelected"
+                                        @change="toggleAll"
+                                        :disabled="!backups.data.length"
+                                        class="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-200"
+                                        title="تحديد الكل"
+                                    />
+                                </th>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">الملف</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المصدر</th>
@@ -274,7 +324,20 @@ const statusClass = (status: string) =>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="b in backups.data" :key="b.id" class="border-t border-slate-100 hover:bg-slate-50">
+                            <tr
+                                v-for="b in backups.data"
+                                :key="b.id"
+                                class="border-t border-slate-100"
+                                :class="selected.includes(b.id) ? 'bg-red-50/60' : 'hover:bg-slate-50'"
+                            >
+                                <td v-if="can('backups.delete')" class="px-4 py-2.5">
+                                    <input
+                                        v-model="selected"
+                                        type="checkbox"
+                                        :value="b.id"
+                                        class="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-200"
+                                    />
+                                </td>
                                 <td class="px-4 py-2.5">
                                     <div class="font-bold text-slate-800" dir="ltr">{{ b.filename }}</div>
                                     <div class="text-[11px] text-slate-500" dir="ltr">{{ b.created_at }}</div>
@@ -324,7 +387,7 @@ const statusClass = (status: string) =>
                                 </td>
                             </tr>
                             <tr v-if="!backups.data.length">
-                                <td colspan="6" class="px-4 py-12 text-center text-sm text-slate-500">لا نسخ احتياطية بعد</td>
+                                <td :colspan="can('backups.delete') ? 7 : 6" class="px-4 py-12 text-center text-sm text-slate-500">لا نسخ احتياطية بعد</td>
                             </tr>
                         </tbody>
                     </table>

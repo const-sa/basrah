@@ -574,6 +574,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
     Route::post('backups', [BackupsController::class, 'store'])->middleware('perm:backups.create')->name('backups.store');
     Route::post('backups/upload', [BackupsController::class, 'upload'])->middleware('perm:backups.create')->name('backups.upload');
     Route::post('backups/{backup}/restore', [BackupsController::class, 'restore'])->middleware('perm:backups.restore')->name('backups.restore');
+    // الحذف الجماعي قبل مسار النسخة الواحدة كي لا تُفسَّر «bulk» رقمَ نسخة
+    Route::delete('backups/bulk', [BackupsController::class, 'destroyMany'])->middleware('perm:backups.delete')->name('backups.destroy_many');
     Route::delete('backups/{backup}', [BackupsController::class, 'destroy'])->middleware('perm:backups.delete')->name('backups.destroy');
 
     // الأرشيف — المحذوفات: استعراض واسترجاع، والإتلاف النهائي بصلاحية مستقلة
