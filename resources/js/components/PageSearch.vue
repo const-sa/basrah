@@ -18,6 +18,7 @@ import {
     FileSignature,
     FileText,
     History,
+    PackageMinus,
     Home,
     Landmark,
     LayoutDashboard,
@@ -155,6 +156,13 @@ const allPages = computed<Page[]>(() => [
         title: t('nav.movements'),
         perm: 'inventory.view',
         keywords: ['movements', 'حركات', 'مخزون'],
+    },
+    {
+        href: '/admin/inventory/issues',
+        icon: PackageMinus,
+        title: t('nav.stock_issues'),
+        perm: 'stock_issues.view',
+        keywords: ['issue', 'اذن صرف', 'إذن صرف', 'صرف', 'كلور', 'تعقيم', 'فني', 'صيانة'],
     },
 
     // المحاسبة

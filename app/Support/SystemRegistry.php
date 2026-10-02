@@ -91,6 +91,8 @@ class SystemRegistry
                 // Four rungs of one ladder: read the movements, open a balance,
                 // correct a single item, post a full stocktake.
                 'inventory' => ['label' => 'المخزون والجرد', 'actions' => ['view', 'create', 'edit', 'approve']],
+                // كلور ومواد تعقيم تخرج مع فني الصيانة — تنقص من الرصيد وتُقيَّد مصروفًا.
+                'stock_issues' => ['label' => 'أذونات الصرف', 'actions' => ['view', 'create', 'delete']],
                 'purchases' => ['label' => 'المشتريات', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'quotations' => ['label' => 'عروض الأسعار', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'pool_clients' => ['label' => 'عملاء المسابح', 'actions' => ['view', 'create', 'edit', 'delete', 'export']],

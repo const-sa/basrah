@@ -16,6 +16,8 @@ class StockMovement extends Model
         'adjustment' => 'تسوية جرد',
         'bundle_consume' => 'خصم مكوّنات حزمة',
         'opening' => 'رصيد افتتاحي',
+        'issue' => 'إذن صرف',
+        'issue_revert' => 'إلغاء إذن صرف',
     ];
 
     protected $fillable = [

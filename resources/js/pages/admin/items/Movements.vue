@@ -37,6 +37,8 @@ const typeClass = (t: string) =>
         adjustment: 'bg-amber-100 text-amber-700',
         bundle_consume: 'bg-violet-100 text-violet-700',
         opening: 'bg-slate-200 text-slate-700',
+        issue: 'bg-orange-100 text-orange-700',
+        issue_revert: 'bg-orange-50 text-orange-800',
     })[t] ?? 'bg-slate-100 text-slate-700';
 </script>
 

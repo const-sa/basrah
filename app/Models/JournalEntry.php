@@ -36,6 +36,7 @@ class JournalEntry extends Model
         'expense' => 'مصروف',
         'voucher' => 'سند',
         'payroll' => 'رواتب',
+        'stock_issue' => 'إذن صرف مخزني',
     ];
 
     protected $fillable = [

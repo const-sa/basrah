@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\HallMonthCalendarController;
 use App\Http\Controllers\Admin\HrController;
 use App\Http\Controllers\Admin\ItemGroupsController;
 use App\Http\Controllers\Admin\ItemsController;
+use App\Http\Controllers\Admin\StockIssuesController;
 use App\Http\Controllers\Admin\MeasureUnitsController;
 use App\Http\Controllers\Admin\NotificationsController;
 use App\Http\Controllers\Admin\NotificationTemplatesController;
@@ -354,6 +355,12 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
         Route::post('inventory/adjust', [ItemsController::class, 'adjust'])->middleware('perm:inventory.approve')->name('inventory.adjust');
         Route::get('inventory/movements', [ItemsController::class, 'movements'])->middleware('perm:inventory.view')->name('inventory.movements');
+
+        // أذونات الصرف — مواد تخرج مع الفني للصيانة فتنقص من المخزون وتُقيَّد مصروفًا
+        Route::get('inventory/issues', [StockIssuesController::class, 'index'])->middleware('perm:stock_issues.view')->name('stock_issues.index');
+        Route::post('inventory/issues', [StockIssuesController::class, 'store'])->middleware('perm:stock_issues.create')->name('stock_issues.store');
+        Route::get('inventory/issues/{stockIssue}', [StockIssuesController::class, 'show'])->middleware('perm:stock_issues.view')->name('stock_issues.show');
+        Route::post('inventory/issues/{stockIssue}/cancel', [StockIssuesController::class, 'cancel'])->middleware('perm:stock_issues.delete')->name('stock_issues.cancel');
 
         // وحدات القياس وأقسام المستودع
         // Its own keys, not items.*: the screen is a row in the permissions

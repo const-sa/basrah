@@ -37,7 +37,7 @@ class PurgeTrialData extends Command
     private const PURGE = [
         'contracts', 'quotations', 'quotation_items',
         'booking_payments', 'booking_addon', 'booking_section', 'bookings',
-        'sales', 'sale_items', 'purchases', 'purchase_items', 'stock_movements',
+        'sales', 'sale_items', 'purchases', 'purchase_items', 'stock_movements', 'stock_issues', 'stock_issue_items',
         'vouchers', 'voucher_attachments', 'expenses', 'journal_entries', 'journal_lines',
         'fixed_assets', 'asset_depreciation_entries',
         'bank_statement_imports', 'bank_statement_lines',
@@ -65,6 +65,8 @@ class PurgeTrialData extends Command
         'sale_items' => ['sales'],
         'purchases' => ['suppliers'],
         'purchase_items' => ['purchases'],
+        'stock_issues' => ['employees', 'contracts', 'journal_entries'],
+        'stock_issue_items' => ['stock_issues'],
         'vouchers' => ['clients', 'journal_entries'],
         'voucher_attachments' => ['vouchers'],
         'expenses' => ['journal_entries'],
