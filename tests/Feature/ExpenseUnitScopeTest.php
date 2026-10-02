@@ -258,8 +258,10 @@ class ExpenseUnitScopeTest extends TestCase
             'department_id' => $pools->id,
         ]);
 
+        // The pools register is gated by pool_expenses.*, which the unit
+        // supervisor never held — it was refused before any scope was read.
         $user = User::factory()->create([
-            'role_id' => Role::where('slug', 'unit-supervisor')->value('id'),
+            'role_id' => $this->poolsRole()->id,
             'is_active' => true,
             'has_all_units' => false,
             'employee_id' => $employee->id,
@@ -269,6 +271,54 @@ class ExpenseUnitScopeTest extends TestCase
 
         $this->actingAs($user)->get('/admin/pools/expenses')
             ->assertInertia(fn ($p) => $p->has('expenses.data', 1)->where('stats.total', 500));
+    }
+
+    /**
+     * An expense the owner charges to the pools reaches the pools employee
+     * even with no employee file behind the account: the pools have no unit to
+     * tick, so the role that opens the pools system is what grants its centre.
+     */
+    public function test_a_pools_employee_without_a_file_sees_the_pools_expenses(): void
+    {
+        $poolCenter = CostCenter::forDepartment(Department::where('code', 'POOLS')->firstOrFail());
+
+        $this->spendOn($poolCenter, 300);
+        $this->spendOn(CostCenter::forUnit($this->unitOfType('hall')), 700);
+
+        $user = User::factory()->create([
+            'role_id' => $this->poolsRole()->id,
+            'is_active' => true,
+            'has_all_units' => false,
+        ]);
+
+        $this->assertSame([$poolCenter->id], $user->accessibleCostCenterIds());
+
+        $this->actingAs($user)->get('/admin/pools/expenses')
+            ->assertInertia(fn ($p) => $p
+                ->has('expenses.data', 1)
+                ->where('stats.total', 300)
+                ->has('costCenters', 1)
+                ->where('costCenters.0.id', $poolCenter->id));
+    }
+
+    /**
+     * A unit supervisor's scope is untouched: no pools system, no pools centre.
+     */
+    public function test_a_halls_supervisor_does_not_gain_the_pools_centre(): void
+    {
+        $poolCenter = CostCenter::forDepartment(Department::where('code', 'POOLS')->firstOrFail());
+        $user = $this->supervisorOf($this->unitOfType('hall'));
+
+        $this->assertNotContains($poolCenter->id, $user->accessibleCostCenterIds());
+    }
+
+    private function poolsRole(): Role
+    {
+        return Role::create([
+            'name' => 'موظف مسابح',
+            'slug' => 'pools-staff-'.fake()->unique()->numberBetween(1, 99999),
+            'permissions' => ['pool_expenses.view', 'pool_expenses.create'],
+        ]);
     }
 
     /**

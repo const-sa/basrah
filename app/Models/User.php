@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\ActivitySegment;
 use App\Support\SystemRegistry;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -162,18 +163,47 @@ class User extends Authenticatable
             return null;
         }
 
-        $departmentId = $this->employee?->department_id;
+        $departmentIds = array_values(array_filter([
+            $this->employee?->department_id,
+            $this->poolsDepartmentId(),
+        ]));
 
         return CostCenter::query()
             ->where(fn ($q) => $q
                 ->whereIn('unit_id', $unitIds)
                 ->orWhereHas('section', fn ($s) => $s->whereIn('unit_id', $unitIds))
-                ->when($departmentId, fn ($sub, $id) => $sub->orWhere('department_id', $id)))
+                ->when($departmentIds, fn ($sub, $ids) => $sub->orWhereIn('department_id', $ids)))
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * The pools department, for a user whose role opens the pools system.
+     *
+     * The pools have no unit to tick on the user's card, so a pools employee
+     * with no employee file behind the account had no centre at all: every
+     * pools expense was hidden from them and the form had nothing to charge
+     * to. Access to the pools system is access to its one centre — which is
+     * made here if no movement has made it yet, so the form has it to offer.
+     */
+    private function poolsDepartmentId(): ?int
+    {
+        if (! in_array(ActivitySegment::POOLS, $this->accessibleSystems(), true)) {
+            return null;
+        }
+
+        $department = Department::where('code', ActivitySegment::POOLS_DEPARTMENT)->first();
+
+        if (! $department) {
+            return null;
+        }
+
+        CostCenter::forDepartment($department);
+
+        return $department->id;
     }
 
     /**
