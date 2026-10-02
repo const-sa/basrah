@@ -166,10 +166,10 @@ class User extends Authenticatable
         $unitIds = array_values(array_unique([...$unitIds, ...$this->activityUnitIds($unitIds)]));
         $this->ensureUnitCenters($unitIds);
 
-        $departmentIds = array_values(array_filter([
+        $departmentIds = array_values(array_unique(array_filter([
             $this->employee?->department_id,
-            $this->poolsDepartmentId(),
-        ]));
+            ...$this->systemDepartmentIds(),
+        ])));
 
         return CostCenter::query()
             ->where(fn ($q) => $q
@@ -230,29 +230,43 @@ class User extends Authenticatable
     }
 
     /**
-     * The pools department, for a user whose role opens the pools system.
-     *
-     * The pools have no unit to tick on the user's card, so a pools employee
-     * with no employee file behind the account had no centre at all: every
-     * pools expense was hidden from them and the form had nothing to charge
-     * to. Access to the pools system is access to its one centre — which is
-     * made here if no movement has made it yet, so the form has it to offer.
+     * The department each system's work belongs to — the pools have no unit,
+     * and the office systems (accounting, HR, administration) have none either.
      */
-    private function poolsDepartmentId(): ?int
+    private const SYSTEM_DEPARTMENTS = [
+        ActivitySegment::POOLS => ActivitySegment::POOLS_DEPARTMENT,
+        'accounting' => 'ADMIN',
+        'hr' => 'ADMIN',
+        'system' => 'ADMIN',
+    ];
+
+    /**
+     * The departments whose systems this user's role opens.
+     *
+     * Such a department has no unit to tick on the user's card, so an employee
+     * of it with no employee file behind the account had no centre at all: the
+     * department's expenses were hidden from them and the form had nothing to
+     * charge to. Access to the system is access to its department's centre —
+     * which is made here if no movement has made it yet, so the form has it.
+     *
+     * @return list<int>
+     */
+    private function systemDepartmentIds(): array
     {
-        if (! in_array(ActivitySegment::POOLS, $this->accessibleSystems(), true)) {
-            return null;
+        $codes = array_values(array_unique(array_intersect_key(
+            self::SYSTEM_DEPARTMENTS,
+            array_flip($this->accessibleSystems()),
+        )));
+
+        if (! $codes) {
+            return [];
         }
 
-        $department = Department::where('code', ActivitySegment::POOLS_DEPARTMENT)->first();
-
-        if (! $department) {
-            return null;
-        }
-
-        CostCenter::forDepartment($department);
-
-        return $department->id;
+        return Department::whereIn('code', $codes)->get()
+            ->each(fn (Department $department) => CostCenter::forDepartment($department))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     /**

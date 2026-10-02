@@ -380,6 +380,29 @@ class ExpenseUnitScopeTest extends TestCase
     }
 
     /**
+     * The accounting has no unit either: its staff record on the
+     * administration's centre, and see that centre's spend only.
+     */
+    public function test_an_accounting_employee_records_on_the_administration_centre(): void
+    {
+        $adminCenter = CostCenter::forDepartment(Department::where('code', 'ADMIN')->firstOrFail());
+
+        $this->spendOn($adminCenter, 150);
+        $this->spendOn(CostCenter::forUnit($this->unitOfType('hall')), 900);
+
+        $user = $this->roleUser(['expenses.view', 'expenses.create']);
+
+        $this->assertSame([$adminCenter->id], $user->accessibleCostCenterIds());
+
+        $this->actingAs($user)->get('/admin/accounting/expenses')
+            ->assertInertia(fn ($p) => $p->has('expenses.data', 1)->where('stats.total', 150)->has('costCenters', 1));
+
+        $this->actingAs($user)
+            ->post('/admin/accounting/expenses', $this->payload($adminCenter->id))
+            ->assertSessionHasNoErrors();
+    }
+
+    /**
      * A ticked hall still narrows the halls to that hall.
      */
     public function test_a_ticked_unit_still_narrows_the_activity_to_it(): void
