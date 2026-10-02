@@ -101,7 +101,7 @@ class CostCentersController extends Controller
 
         CostCenter::create([
             'name' => $data['name'],
-            'code' => $data['code'] ?: $this->nextManualCode(),
+            'code' => ($data['code'] ?? null) ?: $this->nextManualCode(),
             'is_active' => $data['is_active'] ?? true,
         ]);
 

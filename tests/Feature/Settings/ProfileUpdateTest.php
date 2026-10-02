@@ -61,43 +61,19 @@ class ProfileUpdateTest extends TestCase
         $this->assertNotNull($user->refresh()->email_verified_at);
     }
 
-    public function test_user_can_delete_their_account()
+    /**
+     * لا يحذف أحدٌ حسابه بنفسه: الحساب يملك حجوزات وسندات وسجل تدقيق،
+     * فيُعطَّل من شاشة المستخدمين ولا يُزال من صفحة الملف الشخصي.
+     */
+    public function test_a_user_cannot_delete_their_own_account()
     {
         $user = User::factory()->create();
 
-        $response = $this
-            ->actingAs($user)
-            ->delete('/admin/settings/profile', [
-                'password' => 'password',
-            ]);
+        $this->actingAs($user)
+            ->delete('/admin/settings/profile', ['password' => 'password'])
+            ->assertMethodNotAllowed();
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect('/');
-
-        $this->assertGuest();
-
-        // الحساب يُؤرشف لا يُمحى: لا يُوجد للنظام بعدها، ويبقى في الأرشيف
-        // لأن ما عُلّق به من سجلات (حجوزات، سندات، قيود) يُنسب إلى فاعله.
-        $this->assertNull(User::find($user->id));
-        $this->assertSoftDeleted('users', ['id' => $user->id]);
-    }
-
-    public function test_correct_password_must_be_provided_to_delete_account()
-    {
-        $user = User::factory()->create();
-
-        $response = $this
-            ->actingAs($user)
-            ->from('/admin/settings/profile')
-            ->delete('/admin/settings/profile', [
-                'password' => 'wrong-password',
-            ]);
-
-        $response
-            ->assertSessionHasErrors('password')
-            ->assertRedirect('/admin/settings/profile');
-
+        $this->assertAuthenticatedAs($user);
         $this->assertNotNull($user->fresh());
     }
 }

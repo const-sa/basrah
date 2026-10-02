@@ -80,7 +80,7 @@ class CostCentersTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('admin/accounting/CostCenterStatement')
                 ->where('statement.profit', 500)
-                ->where('statement.total_debit', 1100.0)
+                ->where('statement.total_debit', 1100)
                 ->has('breakdown', 2),
             );
     }
