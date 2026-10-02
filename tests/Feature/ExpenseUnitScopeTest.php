@@ -380,25 +380,27 @@ class ExpenseUnitScopeTest extends TestCase
     }
 
     /**
-     * The accounting has no unit either: its staff record on the
-     * administration's centre, and see that centre's spend only.
+     * Anyone in the accounting follows the spend of every department and
+     * charges any of them — by the department's role, not a per-account tick.
      */
-    public function test_an_accounting_employee_records_on_the_administration_centre(): void
+    public function test_an_accounting_employee_sees_and_charges_every_department(): void
     {
-        $adminCenter = CostCenter::forDepartment(Department::where('code', 'ADMIN')->firstOrFail());
+        $hallCenter = CostCenter::forUnit($this->unitOfType('hall'));
+        $poolCenter = CostCenter::forDepartment(Department::where('code', 'POOLS')->firstOrFail());
 
-        $this->spendOn($adminCenter, 150);
-        $this->spendOn(CostCenter::forUnit($this->unitOfType('hall')), 900);
+        $this->spendOn($hallCenter, 900);
+        $this->spendOn($poolCenter, 150);
 
         $user = $this->roleUser(['expenses.view', 'expenses.create']);
 
-        $this->assertSame([$adminCenter->id], $user->accessibleCostCenterIds());
+        $this->assertFalse((bool) $user->has_all_units);
+        $this->assertNull($user->accessibleCostCenterIds());
 
         $this->actingAs($user)->get('/admin/accounting/expenses')
-            ->assertInertia(fn ($p) => $p->has('expenses.data', 1)->where('stats.total', 150)->has('costCenters', 1));
+            ->assertInertia(fn ($p) => $p->has('expenses.data', 2)->where('stats.total', 1050)->where('scoped', false));
 
         $this->actingAs($user)
-            ->post('/admin/accounting/expenses', $this->payload($adminCenter->id))
+            ->post('/admin/accounting/expenses', $this->payload($poolCenter->id))
             ->assertSessionHasNoErrors();
     }
 

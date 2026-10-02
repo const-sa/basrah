@@ -159,7 +159,7 @@ class User extends Authenticatable
     {
         $unitIds = $this->accessibleUnitIds();
 
-        if ($unitIds === null) {
+        if ($unitIds === null || $this->isAccountingDepartment()) {
             return null;
         }
 
@@ -230,12 +230,26 @@ class User extends Authenticatable
     }
 
     /**
+     * The accounting department follows the spend of every department and
+     * charges any of them — everyone in it, not one account ticked by hand.
+     * It is the role that opens the accounting and no activity: a supervisor
+     * who records his unit's spend in the ledger stays on his unit.
+     */
+    private function isAccountingDepartment(): bool
+    {
+        $systems = $this->accessibleSystems();
+
+        return in_array('accounting', $systems, true)
+            && ! array_intersect(ActivitySegment::activities(), $systems);
+    }
+
+    /**
      * The department each system's work belongs to — the pools have no unit,
-     * and the office systems (accounting, HR, administration) have none either.
+     * and the office systems (HR, administration) have none either. The
+     * accounting is absent: it sees every centre (accessibleCostCenterIds).
      */
     private const SYSTEM_DEPARTMENTS = [
         ActivitySegment::POOLS => ActivitySegment::POOLS_DEPARTMENT,
-        'accounting' => 'ADMIN',
         'hr' => 'ADMIN',
         'system' => 'ADMIN',
     ];

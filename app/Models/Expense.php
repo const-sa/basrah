@@ -125,10 +125,12 @@ class Expense extends Model
      */
     public function scopeVisibleTo(Builder $query, ?User $user): Builder
     {
-        if ($user?->seesAllUnits()) {
-            return $query;
+        if (! $user) {
+            return $query->whereRaw('1 = 0');
         }
 
-        return $query->whereIn('cost_center_id', $user?->accessibleCostCenterIds() ?? []);
+        $allowed = $user->accessibleCostCenterIds();
+
+        return $allowed === null ? $query : $query->whereIn('cost_center_id', $allowed);
     }
 }
