@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import UploadProgress from '@/components/UploadProgress.vue';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Ban, CheckCircle2, Download, Paperclip, PencilLine, Plus, Power, Receipt, Tags, Trash2, X } from 'lucide-vue-next';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { Ban, CheckCircle2, Link2, Download, Paperclip, PencilLine, Plus, Power, Receipt, Tags, Trash2, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 interface Expense {
@@ -142,6 +143,13 @@ const clearAttachment = () => {
 // business outside their units, and an activity's register holds that
 // activity's spending — a general expense belongs to neither.
 const centerRequired = computed(() => props.scoped || props.activity !== null);
+
+// A required centre with nothing to pick: the form cannot be saved, so the
+// operator is shown why and sent to where it is fixed instead of a bare error.
+const { can: hasPermission } = usePermissions();
+const page = usePage();
+const authUserId = computed(() => (page.props.auth as { user?: { id: number } } | undefined)?.user?.id ?? null);
+const noCenters = computed(() => centerRequired.value && props.costCenters.length === 0);
 
 const defaultCenter = computed(() => (centerRequired.value ? (props.costCenters[0]?.id ?? null) : null));
 
@@ -604,6 +612,29 @@ const removeCategory = (category: Category) => {
                             <option v-for="c in centerOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </select>
                         <p v-if="form.errors.cost_center_id" class="mt-1 text-xs font-bold text-red-600">{{ form.errors.cost_center_id }}</p>
+                        <div v-if="noCenters" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-medium leading-5 text-amber-900">
+                            <template v-if="scoped">
+                                حسابك غير مربوط بأي وحدة أو قسم، فلا يمكن تحميل المصروف على شيء.
+                                <span v-if="!hasPermission('employees.edit')" class="block font-bold">اطلب من مدير النظام ربط حسابك بوحدة من شاشة الموظفين.</span>
+                                <Link
+                                    v-else-if="authUserId"
+                                    :href="`/admin/employees?edit=${authUserId}`"
+                                    class="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 font-bold text-white hover:bg-amber-700"
+                                >
+                                    <Link2 class="h-3.5 w-3.5" /> ربط حسابي بوحدة
+                                </Link>
+                            </template>
+                            <template v-else>
+                                لا يوجد مركز تكلفة لهذا النشاط بعد.
+                                <Link
+                                    v-if="hasPermission('cost_centers.view')"
+                                    href="/admin/accounting/cost-centers"
+                                    class="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 font-bold text-white hover:bg-amber-700"
+                                >
+                                    <Link2 class="h-3.5 w-3.5" /> مراكز التكلفة
+                                </Link>
+                            </template>
+                        </div>
                     </div>
 
                     <div>

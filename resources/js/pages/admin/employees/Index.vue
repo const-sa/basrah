@@ -5,7 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { FlaskConical, Lock, Pencil, Plus, Power, Search, Trash2, UserCheck, Users, UserX, X } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 interface Role { id: number; name: string; slug: string; }
 interface UnitOption { id: number; name: string; code: string; type: string }
@@ -48,6 +48,8 @@ const props = defineProps<{
     filters: { q: string };
     stats: EmployeeStats;
     demo: DemoPanel;
+    /** ?edit=ID: مستخدمٌ تُفتح نافذة تعديله فور الدخول. */
+    editTarget: UserRow | null;
 }>();
 
 const systemLabel = (key: string) => props.systemLabels.find((s) => s.key === key)?.label ?? key;
@@ -107,6 +109,11 @@ const openEdit = (u: UserRow) => {
     form.unit_ids = [...u.unit_ids];
     showModal.value = true;
 };
+
+// وصلنا من شاشةٍ تعثّرت لأن الحساب بلا وحدة — نافذته تُفتح مباشرةً.
+onMounted(() => {
+    if (props.editTarget) openEdit(props.editTarget);
+});
 
 const toggleUnit = (id: number) => {
     const i = form.unit_ids.indexOf(id);

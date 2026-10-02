@@ -31,23 +31,7 @@ class UsersController extends Controller
             ->latest('id')
             ->paginate(10)
             ->withQueryString()
-            ->through(fn ($u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-                'email' => $u->email,
-                'role' => $u->role?->name,
-                'role_id' => $u->role_id,
-                'employee_id' => $u->employee_id,
-                'employee_name' => $u->employee?->name,
-                'is_active' => (bool) $u->is_active,
-                'is_demo' => (bool) $u->is_demo,
-                'has_all_units' => (bool) $u->has_all_units,
-                'is_super_admin' => $u->isSuperAdmin(),
-                'unit_ids' => $u->units->pluck('id')->all(),
-                'unit_names' => $u->units->pluck('name')->all(),
-                'systems' => $u->accessibleSystems(),
-                'created_at' => $u->created_at?->toDateString(),
-            ]);
+            ->through(fn (User $u) => $this->row($u));
 
         $stats = [
             'total' => User::count(),
@@ -69,7 +53,44 @@ class UsersController extends Controller
             'filters' => ['q' => $search],
             'stats' => $stats,
             'demo' => DemoAccountsController::panelData(),
+            // ?edit=ID يفتح نافذة تعديل مستخدمٍ بعينه وإن لم يكن في الصفحة
+            // الأولى — تصل إليه شاشةٌ تعثّر فيها لأن حسابه بلا وحدة.
+            'editTarget' => $this->editTarget($request->integer('edit')),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function editTarget(int $id): ?array
+    {
+        $user = $id ? User::with(['role:id,name', 'units:id,name,code', 'employee:id,name'])->find($id) : null;
+
+        return $user ? $this->row($user) : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function row(User $u): array
+    {
+        return [
+            'id' => $u->id,
+            'name' => $u->name,
+            'email' => $u->email,
+            'role' => $u->role?->name,
+            'role_id' => $u->role_id,
+            'employee_id' => $u->employee_id,
+            'employee_name' => $u->employee?->name,
+            'is_active' => (bool) $u->is_active,
+            'is_demo' => (bool) $u->is_demo,
+            'has_all_units' => (bool) $u->has_all_units,
+            'is_super_admin' => $u->isSuperAdmin(),
+            'unit_ids' => $u->units->pluck('id')->all(),
+            'unit_names' => $u->units->pluck('name')->all(),
+            'systems' => $u->accessibleSystems(),
+            'created_at' => $u->created_at?->toDateString(),
+        ];
     }
 
     public function store(Request $request): RedirectResponse
