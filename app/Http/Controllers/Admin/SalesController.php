@@ -50,7 +50,7 @@ class SalesController extends Controller
         // السعر. `sales.show` تُجيب بـ JSON للنافذة المنبثقة ولا صفحة خلفها،
         // فالتحويل يقصد هذه القائمة ويُشير إلى فاتورته.
         $openSale = $request->integer('invoice')
-            ? Sale::with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name'])
+            ? Sale::with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name', 'payments.paymentMethod:id,name'])
                 ->find($request->integer('invoice'))
             : null;
 
@@ -59,7 +59,7 @@ class SalesController extends Controller
 
         return Inertia::render('admin/sales/Index', [
             'sales' => (clone $query)
-                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name'])
+                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name', 'payments.paymentMethod:id,name'])
                 ->withSum('returns as returned_amount', 'total_amount')
                 ->latest('sales.id')
                 ->paginate(20)
@@ -118,7 +118,9 @@ class SalesController extends Controller
         return Sale::query()
             ->when($departmentId, fn ($q, $id) => $q->where('sales.department_id', $id))
             ->when($filters['type'], fn ($q, $t) => $q->where('sales.type', $t))
-            ->when($filters['payment_method_id'], fn ($q, $id) => $q->where('sales.payment_method_id', $id))
+            ->when($filters['payment_method_id'], fn ($q, $id) => $q->where(fn ($m) => $m
+                ->where('sales.payment_method_id', $id)
+                ->orWhereHas('payments', fn ($p) => $p->where('payment_method_id', $id))))
             ->when($filters['payment_status'], fn ($q, $s) => $q->paymentStatus($s))
             ->when($filters['from'], fn ($q, $d) => $q->whereDate('sales.created_at', '>=', $d))
             ->when($filters['to'], fn ($q, $d) => $q->whereDate('sales.created_at', '<=', $d))
@@ -146,7 +148,7 @@ class SalesController extends Controller
             fputcsv($out, ['الرقم', 'التاريخ', 'الوقت', 'النوع', 'القسم', 'العميل', 'الجوال', 'الكاشير', 'طريقة الدفع', 'قبل الضريبة', 'الضريبة', 'الإجمالي', 'المرتجع', 'الصافي', 'المدفوع', 'المتبقي', 'حالة السداد']);
 
             $this->filtered($filters)
-                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name'])
+                ->with(['client:id,name,mobile', 'department:id,name', 'user:id,name', 'paymentMethod:id,name', 'payments.paymentMethod:id,name'])
                 ->orderByDesc('sales.id')
                 ->chunk(500, function ($chunk) use ($out) {
                     foreach ($chunk as $sale) {

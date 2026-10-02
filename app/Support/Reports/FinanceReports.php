@@ -80,9 +80,13 @@ class FinanceReports
                     ->sales()
                     ->when($filters['from'] ?? null, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
                     ->when($filters['to'] ?? null, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
-                    ->with('paymentMethod:id,name')
-                    ->get(['payment_method_id', 'paid_amount'])
-                    ->groupBy(fn (Sale $s) => $s->paymentMethod?->name ?? 'غير محددة');
+                    ->with(['paymentMethod:id,name', 'payments.paymentMethod:id,name'])
+                    ->get(['id', 'payment_method_id', 'paid_amount'])
+                    // A split invoice counts under each of its methods, by its part.
+                    ->flatMap(fn (Sale $s) => $s->payments->isNotEmpty()
+                        ? $s->payments->map(fn ($p) => ['method' => $p->paymentMethod?->name ?? 'غير محددة', 'paid_amount' => (float) $p->amount])
+                        : [['method' => $s->paymentMethod?->name ?? 'غير محددة', 'paid_amount' => (float) $s->paid_amount]])
+                    ->groupBy('method');
 
                 $rows = $payments->keys()->merge($sales->keys())->unique()
                     ->map(function (string $method) use ($payments, $sales) {

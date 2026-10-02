@@ -82,6 +82,8 @@ const form = useForm({
     is_taxable: true,
     discount_amount: 0,
     paid_amount: 0,
+    // جزء نقدًا وجزء شبكة — فارغة ما لم يُختر الدفع المقسَّم.
+    payments: [] as { payment_method_id: number; amount: number }[],
     notes: '',
     // «حفظ وطباعة» — يضبطه زرّه عند الإرسال، فيعيد الخادم رابط الورقة لتُطبع.
     print: false as boolean,
@@ -225,7 +227,40 @@ const selectedMethod = computed(() => props.methods.find((m) => m.id === form.pa
  */
 const autoPaid = computed(() => (selectedMethod.value?.is_credit ? 0 : total.value));
 
-const paidAmount = computed(() => (paidInput.value === null ? autoPaid.value : Math.min(total.value, Math.max(0, paidInput.value))));
+// ── الدفع المقسَّم: جزء نقدًا وجزء شبكة ─────────────────────
+const cashMethod = computed(() => props.methods.find((m) => m.code === 'cash') ?? null);
+const cardMethod = computed(() => props.methods.find((m) => m.code === 'card') ?? null);
+const canSplit = computed(() => cashMethod.value !== null && cardMethod.value !== null);
+
+const splitMode = ref(false);
+const splitCash = ref(0);
+/** null = الشبكة تكمل الباقي تلقائيًا؛ ورقمٌ = مبلغ حدّده الكاشير. */
+const splitCardInput = ref<number | null>(null);
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const cashPart = computed(() => Math.max(0, Number(splitCash.value) || 0));
+const cardPart = computed(() =>
+    splitCardInput.value === null ? Math.max(0, round2(total.value - cashPart.value)) : Math.max(0, Number(splitCardInput.value) || 0),
+);
+const cardField = computed({
+    get: () => Number(cardPart.value.toFixed(2)),
+    set: (v: number) => (splitCardInput.value = Number.isFinite(v) ? v : 0),
+});
+const splitOverTotal = computed(() => splitMode.value && cashPart.value + cardPart.value > total.value + 0.005);
+
+const enableSplit = () => {
+    splitMode.value = true;
+    form.payment_method_id = cashMethod.value?.id ?? form.payment_method_id;
+    splitCash.value = 0;
+    splitCardInput.value = null;
+    paidInput.value = null;
+};
+
+const paidAmount = computed(() => {
+    if (splitMode.value) return Math.min(total.value, round2(cashPart.value + cardPart.value));
+
+    return paidInput.value === null ? autoPaid.value : Math.min(total.value, Math.max(0, paidInput.value));
+});
 
 /** الحقل يقرأ المحسوب ويكتب في التحديد اليدوي. */
 const paidField = computed({
@@ -246,13 +281,14 @@ const paymentStatus = computed(() => {
 const changeMethod = (id: number) => {
     form.payment_method_id = id;
     paidInput.value = null;
+    splitMode.value = false;
 };
 
 /** الدَّين على العميل النقدي لا يُتابَع باسم — ننبّه دون منع. */
 const debtOnWalkIn = computed(() => remaining.value > 0.005 && (form.client_id === null || form.client_id === props.defaultClientId));
 
 const submit = (print = false) => {
-    if (!filledLines.value.length || hasStockIssue.value) return;
+    if (!filledLines.value.length || hasStockIssue.value || splitOverTotal.value) return;
 
     form.print = print;
 
@@ -264,6 +300,13 @@ const submit = (print = false) => {
     }));
 
     form.paid_amount = paidAmount.value;
+    form.payments =
+        splitMode.value && cashMethod.value && cardMethod.value
+            ? [
+                  { payment_method_id: cashMethod.value.id, amount: round2(cashPart.value) },
+                  { payment_method_id: cardMethod.value.id, amount: round2(cardPart.value) },
+              ]
+            : [];
 
     form.post('/admin/pos/checkout', {
         preserveScroll: true,
@@ -271,6 +314,7 @@ const submit = (print = false) => {
             lines.value = [emptyLine()];
             lastGroup.value = null;
             paidInput.value = null;
+            splitMode.value = false;
             // Tax returns to the common case with the next invoice: an exemption
             // belongs to one buyer, and leaving it latched would untax the next
             // customer without anyone meaning to.
@@ -350,13 +394,46 @@ const numField =
                                     @click="changeMethod(m.id)"
                                     class="flex-1 rounded-lg py-2 text-xs font-extrabold transition"
                                     :class="
-                                        form.payment_method_id === m.id
+                                        !splitMode && form.payment_method_id === m.id
                                             ? 'bg-emerald-800 text-white shadow'
                                             : 'border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-200'
                                     "
                                 >
                                     {{ m.label }}
                                 </button>
+                            </div>
+                            <button
+                                v-if="canSplit"
+                                type="button"
+                                @click="enableSplit"
+                                class="mt-1 w-full rounded-lg py-2 text-xs font-extrabold transition"
+                                :class="splitMode ? 'bg-emerald-800 text-white shadow' : 'border-2 border-slate-400 bg-white text-slate-900 hover:bg-slate-200'"
+                            >
+                                {{ cashMethod?.label }} + {{ cardMethod?.label }}
+                            </button>
+                            <div v-if="splitMode" class="mt-2 grid grid-cols-2 gap-2">
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-extrabold text-slate-800">{{ cashMethod?.label }}</span>
+                                    <input
+                                        v-model.number="splitCash"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        class="w-full rounded-lg border-2 border-slate-400 px-2 py-1.5 text-left text-sm font-extrabold text-slate-950 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                    />
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1 block text-[11px] font-extrabold text-slate-800">{{ cardMethod?.label }}</span>
+                                    <input
+                                        v-model.number="cardField"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        class="w-full rounded-lg border-2 border-slate-400 px-2 py-1.5 text-left text-sm font-extrabold text-slate-950 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                    />
+                                </label>
+                                <p v-if="splitOverTotal" class="col-span-2 text-[11px] font-bold text-red-700">مجموع الجزأين أكبر من صافي الفاتورة.</p>
+                                <p v-if="form.errors.payments" class="col-span-2 text-[11px] font-bold text-red-700">{{ form.errors.payments }}</p>
                             </div>
                         </div>
 
@@ -579,8 +656,9 @@ const numField =
                             <div class="mt-2 flex items-center justify-between border-t-2 border-slate-200 pt-2">
                                 <span class="font-extrabold text-slate-800">المدفوع</span>
                                 <div class="flex items-center gap-1">
+                                    <span v-if="splitMode" class="text-base font-extrabold text-slate-950" dir="ltr">{{ money(paidAmount) }}</span>
                                     <button
-                                        v-if="paidInput !== null"
+                                        v-else-if="paidInput !== null"
                                         type="button"
                                         @click="paidInput = null"
                                         title="إعادة المدفوع إلى تلقائي طريقة الدفع"
@@ -589,6 +667,7 @@ const numField =
                                         تلقائي
                                     </button>
                                     <input
+                                        v-if="!splitMode"
                                         v-model.number="paidField"
                                         type="number"
                                         min="0"

@@ -219,8 +219,30 @@ class Sale extends Model
         return $this->belongsTo(PaymentMethod::class);
     }
 
+    /**
+     * أجزاء المقبوض حين قُسِم على أكثر من طريقة — فارغةٌ للفاتورة بطريقة واحدة.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SalePayment::class);
+    }
+
+    public function isSplit(): bool
+    {
+        return $this->payments->isNotEmpty();
+    }
+
+    /**
+     * طريقة الدفع كما تُقرأ: «نقدًا» أو «نقدًا 30.00 + شبكة 20.00».
+     */
     public function methodLabel(): string
     {
+        if ($this->isSplit()) {
+            return $this->payments
+                ->map(fn (SalePayment $p) => ($p->paymentMethod?->name ?? '—').' '.number_format((float) $p->amount, 2))
+                ->implode(' + ');
+        }
+
         return $this->paymentMethod?->name ?? '—';
     }
 

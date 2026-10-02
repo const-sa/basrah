@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\PaymentMethod;
+use App\Models\SalePayment;
 use App\Models\Sale;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\PaymentMethodAccounts;
@@ -39,6 +40,7 @@ class SalesService
      *     lines: list<array{item_id:int, quantity:float, unit_price?:float, discount_amount?:float, taxable?:bool}>,
      *     client_id?:int|null, unit_id?:int|null, booking_id?:int|null, quotation_id?:int|null,
      *     payment_method_id?:int|null, discount_amount?:float, paid_amount?:float|null,
+     *     payments?:list<array{payment_method_id:int, amount:float}>|null,
      *     is_taxable?:bool, notes?:string|null
      * }  $data
      *
@@ -50,9 +52,24 @@ class SalesService
             throw new RuntimeException('لا يمكن إتمام فاتورة بلا أصناف.');
         }
 
-        $method = isset($data['payment_method_id'])
-            ? PaymentMethod::findOrFail($data['payment_method_id'])
-            : PaymentMethod::default();
+        $split = $this->splitPayments($data['payments'] ?? null);
+
+        // One part only is a plain sale by that method for that amount.
+        if ($split === [] && count($single = array_values(array_filter(
+            $data['payments'] ?? [],
+            fn (array $p) => (float) $p['amount'] > 0,
+        ))) === 1) {
+            $data['payment_method_id'] = $single[0]['payment_method_id'];
+            $data['paid_amount'] = $single[0]['amount'];
+        }
+
+        // A split sale is filed under its first method, so every screen that
+        // reads one method per invoice still finds one; its parts say the rest.
+        $method = match (true) {
+            $split !== [] => PaymentMethod::findOrFail($split[0]['payment_method_id']),
+            isset($data['payment_method_id']) => PaymentMethod::findOrFail($data['payment_method_id']),
+            default => PaymentMethod::default(),
+        };
 
         // Whether tax is due at all belongs to the invoice, not to the catalogue:
         // the same item is sold with tax to one buyer and without it to an exempt
@@ -60,7 +77,7 @@ class SalesService
         // agreed — so the invoice's answer outranks every rate on it.
         $taxable = (bool) ($data['is_taxable'] ?? true);
 
-        return DB::transaction(function () use ($data, $userId, $method, $taxable) {
+        return DB::transaction(function () use ($data, $userId, $method, $taxable, $split) {
             $sale = Sale::create([
                 'number' => $this->nextNumber('sale'),
                 'user_id' => $userId,
@@ -87,8 +104,14 @@ class SalesService
                 'discount_amount' => $discount,
                 'total_amount' => $total,
                 'cost_amount' => $cost,
-                'paid_amount' => $this->resolvePaidAmount($data, $total, $method),
+                'paid_amount' => $split !== []
+                    ? $this->splitPaidAmount($split, $total)
+                    : $this->resolvePaidAmount($data, $total, $method),
             ]);
+
+            foreach ($split as $part) {
+                $sale->payments()->create($part);
+            }
 
             $this->postSaleEntry($sale->fresh());
 
@@ -112,6 +135,56 @@ class SalesService
         }
 
         return round(min($total, max(0, (float) $data['paid_amount'])), 2);
+    }
+
+    /**
+     * The parts of a payment split between methods — cash and card. Fewer than
+     * two parts is no split: the single method and paid amount say it all.
+     *
+     * @param  list<array<string, mixed>>|null  $payments
+     * @return list<array{payment_method_id:int, amount:float}>
+     */
+    private function splitPayments(?array $payments): array
+    {
+        $parts = collect($payments ?? [])
+            ->map(fn (array $p) => [
+                'payment_method_id' => (int) $p['payment_method_id'],
+                'amount' => round((float) $p['amount'], 2),
+            ])
+            ->filter(fn (array $p) => $p['amount'] > 0)
+            ->values();
+
+        if ($parts->count() < 2) {
+            return [];
+        }
+
+        // On account is what stays unpaid, not a way the money came in.
+        if (PaymentMethod::whereIn('id', $parts->pluck('payment_method_id'))->where('is_credit', true)->exists()) {
+            throw ValidationException::withMessages([
+                'payments' => 'الدفع المقسَّم يكون بطرق تُقبض فورًا — المتبقي يُقيَّد على العميل تلقائيًا.',
+            ]);
+        }
+
+        return $parts->all();
+    }
+
+    /**
+     * What a split payment collected — the sum of its parts, which may not
+     * exceed the invoice: more than the total is change, not revenue.
+     *
+     * @param  list<array{payment_method_id:int, amount:float}>  $split
+     */
+    private function splitPaidAmount(array $split, float $total): float
+    {
+        $paid = round(array_sum(array_column($split, 'amount')), 2);
+
+        if ($paid > $total + 0.005) {
+            throw ValidationException::withMessages([
+                'payments' => 'مجموع الدفعات ('.number_format($paid, 2).') أكبر من إجمالي الفاتورة ('.number_format($total, 2).').',
+            ]);
+        }
+
+        return $paid;
     }
 
     /**
@@ -204,10 +277,44 @@ class SalesService
                 'paid_amount' => $total,
             ]);
 
+            foreach ($this->refundParts($original, $total) as $part) {
+                $return->payments()->create($part);
+            }
+
             $this->postReturnEntry($return->fresh());
 
             return $return->fresh(['lines.item']);
         });
+    }
+
+    /**
+     * A split invoice is refunded the way it was paid: each method gives back
+     * its share of the refund, the last one taking the rounding.
+     *
+     * @return list<array{payment_method_id:int, amount:float}>
+     */
+    private function refundParts(Sale $original, float $total): array
+    {
+        $parts = $original->payments()->orderBy('id')->get()->values();
+        $paid = (float) $parts->sum('amount');
+
+        if ($parts->count() < 2 || $paid <= 0) {
+            return [];
+        }
+
+        $refund = [];
+        $left = $total;
+
+        foreach ($parts as $i => $part) {
+            $amount = $i === $parts->count() - 1 ? $left : round($total * (float) $part->amount / $paid, 2);
+            $left = round($left - $amount, 2);
+
+            if ($amount > 0) {
+                $refund[] = ['payment_method_id' => (int) $part->payment_method_id, 'amount' => $amount];
+            }
+        }
+
+        return $refund;
     }
 
     /**
@@ -337,22 +444,16 @@ class SalesService
         // المقبوض يدخل حيث قرّر المشغّل لهذا النشاط — حساب المسابح البنكي
         // مثلًا. فإن لم يحدّد، فبحسب أداة الدفع؛ والآجل المدفوع جزئيًا نقدُه
         // في الصندوق (لذلك «على الحساب» تحمل deposits_to = cash).
-        $method = $sale->paymentMethod()->firstOrFail();
-
-        $collectedAccount = $this->paymentMethodAccounts->resolveForInvoiceCenter($costCenter, $method)
-            ?? $this->revenueAccounts->depositForInvoiceCenter($costCenter)
-            ?? $method->ledgerAccount();
-
         $lines = [];
 
-        if ($due > 0) {
-            if ($paid > 0) {
-                $lines[] = ['account' => $collectedAccount, 'debit' => $paid, 'cost_center_id' => $costCenter];
-            }
+        // Split between methods, each part lands where its own method sends
+        // the money: the cash in the till, the card in the bank.
+        foreach ($this->collectedParts($sale, $paid) as [$method, $amount]) {
+            $lines[] = ['account' => $this->collectedAccount($costCenter, $method), 'debit' => $amount, 'cost_center_id' => $costCenter];
+        }
 
+        if ($due > 0) {
             $lines[] = ['account' => Ledger::RECEIVABLES, 'debit' => $due, 'cost_center_id' => $costCenter];
-        } else {
-            $lines[] = ['account' => $collectedAccount, 'debit' => $total, 'cost_center_id' => $costCenter];
         }
 
         // The pools invoice their own work, and the operator may keep that
@@ -387,17 +488,17 @@ class SalesService
         // الآجل يعود على ذمة العميل لا على الخزينة — المال لم يُقبض منه أصلًا.
         // وما قُبض فعلًا يخرج من حيث دخل: حساب إيداع النشاط إن حُدِّد، وإلا
         // فحساب أداة الدفع.
-        $method = $return->paymentMethod()->firstOrFail();
-        $creditAccount = $method->is_credit
-            ? $method->refundAccount()
-            : ($this->paymentMethodAccounts->resolveForInvoiceCenter($costCenter, $method)
-                ?? $this->revenueAccounts->depositForInvoiceCenter($costCenter)
-                ?? $method->refundAccount());
-
         $lines = [
             ['account' => $this->returnedRevenueAccount($return, $costCenter), 'debit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],
-            ['account' => $creditAccount, 'credit' => (float) $return->total_amount, 'cost_center_id' => $costCenter],
         ];
+
+        foreach ($this->collectedParts($return, (float) $return->total_amount) as [$method, $amount]) {
+            $lines[] = [
+                'account' => $method->is_credit ? $method->refundAccount() : $this->collectedAccount($costCenter, $method, refund: true),
+                'credit' => $amount,
+                'cost_center_id' => $costCenter,
+            ];
+        }
 
         if ((float) $return->cost_amount > 0) {
             $lines[] = ['account' => Ledger::INVENTORY, 'debit' => (float) $return->cost_amount, 'cost_center_id' => $costCenter];
@@ -412,6 +513,34 @@ class SalesService
             $return,
             $return->user_id,
         );
+    }
+
+    /**
+     * What came in (or goes back) by each method: the parts of a split sale,
+     * or the whole amount by its one method.
+     *
+     * @return list<array{0: PaymentMethod, 1: float}>
+     */
+    private function collectedParts(Sale $sale, float $amount): array
+    {
+        $parts = $sale->payments()->with('paymentMethod')->orderBy('id')->get();
+
+        if ($parts->isNotEmpty()) {
+            return $parts->map(fn (SalePayment $p) => [$p->paymentMethod, (float) $p->amount])->all();
+        }
+
+        return $amount > 0 ? [[$sale->paymentMethod()->firstOrFail(), $amount]] : [];
+    }
+
+    /**
+     * Where money taken by a method lands for this centre: the account the
+     * operator chose for it, else the activity's deposit, else the method's own.
+     */
+    private function collectedAccount(int $costCenter, PaymentMethod $method, bool $refund = false): int|string
+    {
+        return $this->paymentMethodAccounts->resolveForInvoiceCenter($costCenter, $method)
+            ?? $this->revenueAccounts->depositForInvoiceCenter($costCenter)
+            ?? ($refund ? $method->refundAccount() : $method->ledgerAccount());
     }
 
     /**

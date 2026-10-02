@@ -150,7 +150,7 @@ class UnitWorkspaceController extends Controller
     private function invoices(Unit $unit): array
     {
         return Sale::where('unit_id', $unit->id)
-            ->with(['client:id,name', 'paymentMethod:id,name'])
+            ->with(['client:id,name', 'paymentMethod:id,name', 'payments.paymentMethod:id,name'])
             ->latest('id')
             ->limit(15)
             ->get()

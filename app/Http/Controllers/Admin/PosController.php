@@ -92,7 +92,7 @@ class PosController extends Controller
             'methods' => PaymentMethod::options(),
             // آخر فواتير المستخدم نفسه.
             'recentSales' => Sale::where('user_id', $user->id)
-                ->with('paymentMethod:id,name')
+                ->with(['paymentMethod:id,name', 'payments.paymentMethod:id,name'])
                 ->latest('id')->limit(10)->get()->map(fn (Sale $s) => [
                     'id' => $s->id,
                     'number' => $s->number,
@@ -124,6 +124,10 @@ class PosController extends Controller
             // المقبوض عند الإصدار — يُحدّه الإجمالي في الخدمة لا هنا، فالإجمالي
             // لا يُحسب إلا بعد بناء السطور.
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
+            // جزء نقدًا وجزء شبكة — كل جزء بطريقته، ومجموعها هو المقبوض.
+            'payments' => ['nullable', 'array', 'max:4'],
+            'payments.*.payment_method_id' => ['required', Rule::exists('payment_methods', 'id')->where('is_active', true)],
+            'payments.*.amount' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
