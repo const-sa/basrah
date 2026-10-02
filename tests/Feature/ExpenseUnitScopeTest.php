@@ -312,6 +312,76 @@ class ExpenseUnitScopeTest extends TestCase
         $this->assertNotContains($poolCenter->id, $user->accessibleCostCenterIds());
     }
 
+    /**
+     * The fix the pools had, for the halls: an employee whose role opens the
+     * halls with no hall ticked sees every hall's spend and may add to it —
+     * and still nothing of the chalets or the pools.
+     */
+    public function test_a_halls_employee_without_a_ticked_unit_sees_and_adds_the_halls_expenses(): void
+    {
+        $hall = $this->unitOfType('hall');
+        $hallCenter = CostCenter::forUnit($hall);
+
+        $this->spendOn($hallCenter, 400);
+        $this->spendOn(CostCenter::forUnit($this->unitOfType('chalet')), 700);
+
+        $user = $this->roleUser(['hall_expenses.view', 'hall_expenses.create']);
+
+        $this->actingAs($user)->get('/admin/halls/expenses')
+            ->assertInertia(fn ($p) => $p->has('expenses.data', 1)->where('stats.total', 400));
+
+        $this->actingAs($user)
+            ->post('/admin/accounting/expenses', $this->payload($hallCenter->id))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->post('/admin/accounting/expenses', $this->payload(CostCenter::forUnit($this->unitOfType('chalet'))->id))
+            ->assertSessionHasErrors('cost_center_id');
+
+        $this->assertSame(2, Expense::where('cost_center_id', $hallCenter->id)->count());
+    }
+
+    public function test_a_chalets_employee_without_a_ticked_unit_sees_the_chalets_expenses(): void
+    {
+        $this->spendOn(CostCenter::forUnit($this->unitOfType('chalet')), 250);
+        $this->spendOn(CostCenter::forUnit($this->unitOfType('hall')), 900);
+
+        $user = $this->roleUser(['chalet_expenses.view', 'chalet_expenses.create']);
+
+        $this->actingAs($user)->get('/admin/chalets/expenses')
+            ->assertInertia(fn ($p) => $p->has('expenses.data', 1)->where('stats.total', 250));
+    }
+
+    /**
+     * A ticked hall still narrows the halls to that hall.
+     */
+    public function test_a_ticked_unit_still_narrows_the_activity_to_it(): void
+    {
+        [$mine, $other] = Unit::where('type', 'hall')->take(2)->get()->all();
+
+        $user = $this->roleUser(['hall_expenses.view']);
+        $user->units()->sync([$mine->id]);
+
+        $this->assertContains(CostCenter::forUnit($mine)->id, $user->accessibleCostCenterIds());
+        $this->assertNotContains(CostCenter::forUnit($other)->id, $user->accessibleCostCenterIds());
+    }
+
+    /**
+     * A role opens the systems its permissions belong to.
+     *
+     * @param  list<string>  $permissions
+     */
+    private function roleUser(array $permissions): User
+    {
+        $role = Role::create([
+            'name' => 'موظف قسم',
+            'slug' => 'staff-'.fake()->unique()->numberBetween(1, 99999),
+            'permissions' => $permissions,
+        ]);
+
+        return User::factory()->create(['role_id' => $role->id, 'is_active' => true, 'has_all_units' => false]);
+    }
+
     private function poolsRole(): Role
     {
         return Role::create([

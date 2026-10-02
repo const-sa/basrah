@@ -163,6 +163,8 @@ class User extends Authenticatable
             return null;
         }
 
+        $unitIds = array_values(array_unique([...$unitIds, ...$this->activityUnitIds($unitIds)]));
+
         $departmentIds = array_values(array_filter([
             $this->employee?->department_id,
             $this->poolsDepartmentId(),
@@ -177,6 +179,41 @@ class User extends Authenticatable
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values()
+            ->all();
+    }
+
+    /**
+     * The units of each activity — halls, chalets — whose system this user's
+     * role opens while no unit of that activity is ticked on the user's card.
+     *
+     * Like the pools below: an employee of a department with no unit ticked
+     * had no centre at all, so the department's expenses were hidden from them
+     * and the form had nothing to charge to. A ticked unit still narrows the
+     * activity to that unit — a supervisor of one hall keeps seeing one hall.
+     *
+     * @param  list<int>  $tickedUnitIds
+     * @return list<int>
+     */
+    private function activityUnitIds(array $tickedUnitIds): array
+    {
+        $systems = $this->accessibleSystems();
+        $tickedTypes = Unit::whereIn('id', $tickedUnitIds)->pluck('type')->unique()->all();
+
+        $openTypes = collect([ActivitySegment::HALLS => 'hall', ActivitySegment::CHALETS => 'chalet'])
+            ->filter(fn (string $type, string $system) => in_array($system, $systems, true) && ! in_array($type, $tickedTypes, true))
+            ->values()
+            ->all();
+
+        if (! $openTypes) {
+            return [];
+        }
+
+        // Each unit's centre is made if no movement has made it yet, so the
+        // form has it to offer — as the pools centre is made below.
+        return Unit::whereIn('type', $openTypes)->get()
+            ->each(fn (Unit $unit) => CostCenter::forUnit($unit))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
             ->all();
     }
 
