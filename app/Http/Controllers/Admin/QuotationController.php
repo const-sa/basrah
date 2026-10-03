@@ -99,8 +99,7 @@ class QuotationController extends Controller
         try {
             $quotation = DB::transaction(function () use ($data, $request) {
                 // Generate a quotation number
-                $last = Quotation::latest('id')->first();
-                $number = 'QT-' . str_pad(($last ? $last->id + 1 : 1), 6, '0', STR_PAD_LEFT);
+                $number = $this->nextNumber();
 
                 // Calculate totals
                 $lines = $this->priceLines($data['items']);
@@ -471,5 +470,22 @@ class QuotationController extends Controller
             'accepted_count' => (clone $query)->where('quotations.status', 'accepted')->count(),
             'pending_count' => (clone $query)->where('quotations.status', 'pending')->count(),
         ];
+    }
+
+    /**
+     * Soft-deleted rows stay in the table and keep their number under the
+     * unique index, so the loop steps over taken numbers rather than trusting
+     * the latest live row — otherwise the insert hits the constraint.
+     */
+    private function nextNumber(): string
+    {
+        $sequence = (int) Quotation::withTrashed()->max('id') + 1;
+
+        do {
+            $number = 'QT-'.str_pad((string) $sequence, 6, '0', STR_PAD_LEFT);
+            $sequence++;
+        } while (Quotation::withTrashed()->where('number', $number)->exists());
+
+        return $number;
     }
 }

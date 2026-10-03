@@ -136,6 +136,24 @@ class QuotationLineTaxChoiceTest extends TestCase
         $this->assertSame('690.00', $quotation->total_amount);
     }
 
+    public function test_a_new_quotation_does_not_reuse_the_number_of_a_deleted_one(): void
+    {
+        $this->actingAs($this->admin)
+            ->post('/admin/quotations', $this->payload(secondLineTaxable: true))
+            ->assertRedirect('/admin/quotations');
+
+        $first = Quotation::latest('id')->firstOrFail();
+        $first->delete();
+
+        $this->actingAs($this->admin)
+            ->post('/admin/quotations', $this->payload(secondLineTaxable: true))
+            ->assertRedirect('/admin/quotations');
+
+        $second = Quotation::latest('id')->firstOrFail();
+
+        $this->assertNotSame($first->number, $second->number);
+    }
+
     public function test_the_choice_is_answered_again_on_every_edit(): void
     {
         $this->actingAs($this->admin)->post('/admin/quotations', $this->payload(secondLineTaxable: true));

@@ -127,8 +127,7 @@ class PurchaseController extends Controller
         try {
             $purchase = DB::transaction(function () use ($data, $inventory, $request) {
                 // Generate a purchase number
-                $lastPurchase = Purchase::latest('id')->first();
-                $number = 'PUR-' . str_pad(($lastPurchase ? $lastPurchase->id + 1 : 1), 6, '0', STR_PAD_LEFT);
+                $number = $this->nextNumber();
 
                 // Calculate totals
                 $subtotal = 0;
@@ -442,5 +441,22 @@ class PurchaseController extends Controller
             'paid' => $collected,
             'remaining' => round(max(0, $purchasesTotal - $collected), 2),
         ];
+    }
+
+    /**
+     * Soft-deleted rows stay in the table and keep their number under the
+     * unique index, so the loop steps over taken numbers rather than trusting
+     * the latest live row — otherwise the insert hits the constraint.
+     */
+    private function nextNumber(): string
+    {
+        $sequence = (int) Purchase::withTrashed()->max('id') + 1;
+
+        do {
+            $number = 'PUR-'.str_pad((string) $sequence, 6, '0', STR_PAD_LEFT);
+            $sequence++;
+        } while (Purchase::withTrashed()->where('number', $number)->exists());
+
+        return $number;
     }
 }
