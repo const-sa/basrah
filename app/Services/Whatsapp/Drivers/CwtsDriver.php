@@ -79,7 +79,7 @@ class CwtsDriver extends Driver
             // النوع يُعلَن دائمًا: بلا ترويسة نوعٍ صحيحة يعرض واتساب المرفق
             // «BIN» فلا يفتحه العميل، ولو كان اسم الملف ينتهي بـ.pdf. وخادمٌ
             // يقدّمه بـapplication/octet-stream يكفي لحدوث ذلك.
-            'mimetype' => $options['mimetype'] ?? MediaType::mimeType($mediaUrl),
+            'mimetype' => $options['mimetype'] ?? ($this->config('send_mimetype', true) ? MediaType::mimeType($mediaUrl) : null),
         ], fn ($value) => $value !== null && $value !== '');
 
         return $this->call(

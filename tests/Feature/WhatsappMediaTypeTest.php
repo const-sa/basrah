@@ -75,6 +75,19 @@ class WhatsappMediaTypeTest extends TestCase
         Http::assertSent(fn ($request) => ! str_contains(urldecode((string) $request->body()), 'mimetype='));
     }
 
+    /** مفتاح الإطفاء يعيد الإرسال إلى سابق عهده بلا نشر كود. */
+    public function test_the_declaration_can_be_switched_off_from_the_env(): void
+    {
+        config()->set('whatsapp.drivers.cwts.send_mimetype', false);
+        app()->forgetInstance(WhatsappManager::class);
+
+        Http::fake(['*' => Http::response(['ok' => true], 200)]);
+
+        $this->gateway()->sendMedia('0551234567', 'مرفق', 'https://example.test/contract.pdf');
+
+        Http::assertSent(fn ($request) => ! str_contains(urldecode((string) $request->body()), 'mimetype='));
+    }
+
     private function gateway()
     {
         return app(WhatsappManager::class)->driver('cwts');
