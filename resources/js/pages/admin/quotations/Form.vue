@@ -24,6 +24,8 @@ interface ItemOption {
 const props = defineProps<{
     departments: { id: number; name: string }[];
     clients: { id: number; name: string }[];
+    /** سجلّات عملاء الأقسام البائعة — يُبنى بها رابط البحث. */
+    client_register: string[];
     items: ItemOption[];
     /** المجموعات المحفوظة — بنود العرض تُملأ بها دفعةً واحدة. */
     groups: ItemGroupOption[];
@@ -43,6 +45,16 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'عروض الأسعار', href: '/admin/quotations' },
     { title: props.quotation ? `تعديل عرض ${props.quotation.id}` : 'عرض سعر جديد', href: '#' },
 ];
+
+// مربّع البحث يبحث في سجلّ القسم البائع وحده — فلا يُقترح عميل قاعة على
+// عرض معدات مسبح. وبلا سجلٍّ يبقى البحث في الدليل كلّه كما كان.
+const clientSearchUrl = computed(() => {
+    const register = props.client_register ?? [];
+
+    return register.length
+        ? `/admin/api/search?type=clients&register=${register.join(',')}`
+        : '/admin/api/search?type=clients';
+});
 
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 const qty = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { maximumFractionDigits: 3 }).format(n ?? 0);
@@ -200,7 +212,7 @@ const submit = (print = false) => {
                         <label class="mb-2 block text-sm font-extrabold text-emerald-950">العميل</label>
                         <AsyncSelect
                             v-model="form.client_id"
-                            api-url="/admin/api/search?type=clients"
+                            :api-url="clientSearchUrl"
                             placeholder="ابحث عن عميل..."
                             :initial-option="
                                 quotation?.client_id

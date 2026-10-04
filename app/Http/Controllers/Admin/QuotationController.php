@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ItemGroupOptionResource;
 use App\Http\Resources\ItemOptionResource;
-use App\Models\ItemGroup;
 use App\Models\Client;
+use App\Models\Department;
+use App\Models\Item;
+use App\Models\ItemGroup;
 use App\Models\PaymentMethod;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
@@ -16,15 +18,15 @@ use App\Services\Whatsapp\WhatsappAccounts;
 use App\Services\WhatsappNotifier;
 use App\Support\Letterhead;
 use App\Support\Vat;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Inertia\Response;
 use RuntimeException;
 
 class QuotationController extends Controller
@@ -57,7 +59,8 @@ class QuotationController extends Controller
                 ->through(fn (Quotation $q) => $this->summarize($q)),
             'stats' => $this->stats(clone $query),
             'filters' => $filters,
-            'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')->limit(300)->get(['id', 'name']),
+            'clients' => $this->clients(),
+            'client_register' => $this->clientRegister(),
             'methods' => PaymentMethod::options(),
         ]);
     }
@@ -65,10 +68,11 @@ class QuotationController extends Controller
     public function create(): Response
     {
         return Inertia::render('admin/quotations/Form', [
-            'departments' => \App\Models\Department::selling()->orderBy('sort_order')->get(['id', 'name']),
-            'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')->limit(300)->get(['id', 'name']),
+            'departments' => Department::selling()->orderBy('sort_order')->get(['id', 'name']),
+            'clients' => $this->clients(),
+            'client_register' => $this->clientRegister(),
             'items' => ItemOptionResource::list(
-                \App\Models\Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+                Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
             ),
             // المجموعات المحفوظة — بنود العرض تُملأ بها دفعةً واحدة.
             'groups' => ItemGroupOptionResource::list(
@@ -149,10 +153,11 @@ class QuotationController extends Controller
 
         return Inertia::render('admin/quotations/Form', [
             'quotation' => $quotation,
-            'departments' => \App\Models\Department::selling()->orderBy('sort_order')->get(['id', 'name']),
-            'clients' => Client::orderByDesc('is_walk_in')->orderBy('name')->limit(300)->get(['id', 'name']),
+            'departments' => Department::selling()->orderBy('sort_order')->get(['id', 'name']),
+            'clients' => $this->clients(),
+            'client_register' => $this->clientRegister(),
             'items' => ItemOptionResource::list(
-                \App\Models\Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
+                Item::where('is_active', true)->with(['category:id,name'])->orderBy('name')->get(),
             ),
             // المجموعات المحفوظة — بنود العرض تُملأ بها دفعةً واحدة.
             'groups' => ItemGroupOptionResource::list(
@@ -217,6 +222,7 @@ class QuotationController extends Controller
     public function destroy(Quotation $quotation)
     {
         $quotation->delete();
+
         return redirect()->route('quotations.index')->with('success', 'تم حذف عرض السعر بنجاح');
     }
 
@@ -229,7 +235,7 @@ class QuotationController extends Controller
             // الفاتورة الصادرة عن العرض — بها يعرف الزر: يُصدر أو يُحيل.
             'invoice:id,quotation_id,number',
         ]);
-        
+
         $data = [
             'quotation' => $this->summarize($quotation) + [
                 'notes' => $quotation->notes,
@@ -487,5 +493,45 @@ class QuotationController extends Controller
         } while (Quotation::withTrashed()->where('number', $number)->exists());
 
         return $number;
+    }
+
+    /**
+     * عملاء الأقسام البائعة وحدها.
+     *
+     * عرض السعر يصدر من قسمٍ يبيع — المسابح اليوم — فسجلّه هو سجلّ عملاء ذلك
+     * القسم. وعميل قاعةٍ في قائمة عرض معدات مسبح اختيارٌ خاطئ ينتظر أن يُفعَل.
+     *
+     * والأقسام تُقرأ من الجدول لا تُكتب هنا: قسمٌ بائع يُضاف غدًا يأتي سجلّه
+     * معه بلا تعديل في هذا الموضع. والعميل النقدي يبقى في القائمة على كل حال
+     * (راجع Client::scopeOfType) — فالبيع المباشر يُحمَّل عليه.
+     *
+     * @return Collection<int, Client>
+     */
+    private function clients(): Collection
+    {
+        return Client::ofType($this->clientRegister())
+            ->orderByDesc('is_walk_in')
+            ->orderBy('name')
+            ->limit(300)
+            ->get(['id', 'name']);
+    }
+
+    /**
+     * سجلّات عملاء الأقسام البائعة — «pool» اليوم.
+     *
+     * تُقرأ من الجدول لا تُكتب هنا: قسمٌ بائع يُضاف غدًا يأتي سجلّه معه. وهي
+     * نفسها التي تسافر إلى الشاشة لتبني بها رابط البحث، فلا يصطفّ مربّع البحث
+     * على سجلٍّ والقائمة على آخر.
+     *
+     * @return list<string>
+     */
+    private function clientRegister(): array
+    {
+        return Department::selling()
+            ->get()
+            ->flatMap(fn (Department $department) => $department->clientTypes() ?? [])
+            ->unique()
+            ->values()
+            ->all();
     }
 }

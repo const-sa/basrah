@@ -7,6 +7,7 @@ use App\Http\Resources\ItemOptionResource;
 use App\Models\Client;
 use App\Models\Item;
 use App\Models\Supplier;
+use App\Support\ClientType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,6 +21,10 @@ class SearchController extends Controller
         switch ($type) {
             case 'clients':
                 $results = Client::query()
+                    // سجلّ النشاط حين تطلبه الشاشة: عرض معدات المسبح يُقدَّم
+                    // لعميل مسبح، وعميل القاعة في قائمته اختيارٌ خاطئ ينتظر
+                    // أن يُفعَل. وبلا المعامل يبقى البحث في الدليل كلّه كما كان.
+                    ->ofType($this->register($request))
                     ->when($query, function ($q) use ($query) {
                         $q->where('name', 'like', "%{$query}%")
                             ->orWhere('mobile', 'like', "%{$query}%")
@@ -73,5 +78,23 @@ class SearchController extends Controller
         }
 
         return response()->json($results);
+    }
+
+    /**
+     * سجلّات العملاء المطلوبة في ?register=pool أو ?register=hall,chalet.
+     *
+     * ما لا يُعرف من الأنواع يُطرح لا يُرفض الطلب كلّه: معاملٌ مكتوبٌ خطأً
+     * يردّ الدليل كاملًا كما كان قبل هذا المعامل، ولا يترك الشاشة فارغة.
+     *
+     * @return list<string>
+     */
+    private function register(Request $request): array
+    {
+        $asked = array_filter(array_map(
+            'trim',
+            explode(',', $request->string('register')->toString()),
+        ));
+
+        return array_values(array_intersect($asked, ClientType::keys()));
     }
 }
