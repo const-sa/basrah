@@ -33,7 +33,6 @@ use App\Http\Controllers\Admin\HallMonthCalendarController;
 use App\Http\Controllers\Admin\HrController;
 use App\Http\Controllers\Admin\ItemGroupsController;
 use App\Http\Controllers\Admin\ItemsController;
-use App\Http\Controllers\Admin\StockIssuesController;
 use App\Http\Controllers\Admin\MeasureUnitsController;
 use App\Http\Controllers\Admin\NotificationsController;
 use App\Http\Controllers\Admin\NotificationTemplatesController;
@@ -52,15 +51,16 @@ use App\Http\Controllers\Admin\RolesController;
 use App\Http\Controllers\Admin\SalesController;
 use App\Http\Controllers\Admin\SearchController;
 use App\Http\Controllers\Admin\SectionHubController;
+use App\Http\Controllers\Admin\StockIssuesController;
 use App\Http\Controllers\Admin\SuppliersController;
+use App\Http\Controllers\Admin\SystemUpdateController;
 use App\Http\Controllers\Admin\TaxSettingsController;
 use App\Http\Controllers\Admin\TicketsController;
 use App\Http\Controllers\Admin\UnitsController;
 use App\Http\Controllers\Admin\UnitWorkspaceController;
 use App\Http\Controllers\Admin\UsersController;
-use App\Http\Controllers\Admin\WhatsappLogController;
-use App\Http\Controllers\Admin\SystemUpdateController;
 use App\Http\Controllers\Admin\WhatsappAccountsController;
+use App\Http\Controllers\Admin\WhatsappLogController;
 use App\Http\Controllers\Admin\WhatsappSettingsController;
 use App\Http\Controllers\Site\OnlineBookingController;
 use App\Http\Controllers\Site\SiteController;
@@ -309,6 +309,9 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::delete('sales/{sale}', [SalesController::class, 'destroy'])->middleware('perm:sales.delete')->name('sales.destroy');
         Route::post('sales/{sale}/settle', [SalesController::class, 'settle'])->middleware('perm:sales.create')->name('sales.settle');
         Route::post('sales/{sale}/refund', [SalesController::class, 'refund'])->middleware('perm:sales.create')->name('sales.refund');
+        // ورقة الفاتورة وإرسالها: العميل الذي يسحب طلباته شهريًا يُحاسَب على ورقة.
+        Route::get('sales/{sale}/pdf', [SalesController::class, 'pdf'])->middleware('perm:sales.view')->name('sales.pdf');
+        Route::post('sales/{sale}/send', [SalesController::class, 'send'])->middleware(['perm:sales.view', 'perm:whatsapp.send'])->name('sales.send');
 
         Route::get('items', [ItemsController::class, 'index'])->middleware('perm:items.view')->name('items.index');
         Route::post('items', [ItemsController::class, 'store'])->middleware('perm:items.create')->name('items.store');

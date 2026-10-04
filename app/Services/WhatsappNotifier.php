@@ -8,6 +8,7 @@ use App\Models\BookingPayment;
 use App\Models\Contract;
 use App\Models\NotificationTemplate;
 use App\Models\Quotation;
+use App\Models\Sale;
 use App\Models\Voucher;
 use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
@@ -358,6 +359,46 @@ class WhatsappNotifier
             ]));
 
         return $this->send($booking->client?->mobile, $body, 'invoice', $booking, $userId, $pdfUrl);
+    }
+
+    /**
+     * فاتورة المبيعات — للعميل الذي يسحب طلباته ويُحاسَب عليها لاحقًا.
+     *
+     * تُقرأ من قالب «الفاتورة» في مكتبة الإشعارات بقسم المسابح إن وُجد، وإلا
+     * من القسم العام، وإلا من النصّ أدناه. ومتغيّراتها متغيّرات الفاتورة لا
+     * الحجز: لا وحدة ولا تاريخ مناسبة، بل رقمها وإجماليها وما بقي عليها.
+     */
+    public function saleInvoice(Sale $sale, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
+    {
+        $sale->loadMissing(['client', 'department']);
+
+        $client = $sale->client;
+        $remaining = $sale->remainingAmount();
+
+        $body = $this->fromTemplate('invoice', null, [
+            'name' => (string) ($client?->name ?? ''),
+            'mobile' => (string) ($client?->mobile ?? ''),
+            'business_name' => app(WhatsappAccounts::class)->senderName($sale),
+            'reference' => (string) $sale->number,
+            'date' => (string) $sale->created_at?->toDateString(),
+            'total' => number_format((float) $sale->total_amount, 2),
+            'paid' => number_format((float) $sale->paid_amount, 2),
+            'remaining' => number_format($remaining, 2),
+        ], $sale->department?->isPools() ? 'pool' : null)
+            ?? implode('
+', array_filter([
+                'مرحبًا '.($client?->name ?? '').'،',
+                ($pdfUrl ? 'مرفق فاتورتكم رقم ' : 'فاتورتكم رقم ').$sale->number.'.',
+                'التاريخ: '.$sale->created_at?->toDateString(),
+                'الإجمالي: '.number_format((float) $sale->total_amount, 2),
+                'المسدَّد: '.number_format((float) $sale->paid_amount, 2),
+                $remaining > 0
+                    ? 'المتبقي: '.number_format($remaining, 2)
+                    : 'مسدَّدة بالكامل.',
+                'شكرًا لتعاملكم معنا — '.app(WhatsappAccounts::class)->senderName($sale),
+            ]));
+
+        return $this->send($client?->mobile, $body, 'invoice', $sale, $userId, $pdfUrl);
     }
 
     /**

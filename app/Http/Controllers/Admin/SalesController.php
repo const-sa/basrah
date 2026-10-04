@@ -12,7 +12,10 @@ use App\Models\Treasury;
 use App\Models\Voucher;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
+use App\Services\SalePdf;
 use App\Services\SalesService;
+use App\Services\Whatsapp\WhatsappAccounts;
+use App\Services\WhatsappNotifier;
 use App\Services\ZatcaQr;
 use App\Support\Letterhead;
 use App\Support\Vat;
@@ -20,6 +23,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -406,6 +410,9 @@ class SalesController extends Controller
             'remaining' => $sale->remainingAmount(),
             'payment_status' => $sale->paymentStatus(),
             'payment_status_label' => $sale->paymentStatusLabel(),
+            // الفاتورة تُرسل لمن له رقم: العميل النقدي لا جوال له، فلا
+            // يُعرض له زرٌّ يُضغط ليقال له بعدها «لا يوجد رقم».
+            'can_send' => ! $sale->isReturn() && filled($sale->client?->mobile),
             'can_settle' => $sale->acceptsSettlement(),
             'can_refund' => ! $sale->isReturn() && $sale->netTotal() > 0,
         ];
@@ -448,5 +455,65 @@ class SalesController extends Controller
             'partial_count' => (clone $query)->paymentStatus('partial')->count(),
             'unpaid_count' => (clone $query)->paymentStatus('unpaid')->count(),
         ];
+    }
+
+    /**
+     * ورقة الفاتورة — تُعرض في المتصفح، وتُحمَّل بـ?download=1.
+     */
+    public function pdf(Request $request, Sale $sale, SalePdf $pdf): HttpResponse
+    {
+        try {
+            $content = $pdf->render($sale);
+        } catch (RuntimeException $e) {
+            abort(500, $e->getMessage());
+        }
+
+        $disposition = $request->boolean('download') ? 'attachment' : 'inline';
+
+        return response($content, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => $disposition.'; filename="'.$sale->number.'.pdf"',
+        ]);
+    }
+
+    /**
+     * إرسال الفاتورة (PDF) على واتساب العميل.
+     *
+     * الملف يُبنى ويُحفظ قبل الإرسال: الرسالة تقول «مرفق فاتورتكم»، ولا يصحّ
+     * أن تقولها بلا مرفق — وهو ترتيب ContractsController::send نفسه.
+     */
+    public function send(Request $request, Sale $sale, SalePdf $pdf, WhatsappNotifier $whatsapp): RedirectResponse
+    {
+        $sale->loadMissing('client');
+
+        if (blank($sale->client?->mobile)) {
+            return back()->with('warning', 'لا يوجد رقم جوال للعميل — لا يمكن الإرسال.');
+        }
+
+        // يُقال السبب هنا لا في سجلّ الرسائل: رقم القسم غير المربوط يُسقط
+        // الرسالة في الخلفية بصمت، والموظف يظنّها وصلت.
+        $accounts = app(WhatsappAccounts::class);
+
+        if (! $accounts->canSend($sale)) {
+            $account = $accounts->for($sale);
+
+            return back()->with('warning', $account
+                ? "رقم واتساب «{$account->name}» غير مربوط بالبوابة — اربطه من إعدادات واتساب ثم أعد الإرسال."
+                : 'بوابة واتساب غير مهيّأة — اضبطها من إعدادات واتساب ثم أعد الإرسال.');
+        }
+
+        try {
+            $path = $pdf->store($sale);
+        } catch (RuntimeException $e) {
+            return back()->with('warning', $e->getMessage());
+        }
+
+        $message = $whatsapp->saleInvoice($sale, $request->user()?->id, $pdf->publicUrl($path));
+
+        if (! $message) {
+            return back()->with('warning', 'رقم جوال العميل غير صالح — لم تُرسل الفاتورة.');
+        }
+
+        return back()->with('success', "تم إرسال الفاتورة {$sale->number} (PDF) على واتساب العميل");
     }
 }

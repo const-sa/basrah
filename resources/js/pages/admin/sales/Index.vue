@@ -6,7 +6,7 @@ import { useVat } from '@/composables/useVat';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem, type PaymentMethodOption } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Download, Eye, Printer, Receipt, RotateCcw, Search, Trash2, Wallet, X } from 'lucide-vue-next';
+import { Download, Eye, MessageCircle, Printer, Receipt, RotateCcw, Search, Trash2, Wallet, X } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
 interface SaleRow {
@@ -35,6 +35,8 @@ interface SaleRow {
     payment_status_label: string;
     can_settle: boolean;
     can_refund: boolean;
+    /** للعميل رقم جوال، والفاتورة ليست مرتجعًا. */
+    can_send: boolean;
 }
 
 interface SaleLine {
@@ -153,6 +155,22 @@ const exportHref = computed(() => {
 const voidSale = (row: SaleRow) => {
     if (!confirm(`إلغاء الفاتورة ${row.number}؟ يُعكس قيدها وتعود أصنافها إلى المخزون، وتُنقل إلى الأرشيف.`)) return;
     router.delete(`/admin/sales/${row.id}`, { preserveScroll: true });
+};
+
+// ── إرسال الفاتورة على واتساب ───────────────────────────────
+// الملف يُبنى في الخادم ثم يُرسل، فالضغطة قد تستغرق ثانيةً أو ثانيتين —
+// ولهذا يُقفل الزرّ حتى تنتهي، لئلا تُرسل الفاتورة مرّتين.
+const sendingId = ref<number | null>(null);
+
+const sendInvoice = (row: SaleRow) => {
+    if (!confirm(`إرسال الفاتورة ${row.number} (PDF) على واتساب ${row.client_mobile}؟`)) return;
+
+    sendingId.value = row.id;
+
+    router.post(`/admin/sales/${row.id}/send`, {}, {
+        preserveScroll: true,
+        onFinish: () => (sendingId.value = null),
+    });
 };
 
 const statusClass = (s: string) =>
@@ -462,6 +480,16 @@ const submitRefund = () => {
                                             class="rounded-lg bg-slate-500 p-1.5 text-white hover:bg-slate-600"
                                         >
                                             <Eye class="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                            v-if="can('whatsapp.send') && s.can_send"
+                                            type="button"
+                                            @click="sendInvoice(s)"
+                                            :disabled="sendingId === s.id"
+                                            :title="`إرسال الفاتورة (PDF) على واتساب ${s.client_mobile}`"
+                                            class="rounded-lg bg-green-600 p-1.5 text-white transition hover:bg-green-700 disabled:opacity-50"
+                                        >
+                                            <MessageCircle class="h-3.5 w-3.5" />
                                         </button>
                                         <button
                                             v-if="can('sales.create') && s.can_settle"
