@@ -76,7 +76,10 @@ class CwtsDriver extends Driver
             'caption' => $this->sanitize($message),
             'file_name' => $options['file_name']
                 ?? ($type === MediaType::DOCUMENT ? MediaType::fileName($mediaUrl) : null),
-            'mimetype' => $options['mimetype'] ?? null,
+            // النوع يُعلَن دائمًا: بلا ترويسة نوعٍ صحيحة يعرض واتساب المرفق
+            // «BIN» فلا يفتحه العميل، ولو كان اسم الملف ينتهي بـ.pdf. وخادمٌ
+            // يقدّمه بـapplication/octet-stream يكفي لحدوث ذلك.
+            'mimetype' => $options['mimetype'] ?? MediaType::mimeType($mediaUrl),
         ], fn ($value) => $value !== null && $value !== '');
 
         return $this->call(
