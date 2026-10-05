@@ -7,6 +7,7 @@ use App\Models\BookingPayment;
 use App\Models\Client;
 use App\Models\Contract;
 use App\Models\Quotation;
+use App\Models\Sale;
 use App\Models\WhatsappAccount;
 use App\Support\ActivityPermission;
 use App\Support\ActivitySegment;
@@ -81,6 +82,12 @@ class WhatsappAccounts
             ?? Letterhead::raw($this->target($related)[1] === ActivitySegment::POOLS)['name'];
     }
 
+    /** القسم الذي ينتمي إليه السجلّ (pools / halls / chalets) أو null. */
+    public function section(?Model $related): ?string
+    {
+        return $this->target($related)[1];
+    }
+
     public function forget(): void
     {
         $this->active = null;
@@ -120,6 +127,13 @@ class WhatsappAccounts
 
         // عرض السعر: قسمه من قسم العرض — عرض المسابح يخرج من رقم المسابح.
         if ($related instanceof Quotation) {
+            return [null, $related->department?->isPools()
+                ? ActivitySegment::POOLS
+                : ActivityPermission::ofClient($related->client)];
+        }
+
+        // فاتورة المبيعات كعرض السعر: فاتورة قسم المسابح تخرج من رقم المسابح.
+        if ($related instanceof Sale) {
             return [null, $related->department?->isPools()
                 ? ActivitySegment::POOLS
                 : ActivityPermission::ofClient($related->client)];

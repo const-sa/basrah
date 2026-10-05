@@ -14,6 +14,7 @@ use App\Models\WhatsappMessage;
 use App\Services\Whatsapp\MessageTemplate;
 use App\Services\Whatsapp\PhoneNumber;
 use App\Services\Whatsapp\WhatsappAccounts;
+use App\Support\ActivitySegment;
 use App\Support\HourlyPeriod;
 use App\Support\NotificationCatalog;
 use Illuminate\Database\Eloquent\Model;
@@ -238,7 +239,7 @@ class WhatsappNotifier
             'quotation_number' => (string) $quotation->number,
             'total' => $total,
             'valid_until' => (string) ($validUntil ?? ''),
-        ], $quotation->department?->isPools() ? 'pool' : null)
+        ], $this->categoryOf($quotation))
             ?? implode("\n", array_filter([
                 'مرحبًا '.($client?->name ?? '').'،',
                 ($pdfUrl ? 'مرفق عرض السعر رقم ' : 'عرض السعر رقم ').$quotation->number.'.',
@@ -364,8 +365,8 @@ class WhatsappNotifier
     /**
      * فاتورة المبيعات — للعميل الذي يسحب طلباته ويُحاسَب عليها لاحقًا.
      *
-     * تُقرأ من قالب «الفاتورة» في مكتبة الإشعارات بقسم المسابح إن وُجد، وإلا
-     * من القسم العام، وإلا من النصّ أدناه. ومتغيّراتها متغيّرات الفاتورة لا
+     * تُقرأ من قالب «فاتورة المبيعات» بقسم الفاتورة (المسابح وغيرها) إن وُجد،
+     * وإلا من القسم العام، وإلا من النصّ أدناه. ولها قالبها لا قالب فاتورة
      * الحجز: لا وحدة ولا تاريخ مناسبة، بل رقمها وإجماليها وما بقي عليها.
      */
     public function saleInvoice(Sale $sale, ?int $userId = null, ?string $pdfUrl = null): ?WhatsappMessage
@@ -375,16 +376,17 @@ class WhatsappNotifier
         $client = $sale->client;
         $remaining = $sale->remainingAmount();
 
-        $body = $this->fromTemplate('invoice', null, [
+        $body = $this->fromTemplate('sale_invoice', null, [
             'name' => (string) ($client?->name ?? ''),
             'mobile' => (string) ($client?->mobile ?? ''),
             'business_name' => app(WhatsappAccounts::class)->senderName($sale),
+            'invoice_number' => (string) $sale->number,
             'reference' => (string) $sale->number,
             'date' => (string) $sale->created_at?->toDateString(),
             'total' => number_format((float) $sale->total_amount, 2),
             'paid' => number_format((float) $sale->paid_amount, 2),
             'remaining' => number_format($remaining, 2),
-        ], $sale->department?->isPools() ? 'pool' : null)
+        ], $this->categoryOf($sale))
             ?? implode('
 ', array_filter([
                 'مرحبًا '.($client?->name ?? '').'،',
@@ -480,6 +482,20 @@ class WhatsappNotifier
             'paid' => number_format((float) ($booking?->paid_amount ?? 0), 2),
             'remaining' => number_format((float) ($booking?->remainingAmount() ?? 0), 2),
         ];
+    }
+
+    /**
+     * قسم المكتبة الموافق لقسم السجلّ — القسم نفسه الذي يُختار منه رقم الإرسال،
+     * فتصل رسالة المسابح بقالب المسابح ومن رقمها معًا.
+     */
+    private function categoryOf(Model $related): string
+    {
+        return match (app(WhatsappAccounts::class)->section($related)) {
+            ActivitySegment::POOLS => 'pool',
+            ActivitySegment::HALLS => 'hall',
+            ActivitySegment::CHALETS => 'chalet',
+            default => 'general',
+        };
     }
 
     /** Null for a number too short to dial, so the send is dropped rather than wasted. */

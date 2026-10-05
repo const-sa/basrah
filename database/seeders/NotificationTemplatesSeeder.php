@@ -486,6 +486,64 @@ class NotificationTemplatesSeeder extends Seeder
                     '{business_name} 🏊',
                 ]),
             ],
+            [
+                'category' => 'pool',
+                'event' => 'quotation',
+                'title' => 'عرض سعر — المسابح',
+                'body' => implode("\n", [
+                    'مرحباً {name} 👋',
+                    'مرفق عرض السعر رقم {quotation_number} 📄',
+                    'الإجمالي: {total} ر.س',
+                    'صالح حتى: {valid_until}',
+                    'يسعدنا تواصلكم لأي استفسار.',
+                    '{business_name} 🏊',
+                ]),
+            ],
+            [
+                'category' => 'pool',
+                'event' => 'sale_invoice',
+                'title' => 'فاتورة مبيعات — المسابح',
+                'body' => implode("\n", [
+                    'مرحباً {name} 👋',
+                    'مرفق فاتورتكم رقم {invoice_number} 🧾',
+                    'التاريخ: {date}',
+                    '——————————————',
+                    'الإجمالي: {total}',
+                    'المسدَّد: {paid}',
+                    'المتبقي: {remaining}',
+                    '——————————————',
+                    'شكراً لتعاملكم مع {business_name} 🏊',
+                ]),
+            ],
+
+            // ===================== عروض الأسعار والمبيعات — عام =====================
+            [
+                'category' => 'general',
+                'event' => 'quotation',
+                'title' => 'إرسال عرض السعر — عام',
+                'body' => implode("\n", [
+                    'مرحباً {name} 👋',
+                    'مرفق عرض السعر رقم {quotation_number} 📄',
+                    'الإجمالي: {total} ر.س',
+                    'صالح حتى: {valid_until}',
+                    'يسعدنا تواصلكم لأي استفسار.',
+                    '{business_name}',
+                ]),
+            ],
+            [
+                'category' => 'general',
+                'event' => 'sale_invoice',
+                'title' => 'فاتورة مبيعات — عام',
+                'body' => implode("\n", [
+                    'مرحباً {name} 👋',
+                    'مرفق فاتورتكم رقم {invoice_number} 🧾',
+                    'التاريخ: {date}',
+                    'الإجمالي: {total}',
+                    'المسدَّد: {paid}',
+                    'المتبقي: {remaining}',
+                    'شكراً لتعاملكم مع {business_name}.',
+                ]),
+            ],
         ];
     }
 }

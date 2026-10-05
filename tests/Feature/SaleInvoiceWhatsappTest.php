@@ -4,10 +4,14 @@ namespace Tests\Feature;
 
 use App\Jobs\SendWhatsappMessage;
 use App\Models\Client;
+use App\Models\Department;
 use App\Models\Role;
 use App\Models\Sale;
 use App\Models\User;
+use App\Models\WhatsappAccount;
+use App\Models\WhatsappMessage;
 use App\Services\SalePdf;
+use App\Services\Whatsapp\WhatsappAccounts;
 use Database\Seeders\RolesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
@@ -82,6 +86,40 @@ class SaleInvoiceWhatsappTest extends TestCase
         Bus::assertNotDispatched(SendWhatsappMessage::class);
     }
 
+    /**
+     * فاتورة قسم المسابح تخرج من رقم المسابح وبقالب «فاتورة المبيعات» للمسابح،
+     * لا من البوابة العامة ولا بقالب فاتورة الحجز (المسبح/الفترة فارغان).
+     */
+    public function test_a_pools_invoice_goes_from_the_pools_number_with_its_own_template(): void
+    {
+        Storage::fake(SalePdf::DISK);
+        Bus::fake();
+
+        $pools = WhatsappAccount::updateOrCreate(
+            ['section' => 'pools', 'unit_id' => null],
+            ['name' => 'مؤسسة العجلان لبرك السباحه', 'driver' => 'cwts', 'is_active' => true,
+                'instance_id' => 'TEST-INSTANCE', 'access_token' => 'test-token'],
+        );
+        app(WhatsappAccounts::class)->forget();
+
+        $sale = $this->sale('0551234567', 'hall');
+        $sale->update(['department_id' => Department::firstOrCreate(
+            ['code' => 'POOLS'],
+            ['name' => 'المسابح', 'sells' => true, 'is_active' => true, 'sort_order' => 1],
+        )->id]);
+
+        $this->actingAs($this->owner)
+            ->post("/admin/sales/{$sale->id}/send")
+            ->assertSessionHas('success');
+
+        $message = WhatsappMessage::latest('id')->firstOrFail();
+
+        $this->assertSame($pools->id, $message->whatsapp_account_id);
+        $this->assertStringContainsString('مرفق فاتورتكم رقم '.$sale->number, $message->body);
+        $this->assertStringContainsString('مؤسسة العجلان لبرك السباحه', $message->body);
+        $this->assertStringNotContainsString('المسبح:', $message->body);
+    }
+
     public function test_the_invoice_sheet_opens_as_a_pdf(): void
     {
         $sale = $this->sale('0551234567');
@@ -93,11 +131,16 @@ class SaleInvoiceWhatsappTest extends TestCase
         $this->assertStringStartsWith('%PDF', $response->getContent());
     }
 
-    private function sale(?string $mobile): Sale
+    /**
+     * عميل القاعات افتراضيًا: لا رقم لقسمه في الاختبار فتخرج فاتورته من
+     * البوابة العامة (العميل بلا نوعٍ يُحسب على المسابح ورقمها).
+     */
+    private function sale(?string $mobile, string $clientType = 'hall'): Sale
     {
         $client = Client::create([
             'name' => 'عميل الصيانة الشهرية',
             'mobile' => $mobile,
+            'type' => $clientType,
             'is_active' => true,
         ]);
 

@@ -21,7 +21,7 @@ class NotificationCatalog
             'general' => ['label' => 'عام', 'hint' => 'رسائل لا ترتبط بنوع وحدة بعينه'],
             'chalet' => ['label' => 'الشاليهات', 'hint' => 'حجوزات الشاليهات والإقامات'],
             'hall' => ['label' => 'القاعات', 'hint' => 'حجوزات القاعات والمناسبات'],
-            'pool' => ['label' => 'المسابح', 'hint' => 'حجوزات المسابح والفترات'],
+            'pool' => ['label' => 'المسابح', 'hint' => 'حجوزات المسابح وعروض أسعارها وفواتيرها'],
         ];
     }
 
@@ -42,7 +42,8 @@ class NotificationCatalog
             'receipt' => ['label' => 'سند القبض', 'hint' => 'عند إرسال سند دفعة إلى العميل', 'auto' => true],
             'cancellation' => ['label' => 'إشعار إلغاء', 'hint' => 'عند إلغاء الحجز', 'auto' => true],
             'contract' => ['label' => 'إرسال العقد', 'hint' => 'عند إصدار العقد', 'auto' => true],
-            'quotation' => ['label' => 'إرسال عرض السعر', 'hint' => 'عند إرسال عرض السعر (PDF) إلى العميل', 'auto' => true],
+            'quotation' => ['label' => 'إرسال عرض السعر', 'hint' => 'يدويًا بزر الإرسال في عرض السعر — مرفقًا بملفه PDF', 'auto' => false],
+            'sale_invoice' => ['label' => 'فاتورة المبيعات', 'hint' => 'يدويًا بزر الإرسال في فاتورة المبيعات — مرفقةً بملفها PDF', 'auto' => false],
             'custom' => ['label' => 'رسالة حرّة', 'hint' => 'إرسال يدوي من المكتبة', 'auto' => false],
         ];
     }
@@ -80,6 +81,13 @@ class NotificationCatalog
             'custom' => $client,
             'contract' => $booking + ['contract_number' => 'رقم العقد', 'contract_title' => 'نوع العقد'],
             'quotation' => $client + ['quotation_number' => 'رقم العرض', 'total' => 'إجمالي العرض', 'valid_until' => 'صالح حتى'],
+            'sale_invoice' => $client + [
+                'invoice_number' => 'رقم الفاتورة',
+                'date' => 'تاريخ الفاتورة',
+                'total' => 'إجمالي الفاتورة',
+                'paid' => 'المسدَّد',
+                'remaining' => 'المتبقي',
+            ],
             'payment' => $booking + ['amount' => 'مبلغ الدفعة'],
             'receipt' => $booking + ['amount' => 'مبلغ السند', 'method' => 'طريقة الدفع', 'payment_type' => 'نوع الدفعة'],
             'cancellation' => $booking + ['reason' => 'سبب الإلغاء'],
