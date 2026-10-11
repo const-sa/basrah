@@ -3,12 +3,17 @@ import { StatPill } from '@/components/data-table';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { AlertTriangle, CheckCircle2, Download } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, Download } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface Row { code: string; name: string; type?: string; type_label?: string; debit?: number; credit?: number; balance?: number; amount?: number }
 interface UnitProfit { id: number; code: string; name: string; unit_type: string | null; revenue: number; expense: number; profit: number; margin: number }
 interface VatMonth { month: string; output_net: number; output_tax: number; input_net: number; input_tax: number; net_due: number }
+interface FlowRow { code: string; name: string; amount: number }
+interface FlowSection { key: string; label: string; inflows: FlowRow[]; outflows: FlowRow[]; net: number }
+interface FlowSource { key: string; label: string; inflow: number; outflow: number }
+interface CashAccount { id: number; code: string; name: string; treasuries: string[]; opening: number; inflow: number; outflow: number; closing: number }
+interface CashMovement { date: string; entry_number: string; description: string; source_label: string; account_id: number; account: string; inflow: number; outflow: number }
 
 const props = defineProps<{
     filters: { from: string; to: string };
@@ -27,6 +32,15 @@ const props = defineProps<{
         net_due: number;
         months: VatMonth[];
     };
+    cashFlow: {
+        sections: FlowSection[];
+        sources: FlowSource[];
+        accounts: CashAccount[];
+        movements: CashMovement[];
+        movements_truncated: boolean;
+        transfers: number;
+        totals: { opening: number; inflow: number; outflow: number; net: number; closing: number };
+    };
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -39,15 +53,31 @@ const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumF
 const filters = ref({ ...props.filters });
 const apply = () => router.get('/admin/accounting/reports', filters.value, { preserveState: true, replace: true });
 
-const tab = ref<'profitability' | 'income' | 'trial' | 'balance' | 'vat'>('profitability');
+type Tab = 'profitability' | 'income' | 'trial' | 'balance' | 'cashflow' | 'vat';
 
 const tabs = [
     { key: 'profitability', label: 'ربحية الوحدات' },
     { key: 'income', label: 'قائمة الدخل' },
     { key: 'trial', label: 'ميزان المراجعة' },
     { key: 'balance', label: 'الميزانية' },
+    { key: 'cashflow', label: 'التدفقات النقدية' },
     { key: 'vat', label: 'الإقرار الضريبي' },
 ] as const;
+
+// A link may open a given tab directly (?tab=cashflow).
+const requested = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab');
+const tab = ref<Tab>(tabs.some((t) => t.key === requested) ? (requested as Tab) : 'profitability');
+
+// Movements narrowed to one treasury account; empty means all of them.
+const movementAccount = ref<number | ''>('');
+const movements = computed(() =>
+    movementAccount.value === '' ? props.cashFlow.movements : props.cashFlow.movements.filter((m) => m.account_id === movementAccount.value),
+);
+
+const exportCashFlow = () => {
+    const params = new URLSearchParams({ from: filters.value.from, to: filters.value.to });
+    window.location.href = `/admin/accounting/reports/cash-flow/export?${params.toString()}`;
+};
 
 const exportVat = () => {
     const params = new URLSearchParams({ from: filters.value.from, to: filters.value.to });
@@ -241,6 +271,173 @@ const exportVat = () => {
                                     <td class="px-4 py-2 text-amber-800">الإجمالي</td>
                                     <td class="px-4 py-2 text-left text-amber-800" dir="ltr">{{ money(balanceSheet.total_liabilities + balanceSheet.total_equity) }}</td>
                                 </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- التدفقات النقدية -->
+            <div v-if="tab === 'cashflow'" class="space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <p class="text-xs font-medium text-slate-500">كل مبلغ دخل الصندوق أو البنك أو خرج منهما — من سندات القبض والصرف ودفعات الحجوزات والكاشير والمصروفات والرواتب</p>
+                    <button type="button" @click="exportCashFlow" class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                        <Download class="h-4 w-4" /> تصدير CSV
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <StatPill label="رصيد أول المدة" :value="money(cashFlow.totals.opening)" variant="dark" />
+                    <StatPill label="إجمالي الداخل" :value="money(cashFlow.totals.inflow)" variant="success" />
+                    <StatPill label="إجمالي الخارج" :value="money(cashFlow.totals.outflow)" variant="danger" />
+                    <StatPill label="صافي التدفق" :value="money(cashFlow.totals.net)" :variant="cashFlow.totals.net >= 0 ? 'info' : 'warning'" />
+                    <StatPill label="رصيد آخر المدة" :value="money(cashFlow.totals.closing)" variant="primary" />
+                </div>
+
+                <!-- حسب الخزينة -->
+                <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div class="border-b border-slate-100 px-4 py-3">
+                        <h2 class="font-extrabold text-slate-800">حركة الخزائن</h2>
+                        <p class="text-xs font-medium text-slate-500">رصيد آخر المدة هو رصيد الحساب نفسه في شجرة الحسابات</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">الخزينة</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">أول المدة</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">داخل</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">خارج</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">آخر المدة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="a in cashFlow.accounts" :key="a.id" class="border-t border-slate-100">
+                                    <td class="px-4 py-2.5">
+                                        <span class="font-mono text-[11px] text-slate-400" dir="ltr">{{ a.code }}</span>
+                                        <span class="ms-1 font-bold text-slate-800">{{ a.name }}</span>
+                                        <span v-if="a.treasuries.length" class="ms-1.5 text-[11px] text-slate-500">({{ a.treasuries.join('، ') }})</span>
+                                    </td>
+                                    <td class="px-4 py-2.5 text-left" dir="ltr">{{ money(a.opening) }}</td>
+                                    <td class="px-4 py-2.5 text-left font-bold text-emerald-700" dir="ltr">{{ money(a.inflow) }}</td>
+                                    <td class="px-4 py-2.5 text-left font-bold text-red-600" dir="ltr">{{ money(a.outflow) }}</td>
+                                    <td class="px-4 py-2.5 text-left font-extrabold text-slate-900" dir="ltr">{{ money(a.closing) }}</td>
+                                </tr>
+                                <tr v-if="!cashFlow.accounts.length"><td colspan="5" class="px-4 py-10 text-center text-sm text-slate-500">لا توجد حسابات نقدية</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-if="cashFlow.transfers > 0" class="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-600">
+                        <ArrowLeftRight class="h-3.5 w-3.5" />
+                        تحويلات بين الخزائن: <span dir="ltr">{{ money(cashFlow.transfers) }}</span> — تظهر في حركة كل خزينة ولا تدخل إجمالي الداخل والخارج
+                    </div>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <!-- حسب المصدر -->
+                    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <h2 class="border-b border-slate-100 px-4 py-3 font-extrabold text-slate-800">حسب المصدر</h2>
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">المصدر</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">داخل</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">خارج</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="s in cashFlow.sources" :key="s.key" class="border-t border-slate-100">
+                                    <td class="px-4 py-2 font-bold text-slate-700">{{ s.label }}</td>
+                                    <td class="px-4 py-2 text-left font-bold text-emerald-700" dir="ltr">{{ s.inflow ? money(s.inflow) : '' }}</td>
+                                    <td class="px-4 py-2 text-left font-bold text-red-600" dir="ltr">{{ s.outflow ? money(s.outflow) : '' }}</td>
+                                </tr>
+                                <tr v-if="!cashFlow.sources.length"><td colspan="3" class="px-4 py-10 text-center text-sm text-slate-500">لا حركة في هذه الفترة</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- قائمة التدفقات حسب النشاط -->
+                    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <h2 class="border-b border-slate-100 px-4 py-3 font-extrabold text-slate-800">قائمة التدفقات النقدية</h2>
+                        <table class="w-full text-sm">
+                            <tbody>
+                                <template v-for="sec in cashFlow.sections" :key="sec.key">
+                                    <tr class="bg-slate-50">
+                                        <td colspan="2" class="px-4 py-2 font-extrabold text-[#1e3a8a]">{{ sec.label }}</td>
+                                    </tr>
+                                    <tr v-for="r in sec.inflows" :key="'in-' + r.code" class="border-t border-slate-50">
+                                        <td class="px-4 py-1.5 text-slate-700">
+                                            <span class="font-mono text-[11px] text-slate-400" dir="ltr">{{ r.code }}</span> مقبوض — {{ r.name }}
+                                        </td>
+                                        <td class="px-4 py-1.5 text-left font-bold text-emerald-700" dir="ltr">{{ money(r.amount) }}</td>
+                                    </tr>
+                                    <tr v-for="r in sec.outflows" :key="'out-' + r.code" class="border-t border-slate-50">
+                                        <td class="px-4 py-1.5 text-slate-700">
+                                            <span class="font-mono text-[11px] text-slate-400" dir="ltr">{{ r.code }}</span> مدفوع — {{ r.name }}
+                                        </td>
+                                        <td class="px-4 py-1.5 text-left font-bold text-red-600" dir="ltr">({{ money(r.amount) }})</td>
+                                    </tr>
+                                    <tr v-if="!sec.inflows.length && !sec.outflows.length" class="border-t border-slate-50">
+                                        <td colspan="2" class="px-4 py-1.5 text-xs text-slate-400">لا حركة</td>
+                                    </tr>
+                                    <tr class="border-t border-slate-200 font-extrabold">
+                                        <td class="px-4 py-2 text-slate-800">صافي {{ sec.label }}</td>
+                                        <td class="px-4 py-2 text-left" :class="sec.net >= 0 ? 'text-slate-900' : 'text-red-600'" dir="ltr">{{ money(sec.net) }}</td>
+                                    </tr>
+                                </template>
+                                <tr class="border-t-2 border-slate-300 bg-slate-50 font-extrabold">
+                                    <td class="px-4 py-2 text-slate-800">صافي التغير في النقدية</td>
+                                    <td class="px-4 py-2 text-left text-slate-900" dir="ltr">{{ money(cashFlow.totals.net) }}</td>
+                                </tr>
+                                <tr class="font-bold">
+                                    <td class="px-4 py-1.5 text-slate-600">رصيد النقدية أول المدة</td>
+                                    <td class="px-4 py-1.5 text-left text-slate-700" dir="ltr">{{ money(cashFlow.totals.opening) }}</td>
+                                </tr>
+                                <tr class="bg-blue-50 font-extrabold">
+                                    <td class="px-4 py-2 text-blue-800">رصيد النقدية آخر المدة</td>
+                                    <td class="px-4 py-2 text-left text-blue-800" dir="ltr">{{ money(cashFlow.totals.closing) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- تفصيل الحركة -->
+                <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+                        <h2 class="font-extrabold text-slate-800">تفصيل حركة الخزائن</h2>
+                        <select v-model="movementAccount" class="rounded-xl border border-slate-200 px-3 py-1.5 text-sm">
+                            <option value="">كل الخزائن</option>
+                            <option v-for="a in cashFlow.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+                        </select>
+                    </div>
+                    <p v-if="cashFlow.movements_truncated" class="bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700">
+                        الحركة أكثر من المعروض — ضيّق الفترة أو صدّر CSV لرؤيتها كاملة. الإجماليات أعلاه محسوبة على الفترة كلها.
+                    </p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">التاريخ</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">القيد</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">البيان</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">المصدر</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-extrabold text-[#1e3a8a]">الخزينة</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">داخل</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-extrabold text-[#1e3a8a]">خارج</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(m, i) in movements" :key="i" class="border-t border-slate-100">
+                                    <td class="whitespace-nowrap px-4 py-2 text-slate-600" dir="ltr">{{ m.date }}</td>
+                                    <td class="whitespace-nowrap px-4 py-2 font-mono text-[11px] text-slate-500" dir="ltr">{{ m.entry_number }}</td>
+                                    <td class="px-4 py-2 text-slate-700">{{ m.description }}</td>
+                                    <td class="whitespace-nowrap px-4 py-2 text-xs text-slate-500">{{ m.source_label }}</td>
+                                    <td class="whitespace-nowrap px-4 py-2 text-xs font-bold text-slate-600">{{ m.account }}</td>
+                                    <td class="px-4 py-2 text-left font-bold text-emerald-700" dir="ltr">{{ m.inflow ? money(m.inflow) : '' }}</td>
+                                    <td class="px-4 py-2 text-left font-bold text-red-600" dir="ltr">{{ m.outflow ? money(m.outflow) : '' }}</td>
+                                </tr>
+                                <tr v-if="!movements.length"><td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">لا حركة في هذه الفترة</td></tr>
                             </tbody>
                         </table>
                     </div>

@@ -502,6 +502,7 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
 
         Route::get('accounting/reports', [FinancialReportsController::class, 'index'])->middleware('perm:fin_reports.view')->name('fin_reports.index');
         Route::get('accounting/reports/vat/export', [FinancialReportsController::class, 'exportVatReturn'])->middleware('perm:fin_reports.export')->name('fin_reports.vat_export');
+        Route::get('accounting/reports/cash-flow/export', [FinancialReportsController::class, 'exportCashFlow'])->middleware('perm:fin_reports.export')->name('fin_reports.cash_flow_export');
     });
 
     /*

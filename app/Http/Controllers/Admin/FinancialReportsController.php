@@ -10,6 +10,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Purchase;
 use App\Models\Sale;
+use App\Services\Accounting\CashFlowStatement;
 use App\Support\Vat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -19,10 +20,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * التقارير المالية: ميزان المراجعة، قائمة الدخل، الميزانية، ربحية الوحدات،
- * والإقرار الضريبي.
+ * التدفقات النقدية، والإقرار الضريبي.
  */
 class FinancialReportsController extends Controller
 {
+    public function __construct(private readonly CashFlowStatement $cashFlow) {}
+
     public function index(Request $request): Response
     {
         $from = $request->string('from')->toString() ?: now()->startOfYear()->toDateString();
@@ -35,7 +38,54 @@ class FinancialReportsController extends Controller
             'balanceSheet' => $this->balanceSheet($to),
             'unitProfitability' => $this->unitProfitability($from, $to),
             'vatReturn' => $this->vatReturn($from, $to),
+            'cashFlow' => $this->cashFlow->build($from, $to),
         ]);
+    }
+
+    /**
+     * تصدير قائمة التدفقات النقدية وحركة الخزائن لنفس الفترة المعروضة.
+     */
+    public function exportCashFlow(Request $request): StreamedResponse
+    {
+        $from = $request->string('from')->toString() ?: now()->startOfYear()->toDateString();
+        $to = $request->string('to')->toString() ?: now()->toDateString();
+
+        $flow = $this->cashFlow->build($from, $to);
+        $filename = 'cash-flow-'.$from.'-to-'.$to.'.csv';
+
+        return response()->streamDownload(function () use ($flow) {
+            $out = fopen('php://output', 'w');
+
+            // BOM so Excel opens the Arabic text in the right encoding.
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, ['القسم', 'البند', 'داخل', 'خارج']);
+
+            foreach ($flow['sections'] as $section) {
+                foreach ($section['inflows'] as $row) {
+                    fputcsv($out, [$section['label'], $row['code'].' '.$row['name'], $row['amount'], '']);
+                }
+                foreach ($section['outflows'] as $row) {
+                    fputcsv($out, [$section['label'], $row['code'].' '.$row['name'], '', $row['amount']]);
+                }
+                fputcsv($out, [$section['label'], 'صافي التدفق', $section['net'], '']);
+            }
+
+            fputcsv($out, []);
+            fputcsv($out, ['رصيد أول المدة', $flow['totals']['opening']]);
+            fputcsv($out, ['إجمالي الداخل', $flow['totals']['inflow']]);
+            fputcsv($out, ['إجمالي الخارج', $flow['totals']['outflow']]);
+            fputcsv($out, ['رصيد آخر المدة', $flow['totals']['closing']]);
+
+            fputcsv($out, []);
+            fputcsv($out, ['التاريخ', 'رقم القيد', 'البيان', 'المصدر', 'الخزينة', 'داخل', 'خارج']);
+
+            foreach ($flow['movements'] as $m) {
+                fputcsv($out, [$m['date'], $m['entry_number'], $m['description'], $m['source_label'], $m['account'], $m['inflow'] ?: '', $m['outflow'] ?: '']);
+            }
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     /**
