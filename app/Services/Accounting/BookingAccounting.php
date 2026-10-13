@@ -20,6 +20,7 @@ class BookingAccounting
 {
     public function __construct(
         private readonly Ledger $ledger,
+        private readonly BookingReceipts $receipts,
         private readonly RevenueAccounts $revenueAccounts,
         private readonly PaymentMethodAccounts $paymentMethodAccounts,
     ) {}
@@ -54,7 +55,7 @@ class BookingAccounting
 
         $label = $isRefund ? 'استرداد' : ($payment->type === 'deposit' ? 'عربون' : 'دفعة');
 
-        return $this->ledger->post(
+        $entry = $this->ledger->post(
             $payment->paid_on->toDateString(),
             "{$label} على الحجز {$booking->reference}",
             $lines,
@@ -62,6 +63,10 @@ class BookingAccounting
             $payment,
             $userId,
         );
+
+        $this->receipts->mirror($payment, $booking, $entry, $costCenter, $userId);
+
+        return $entry;
     }
 
     /**
@@ -103,7 +108,7 @@ class BookingAccounting
 
         $label = BookingPayment::TYPES[$payment->type] ?? $payment->type;
 
-        return $this->ledger->post(
+        $entry = $this->ledger->post(
             $payment->paid_on->toDateString(),
             "{$label} على الحجز {$booking->reference}",
             $lines,
@@ -111,6 +116,10 @@ class BookingAccounting
             $payment,
             $userId,
         );
+
+        $this->receipts->mirror($payment, $booking, $entry, $costCenter, $userId);
+
+        return $entry;
     }
 
     /**

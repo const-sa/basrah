@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -70,6 +72,23 @@ class BookingPayment extends Model
     public function receiver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    /**
+     * The receipt this payment was mirrored into.
+     *
+     * Every payment that moves cash belongs in the register the rest of the
+     * business writes in — see BookingReceipts.
+     */
+    public function voucher(): HasOne
+    {
+        return $this->hasOne(Voucher::class);
+    }
+
+    /** The ledger entries posted off this payment. */
+    public function entries(): MorphMany
+    {
+        return $this->morphMany(JournalEntry::class, 'reference');
     }
 
     public function paymentMethod(): BelongsTo

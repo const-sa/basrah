@@ -166,7 +166,11 @@ class ClientStatementService
             ]);
         }
 
-        foreach ($client->vouchers()->where('status', 'posted')->where('type', 'receipt')->get() as $voucher) {
+        // A booking payment is listed above as itself; its mirrored receipt in
+        // the register is the same money, so it is skipped rather than credited
+        // to the client twice.
+        foreach ($client->vouchers()->where('status', 'posted')->where('type', 'receipt')
+            ->whereNull('booking_payment_id')->get() as $voucher) {
             $events->push([
                 'date' => $voucher->voucher_date->toDateString(),
                 'type' => 'voucher',

@@ -2,6 +2,7 @@
 
 namespace App\Services\Accounting;
 
+use App\Models\JournalEntry;
 use App\Models\Voucher;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -24,6 +25,26 @@ class VoucherService
             ...$data,
             'number' => $this->nextNumber($data['type']),
             'status' => 'draft',
+            'created_by' => $userId,
+        ]);
+    }
+
+    /**
+     * Record a voucher for an entry that is already in the books.
+     *
+     * post() below writes the entry itself; this is for money whose entry was
+     * posted elsewhere — a booking payment — where the register was the only
+     * thing missing. Posting again would double the books.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function createPosted(array $data, JournalEntry $entry, ?int $userId = null): Voucher
+    {
+        return Voucher::create([
+            ...$data,
+            'number' => $this->nextNumber($data['type']),
+            'status' => 'posted',
+            'journal_entry_id' => $entry->id,
             'created_by' => $userId,
         ]);
     }

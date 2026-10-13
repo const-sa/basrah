@@ -30,6 +30,20 @@ class Treasury extends Model
         return $this->belongsTo(Account::class);
     }
 
+    /**
+     * The till a payment method deposits into — cash at the box, a transfer
+     * or a card at the bank.
+     *
+     * One rule, read by every receipt written without an explicit choice, so
+     * a booking's deposit and a contract's land in the same place.
+     */
+    public static function forMethod(PaymentMethod $method): ?self
+    {
+        $active = self::where('is_active', true)->orderBy('id');
+
+        return (clone $active)->where('type', $method->deposits_to)->first() ?? $active->first();
+    }
+
     public function vouchers(): HasMany
     {
         return $this->hasMany(Voucher::class);

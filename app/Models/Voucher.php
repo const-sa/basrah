@@ -28,7 +28,7 @@ class Voucher extends Model
 
     protected $fillable = [
         'number', 'type', 'voucher_date', 'amount', 'treasury_id', 'account_id',
-        'cost_center_id', 'client_id', 'supplier_id', 'sale_id', 'contract_id', 'payment_method_id', 'reference',
+        'cost_center_id', 'client_id', 'supplier_id', 'sale_id', 'contract_id', 'booking_payment_id', 'payment_method_id', 'reference',
         'description', 'status', 'journal_entry_id', 'created_by',
     ];
 
@@ -74,6 +74,24 @@ class Voucher extends Model
     public function sale(): BelongsTo
     {
         return $this->belongsTo(Sale::class);
+    }
+
+    /**
+     * The booking payment this receipt was written for.
+     *
+     * A hall or chalet booking keeps its own payment ledger, and every row on
+     * it is mirrored here so the till and the receipt book cover the whole
+     * business. The link is what keeps the two from being counted twice.
+     */
+    public function bookingPayment(): BelongsTo
+    {
+        return $this->belongsTo(BookingPayment::class);
+    }
+
+    /** Was this receipt written off a booking's payment ledger? */
+    public function mirrorsBookingPayment(): bool
+    {
+        return $this->booking_payment_id !== null;
     }
 
     public function paymentMethod(): BelongsTo
