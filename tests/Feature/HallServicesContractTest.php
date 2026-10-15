@@ -228,6 +228,38 @@ class HallServicesContractTest extends TestCase
                 ->etc());
     }
 
+    /**
+     * A sheet written straight onto a client has no booking, as the pools'
+     * papers do — yet it is still the halls', and must not leak into the pools'
+     * register.
+     */
+    public function test_a_services_sheet_with_no_booking_stays_in_the_halls_register(): void
+    {
+        $client = Client::create(['name' => 'أبو بكر', 'mobile' => '0551704183']);
+        $services = app(ContractService::class)->generateDirect($client, $this->template());
+        $rental = app(ContractService::class)->generateDirect(
+            $client,
+            ContractTemplate::where('name', HallRentalContractTemplate::NAME)->firstOrFail(),
+        );
+
+        $ids = fn ($rows) => collect($rows)->pluck('id')->sort()->values()->all();
+
+        $this->actingAs($this->owner)->get('/admin/pools/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('scope', 'quotation')
+                ->where('contracts.data', fn ($rows) => $ids($rows) === [])
+                ->where('stats.total', 0)
+                ->etc());
+
+        $this->actingAs($this->owner)->get('/admin/halls/contracts')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('contracts.data', fn ($rows) => $ids($rows)
+                    === collect([$services->id, $rental->id])->sort()->values()->all())
+                ->etc());
+    }
+
     public function test_refreshing_the_wording_keeps_what_the_sheet_was_priced_at(): void
     {
         $contract = $this->servicesContract();

@@ -141,12 +141,17 @@ class ContractsController extends Controller
             // Anything not drawn from a booking is the pools' — a quotation
             // contract or one written straight onto a client. Neither has a
             // unit behind it, so unit visibility cannot scope them and
-            // `contracts.view` is the whole gate there. The chalets' own sheet
-            // is the exception: it too may be written with no booking, and it
-            // belongs in that activity's register, not in this one.
+            // `contracts.view` is the whole gate there. The chalets' sheet and
+            // the halls' two papers are the exception: they too may be written
+            // with no booking, and they belong in their own activity's
+            // register, not in this one.
             ->when($poolsOnly, fn ($q) => $q->whereNull('booking_id')
                 ->where(fn ($w) => $w->whereNull('data->form')
-                    ->orWhere('data->form', '!=', ChaletContractTemplate::FORM)))
+                    ->orWhereNotIn('data->form', [
+                        ChaletContractTemplate::FORM,
+                        HallRentalContractTemplate::FORM,
+                        HallServicesContractTemplate::FORM,
+                    ])))
             // The chalets': a stay on a chalet the user may see, or a sheet
             // drawn on their form with no booking — that one has no unit
             // either, and is gated the same way as the pools' above.
