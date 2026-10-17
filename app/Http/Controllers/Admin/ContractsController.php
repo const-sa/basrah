@@ -11,6 +11,7 @@ use App\Models\ContractTemplate;
 use App\Models\PaymentMethod;
 use App\Models\Quotation;
 use App\Models\Treasury;
+use App\Models\Unit;
 use App\Models\Voucher;
 use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
@@ -32,6 +33,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -65,11 +67,57 @@ class ContractsController extends Controller
     ) {}
 
     /**
+     * The gate of every screen that opens one contract: the activity's key
+     * for the action, and the unit — a hall's supervisor reaches his own
+     * hall's papers, not the other hall's by typing its address.
+     */
+    private function authorizeContract(Request $request, Contract $contract, string $action): void
+    {
+        $this->authorizeActivity($request, 'contracts', $action, ActivityPermission::ofContract($contract));
+
+        if (! $contract->isVisibleTo($request->user())) {
+            abort(403, 'هذا العقد لوحدة لا تعمل عليها.');
+        }
+    }
+
+    /**
+     * The unit a hall's or chalet's pad written with no booking is let on —
+     * required there, of that activity's type, and one the user works on.
+     * Any other form carries none.
+     */
+    private function unitForForm(Request $request, ?string $form, mixed $unitId): ?Unit
+    {
+        $type = match ($form) {
+            HallRentalContractTemplate::FORM, HallServicesContractTemplate::FORM => 'hall',
+            ChaletContractTemplate::FORM => 'chalet',
+            default => null,
+        };
+
+        if ($type === null) {
+            return null;
+        }
+
+        $unit = $unitId ? Unit::where('type', $type)->find($unitId) : null;
+
+        if (! $unit) {
+            throw ValidationException::withMessages([
+                'unit_id' => $type === 'hall' ? 'اختر القاعة التي يُحرَّر عليها العقد.' : 'اختر الشاليه الذي يُحرَّر عليه العقد.',
+            ]);
+        }
+
+        if (! $request->user()?->canAccessUnit($unit)) {
+            throw ValidationException::withMessages(['unit_id' => 'ليس لديك صلاحية العمل على هذه الوحدة.']);
+        }
+
+        return $unit;
+    }
+
+    /**
      * ملف العقد PDF — يُعرض في المتصفح افتراضيًا ويُنزَّل بـ?download=1.
      */
     public function pdf(Request $request, Contract $contract): HttpResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'export', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'export');
 
         try {
             $content = $this->pdf->render($contract);
@@ -136,6 +184,7 @@ class ContractsController extends Controller
         $poolsOnly = $scope === 'quotation';
         $chaletsOnly = $scope === 'chalet';
         $hallsOnly = $scope === 'hall';
+        $unitType = $hallsOnly ? 'hall' : ($chaletsOnly ? 'chalet' : null);
 
         $query = Contract::query()
             // Anything not drawn from a booking is the pools' — a quotation
@@ -170,8 +219,14 @@ class ContractsController extends Controller
             ->when($scope === 'all', fn ($q) => $q->where(fn ($w) => $w
                 ->whereNull('booking_id')
                 ->orWhereHas('booking', fn ($b) => $b->visibleTo($user))))
+            // Every register keeps to the units the user works on — the pads
+            // written with no booking included, which used to show in every
+            // hall's register because they named no hall.
+            ->visibleTo($user)
+            // And one who sees several halls (or chalets) reads them apart.
+            ->when($unitType && $request->integer('unit_id'), fn ($q) => $q->where('unit_id', $request->integer('unit_id')))
             ->with([
-                'booking:id,reference,unit_id,booking_date', 'booking.unit:id,name',
+                'booking:id,reference,unit_id,booking_date', 'booking.unit:id,name', 'unit:id,name',
                 'quotation:id,number', 'client:id,name,mobile',
                 // سندات القبض في صف العقد — للطباعة والإرسال من السجلّ مباشرةً.
                 'vouchers' => fn ($q) => $q->where('type', 'receipt')->where('status', 'posted')
@@ -215,7 +270,7 @@ class ContractsController extends Controller
                         'subject' => $c->subject(),
                         'quotation_number' => $c->quotation?->number ?? ($c->data['quotation_number'] ?? null),
                         'booking_reference' => $c->booking?->reference,
-                        'unit_name' => $c->booking?->unit?->name,
+                        'unit_name' => $c->unit?->name ?? $c->booking?->unit?->name,
                         'booking_date' => $c->booking?->booking_date?->toDateString(),
                         'total_amount' => $c->data['total_amount'] ?? null,
                         // ما قُبض على العقد وما بقي — من دفتر السندات لا من اللقطة.
@@ -251,7 +306,12 @@ class ContractsController extends Controller
             // way of paying to be written against.
             'payment_methods' => PaymentMethod::options(),
             'treasuries' => Treasury::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'filters' => $request->only(['status', 'search']),
+            'filters' => $request->only(['status', 'search', 'unit_id']),
+            // The halls (or chalets) this user works on — the register's filter,
+            // and the unit a pad written with no booking is let on.
+            'units' => $poolsOnly ? [] : Unit::visibleTo($user)
+                ->whereIn('type', $unitType ? [$unitType] : ['hall', 'chalet'])
+                ->orderBy('name')->get(['id', 'name', 'type']),
             'statuses' => collect(Contract::STATUSES)->map(fn ($l, $k) => ['key' => $k, 'label' => $l])->values(),
             // وأيُّ منها يحمل دفتر سنداته — فتظهر خانة العربون على نموذج
             // التركيب والصيانة وحدهما.
@@ -261,6 +321,13 @@ class ContractsController extends Controller
                     'name' => $t->name,
                     'is_default' => (bool) $t->is_default,
                     'takes_deposit' => ContractService::takesDeposit($t),
+                    // The unit type a pad written with no booking must name — the
+                    // hall's two and the chalet's; null on any other.
+                    'unit_type' => match (ContractService::formFor($t)) {
+                        HallRentalContractTemplate::FORM, HallServicesContractTemplate::FORM => 'hall',
+                        ChaletContractTemplate::FORM => 'chalet',
+                        default => null,
+                    },
                 ]),
             // الحجوزات التي لا عقد لها بعد — هي المرشّحة للتوليد.
             // A hall writes two papers, so its booking stays on offer until the
@@ -349,7 +416,7 @@ class ContractsController extends Controller
 
     public function show(Request $request, Contract $contract): Response
     {
-        $this->authorizeActivity($request, 'contracts', 'view', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'view');
 
         $contract->load([
             // The quotation's department is what heads a pools sheet.
@@ -580,6 +647,7 @@ class ContractsController extends Controller
             'client_id' => ['required', 'exists:clients,id'],
             'contract_template_id' => ['nullable', 'exists:contract_templates,id'],
             'total_amount' => ['nullable', 'numeric', 'min:0'],
+            'unit_id' => ['nullable', 'integer'],
             ...self::DEPOSIT_RULES,
         ], [], self::DEPOSIT_LABELS);
 
@@ -587,10 +655,15 @@ class ContractsController extends Controller
             ? ContractTemplate::find($data['contract_template_id'])
             : null;
 
+        $drawnOn = $template ?? ContractTemplate::defaultTemplate();
+        $form = $drawnOn ? ContractService::formFor($drawnOn) : null;
+
         // No booking behind it, so the chosen form names the activity.
-        $this->authorizeActivity($request, 'contracts', 'create', ActivityPermission::ofForm(
-            $template ? ContractService::formFor($template) : null,
-        ));
+        $this->authorizeActivity($request, 'contracts', 'create', ActivityPermission::ofForm($template ? $form : null));
+
+        // …and a hall's or chalet's pad names its unit, or it would land in the
+        // register of every hall (or chalet) instead of its own.
+        $unit = $this->unitForForm($request, $form, $data['unit_id'] ?? null);
 
         try {
             $contract = $this->contracts->generateDirect(
@@ -598,6 +671,7 @@ class ContractsController extends Controller
                 $template,
                 isset($data['total_amount']) ? (float) $data['total_amount'] : null,
                 $request->user()?->id,
+                $unit,
             );
         } catch (RuntimeException $e) {
             return back()->with('warning', $e->getMessage());
@@ -618,7 +692,7 @@ class ContractsController extends Controller
      */
     public function receipt(Request $request, Contract $contract): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'edit');
 
         abort_unless($contract->takesReceipts(), 404);
 
@@ -647,7 +721,7 @@ class ContractsController extends Controller
      */
     public function receiptPdf(Request $request, Contract $contract, Voucher $voucher): HttpResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'view', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'view');
 
         $this->assertReceiptOf($contract, $voucher);
 
@@ -670,7 +744,7 @@ class ContractsController extends Controller
      */
     public function sendReceipt(Request $request, Contract $contract, Voucher $voucher): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'send', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'send');
 
         $this->assertReceiptOf($contract, $voucher);
 
@@ -789,7 +863,7 @@ class ContractsController extends Controller
      */
     public function edit(Request $request, Contract $contract): Response|RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'edit');
 
         if ($contract->isSent()) {
             return redirect()->route('contracts.show', $contract)
@@ -831,6 +905,8 @@ class ContractsController extends Controller
                 ])->values(),
             ])->values();
 
+        $picksUnit = ! $contract->booking_id && $contract->isUnitForm();
+
         return Inertia::render('admin/contracts/Edit', [
             'contract' => [
                 'id' => $contract->id,
@@ -862,7 +938,16 @@ class ContractsController extends Controller
                 'event_name' => $contract->booking?->eventType?->name,
                 'quotation_date' => ($data['quotation_date'] ?? '—') === '—' ? null : $data['quotation_date'],
                 'is_taxable' => (bool) ($data['is_taxable'] ?? false),
+                // A hall's or chalet's pad with no booking names its unit here —
+                // and is moved here when it was written under the wrong one.
+                'unit_id' => $contract->unit_id,
+                'picks_unit' => $picksUnit,
             ],
+            'units' => $picksUnit
+                ? Unit::visibleTo($request->user())
+                    ->where('type', $contract->isChaletRentalForm() ? 'chalet' : 'hall')
+                    ->orderBy('name')->get(['id', 'name'])
+                : [],
             'issuer' => $this->issuer($data['org_name'] ?? null, $contract->underPoolsLetterhead()),
             'clients' => Client::where('is_active', true)
                 ->orderBy('name')->limit(300)->get(['id', 'name', 'mobile'])
@@ -878,7 +963,7 @@ class ContractsController extends Controller
      */
     public function update(Request $request, Contract $contract): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'edit');
 
         // A sent or signed contract is the paper the client holds: correcting
         // it under its own number forges what was signed.
@@ -926,9 +1011,20 @@ class ContractsController extends Controller
             'items.*.notes' => ['nullable', 'string', 'max:190'],
             'body' => ['required', 'string', 'max:40000'],
             'terms' => ['nullable', 'string', 'max:40000'],
+            'unit_id' => ['nullable', 'integer'],
         ]);
 
+        // Only a pad with no booking is moved between units: one drawn from a
+        // booking follows that booking's unit and nothing else.
+        $unit = ! $contract->booking_id && $contract->isUnitForm() && $request->has('unit_id')
+            ? $this->unitForForm($request, $contract->data['form'] ?? null, $data['unit_id'] ?? null)
+            : null;
+
         $this->contracts->applyEdit($contract, $data);
+
+        if ($unit && $unit->id !== $contract->unit_id) {
+            $contract->update(['unit_id' => $unit->id]);
+        }
 
         return redirect()->route('contracts.show', $contract)
             ->with('success', 'تم حفظ تعديل العقد');
@@ -942,7 +1038,7 @@ class ContractsController extends Controller
      */
     public function refresh(Request $request, Contract $contract): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'edit');
 
         // العقد المُرسل أو الموقّع نسخةٌ بيد العميل: تغيير نصه بعدها تزويرٌ
         // للورقة التي وقّعها، فيُلغى ويُولَّد غيره لا أن يُبدَّل تحت رقمه.
@@ -972,7 +1068,7 @@ class ContractsController extends Controller
      */
     public function send(Request $request, Contract $contract): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'send', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'send');
 
         $contract->loadMissing('client');
 
@@ -1010,7 +1106,7 @@ class ContractsController extends Controller
 
     public function changeStatus(Request $request, Contract $contract): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'edit', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'edit');
 
         $data = $request->validate([
             'status' => ['required', Rule::in(array_keys(Contract::STATUSES))],
@@ -1026,7 +1122,7 @@ class ContractsController extends Controller
 
     public function destroy(Request $request, Contract $contract): RedirectResponse
     {
-        $this->authorizeActivity($request, 'contracts', 'delete', ActivityPermission::ofContract($contract));
+        $this->authorizeContract($request, $contract, 'delete');
 
         if ($contract->isSent()) {
             return back()->with('warning', 'لا يُحذف عقد أُرسل للعميل — ألغِه بدل حذفه.');

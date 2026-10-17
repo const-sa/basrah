@@ -12,6 +12,7 @@ use App\Models\PaymentMethod;
 use App\Models\Quotation;
 use App\Models\Role;
 use App\Models\Treasury;
+use App\Models\Unit;
 use App\Models\User;
 use App\Models\Voucher;
 use App\Services\Accounting\Ledger;
@@ -216,6 +217,7 @@ class ContractDepositReceiptTest extends TestCase
         $this->actingAs($this->owner)->post('/admin/contracts/direct', [
             'client_id' => $this->client->id,
             'contract_template_id' => $this->chaletForm()->id,
+            'unit_id' => $this->chalet()->id,
             'total_amount' => 3000,
             'deposit_amount' => 1000,
         ])->assertRedirect();
@@ -246,6 +248,7 @@ class ContractDepositReceiptTest extends TestCase
         $this->actingAs($this->owner)->post('/admin/contracts/direct', [
             'client_id' => $this->client->id,
             'contract_template_id' => $this->chaletForm()->id,
+            'unit_id' => $this->chalet()->id,
             'total_amount' => 3000,
             'deposit_amount' => 1000,
         ])->assertRedirect();
@@ -411,5 +414,11 @@ class ContractDepositReceiptTest extends TestCase
     private function chaletForm(): ContractTemplate
     {
         return ContractTemplate::where('name', ChaletContractTemplate::NAME)->firstOrFail();
+    }
+
+    /** The chalet a sheet with no booking is let on — it names one now. */
+    private function chalet(): Unit
+    {
+        return Unit::firstOrCreate(['code' => 'CH1'], ['name' => 'شاليه 1', 'type' => 'chalet']);
     }
 }

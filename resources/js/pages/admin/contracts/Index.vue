@@ -43,10 +43,13 @@ const props = defineProps<{
     statuses: { key: string; label: string }[];
     // takes_deposit: the pools' own forms, the only sheets that carry a
     // receipt book of their own.
-    templates: { id: number; name: string; is_default: boolean; takes_deposit: boolean }[];
+    templates: { id: number; name: string; is_default: boolean; takes_deposit: boolean; unit_type: string | null }[];
     bookings: { id: number; label: string }[];
     quotations: QuotationOption[];
     clients: { id: number; label: string }[];
+    // The halls (or chalets) this user works on — the filter, and the unit a
+    // pad written with no booking is let on. Empty on the other registers.
+    units: { id: number; name: string; type: string }[];
     payment_methods: { id: number; label: string; is_credit: boolean }[];
     treasuries: { id: number; name: string }[];
     stats: { total: number; draft: number; sent: number; signed: number };
@@ -133,6 +136,7 @@ const form = useForm({
     booking_id: null as number | null,
     quotation_id: null as number | null,
     client_id: null as number | null,
+    unit_id: null as number | null,
     total_amount: null as number | null,
     contract_template_id: null as number | null,
     // العربون المدفوع لحظة التحرير — يُسجّل سند قبض بمجرد إصدار العقد.
@@ -148,6 +152,11 @@ const takesDeposit = computed(
     () => source.value !== 'booking' && !!props.templates.find((t) => t.id === form.contract_template_id)?.takes_deposit,
 );
 
+// A hall's or chalet's pad written with no booking names the unit it is let
+// on; the halls the user works on are offered for the hall's pads, and so on.
+const pickedUnitType = computed(() => props.templates.find((t) => t.id === form.contract_template_id)?.unit_type ?? null);
+const pickableUnits = computed(() => (pickedUnitType.value ? props.units.filter((u) => u.type === pickedUnitType.value) : []));
+
 // The pools register never draws from a booking — that contract would not
 // appear in the very screen that created it. Nor does the chalets' draw from a
 // quotation, for the same reason.
@@ -160,6 +169,9 @@ const openCreate = () => {
     form.clearErrors();
     form.contract_template_id = props.templates.find((t) => t.is_default)?.id ?? props.templates[0]?.id ?? null;
     form.deposit_paid_on = new Date().toISOString().slice(0, 10);
+    // A single hall is the only answer; with several, the one the register is
+    // filtered to is the likely one.
+    form.unit_id = pickableUnits.value.length === 1 ? pickableUnits.value[0].id : Number(filters.value.unit_id) || null;
     // «على الحساب» collects nothing, so it is never the default for a deposit.
     form.payment_method_id = props.payment_methods.find((m) => !m.is_credit)?.id ?? null;
     // Open on whichever source actually has something to draw from, so the
@@ -181,7 +193,7 @@ const pickSource = (next: Source) => {
 
 const canSubmit = computed(() => {
     if (source.value === 'booking') return !!form.booking_id;
-    if (source.value === 'client') return !!form.client_id;
+    if (source.value === 'client') return !!form.client_id && (!pickedUnitType.value || !!form.unit_id);
     return !!form.quotation_id;
 });
 
@@ -202,7 +214,7 @@ const submit = () => {
             ...(picked === 'quotation' ? { quotation_id: data.quotation_id } : {}),
             // A blank value is left to be written on the paper, so it is sent
             // as nothing rather than as a zero the contract would print.
-            ...(picked === 'client' ? { client_id: data.client_id, total_amount: data.total_amount || null } : {}),
+            ...(picked === 'client' ? { client_id: data.client_id, unit_id: pickedUnitType.value ? data.unit_id : null, total_amount: data.total_amount || null } : {}),
             // Nothing paid means no receipt at all — an empty box must not
             // write a voucher for zero into the till.
             ...(withDeposit
@@ -294,7 +306,7 @@ const statusClass = (s: string) =>
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                <div class="grid gap-2 sm:grid-cols-2">
+                <div :class="['grid gap-2', units.length > 1 && (hallsOnly || chaletsOnly) ? 'sm:grid-cols-3' : 'sm:grid-cols-2']">
                     <div class="relative">
                         <Search class="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ltr:left-3 rtl:right-3" />
                         <input v-model="filters.search" @keyup.enter="apply" placeholder="رقم العقد أو اسم العميل" class="w-full rounded-xl border border-slate-200 py-2.5 text-sm ltr:pl-9 ltr:pr-3 rtl:pl-3 rtl:pr-9" />
@@ -302,6 +314,11 @@ const statusClass = (s: string) =>
                     <select v-model="filters.status" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
                         <option :value="null">كل الحالات</option>
                         <option v-for="s in statuses" :key="s.key" :value="s.key">{{ s.label }}</option>
+                    </select>
+                    <!-- Each hall (or chalet) read apart, for whoever oversees several. -->
+                    <select v-if="units.length > 1 && (hallsOnly || chaletsOnly)" v-model="filters.unit_id" @change="apply" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        <option :value="null">{{ hallsOnly ? 'كل القاعات' : 'كل الشاليهات' }}</option>
+                        <option v-for="u in units" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
                     </select>
                 </div>
             </div>
@@ -512,6 +529,16 @@ const statusClass = (s: string) =>
                     <!-- No quotation: the contract is written on the client, and its
                          value may be left for the paper to carry. -->
                     <template v-else-if="source === 'client'">
+                        <!-- The unit the pad is let on — it keeps the contract in that
+                             hall's (or chalet's) register and out of every other's. -->
+                        <div v-if="pickedUnitType">
+                            <label class="mb-1 block text-sm font-bold text-slate-700">{{ pickedUnitType === 'hall' ? 'القاعة' : 'الشاليه' }}</label>
+                            <select v-model="form.unit_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                                <option :value="null">— اختر —</option>
+                                <option v-for="u in pickableUnits" :key="u.id" :value="u.id">{{ u.name }}</option>
+                            </select>
+                            <p v-if="form.errors.unit_id" class="mt-1 text-xs text-red-500">{{ form.errors.unit_id }}</p>
+                        </div>
                         <div>
                             <label class="mb-1 block text-sm font-bold text-slate-700">العميل</label>
                             <select v-model="form.client_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">

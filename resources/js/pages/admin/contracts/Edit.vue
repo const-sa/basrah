@@ -24,6 +24,7 @@ type Line = {
 
 type EditForm = {
     client_id: number | null;
+    unit_id: number | null;
     fields: Record<string, string>;
     items: Line[];
     body: string;
@@ -66,7 +67,11 @@ const props = defineProps<{
         from_quotation: boolean;
         is_taxable: boolean;
         quotation_date: string | null;
+        /** The hall or chalet a pad with no booking is let on — picked here. */
+        unit_id: number | null;
+        picks_unit: boolean;
     };
+    units: { id: number; name: string }[];
     issuer: {
         business_name: string;
         logo_url: string | null;
@@ -127,6 +132,7 @@ const startingLines = () => {
 
 const form = useForm<EditForm>({
     client_id: props.contract.client_id,
+    unit_id: props.contract.unit_id,
     fields: Object.fromEntries(props.contract.groups.flatMap((g) => g.fields).map((f) => [f.key, f.value])),
     items: startingLines(),
     body: props.contract.body,
@@ -193,7 +199,11 @@ const showText = ref(false);
 // application, and the save comes back 403 with nothing to report. The route
 // answers to both.
 const submit = () =>
-    form.post(`/admin/contracts/${props.contract.id}`, {
+    form
+        // A booking's contract follows its booking's unit, so only a pad with
+        // no booking sends one.
+        .transform(({ unit_id, ...data }) => (props.contract.picks_unit ? { ...data, unit_id } : data))
+        .post(`/admin/contracts/${props.contract.id}`, {
         onError: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
     });
 </script>
@@ -252,6 +262,21 @@ const submit = () =>
             </p>
 
             <form id="contract-edit" @submit.prevent="submit" class="space-y-4">
+                <!-- Which hall (or chalet) the pad belongs to — it decides whose
+                     register the contract is listed in. -->
+                <div v-if="contract.picks_unit" class="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <label class="mb-1 block text-sm font-bold text-slate-700">
+                        {{ contract.is_hall_form || contract.is_hall_services_form ? 'القاعة' : 'الشاليه' }}
+                    </label>
+                    <select v-model="form.unit_id" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                        <option :value="null">— اختر —</option>
+                        <option v-for="u in units" :key="u.id" :value="u.id">{{ u.name }}</option>
+                    </select>
+                    <p v-if="!contract.unit_id" class="mt-1 text-xs font-bold text-amber-600">
+                        هذا العقد غير مربوط بوحدة — اختر وحدته ليظهر في سجلّها وحدها.
+                    </p>
+                </div>
+
                 <!-- The sheet as it prints, its runs turned into the inputs that fill
                      them — one document, whether it is read or written. -->
                 <div class="mx-auto max-w-4xl">

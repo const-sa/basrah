@@ -121,6 +121,7 @@ class ChaletContractTest extends TestCase
             'client_id' => Client::create(['name' => 'ضيف بلا حجز', 'mobile' => '0553334444', 'type' => 'chalet'])->id,
             'contract_template_id' => ContractTemplate::where('name', ChaletContractTemplate::NAME)->value('id'),
             'total_amount' => 1500,
+            'unit_id' => Unit::where('type', 'chalet')->value('id'),
         ])->assertRedirect();
 
         $this->actingAs($this->owner)->get('/admin/chalets/contracts')

@@ -7,6 +7,7 @@ use App\Support\HallRentalContractTemplate;
 use App\Support\HallServicesContractTemplate;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -24,8 +25,15 @@ class Contract extends Model
     ];
 
     protected $fillable = [
-        'number', 'booking_id', 'quotation_id', 'client_id', 'contract_template_id', 'created_by',
+        'number', 'booking_id', 'quotation_id', 'unit_id', 'client_id', 'contract_template_id', 'created_by',
         'body', 'terms', 'data', 'paid_amount', 'status', 'sent_at', 'signed_at', 'pdf_path',
+    ];
+
+    /** The printed pads that are let on a unit — a hall's two and the chalet's. */
+    public const UNIT_FORMS = [
+        HallRentalContractTemplate::FORM,
+        HallServicesContractTemplate::FORM,
+        ChaletContractTemplate::FORM,
     ];
 
     /** ما دون هذا لا يُعدّ متبقيًا — كسور الهللة لا تُبقي عقدًا مفتوحًا. */
@@ -51,9 +59,59 @@ class Contract extends Model
         return $this->belongsTo(Quotation::class);
     }
 
+    /**
+     * The hall or chalet the contract is written for — its booking's unit, or
+     * the one picked on the form when it was written with no booking.
+     */
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(Unit::class);
+    }
+
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    /** Is it printed on a pad that is let on a unit (a hall's or a chalet's)? */
+    public function isUnitForm(): bool
+    {
+        return in_array($this->data['form'] ?? null, self::UNIT_FORMS, true);
+    }
+
+    /**
+     * قصر العقود على وحدات المستخدم — مشرف قاعة لا يرى عقود قاعة غيرها.
+     *
+     * A contract with no unit is the pools' (gated by the activity alone), or
+     * a hall/chalet pad written before the unit was asked for: that one stays
+     * with whoever wrote it until someone who sees every unit assigns it.
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): Builder
+    {
+        if ($user?->seesAllUnits()) {
+            return $query;
+        }
+
+        return $query->where(fn ($w) => $w
+            ->whereIn('unit_id', $user?->accessibleUnitIds() ?? [])
+            ->orWhere(fn ($none) => $none->whereNull('unit_id')->where(fn ($n) => $n
+                ->whereNull('data->form')
+                ->orWhereNotIn('data->form', self::UNIT_FORMS)
+                ->when($user, fn ($own) => $own->orWhere('created_by', $user->id)))));
+    }
+
+    /** The single-contract counterpart of scopeVisibleTo(). */
+    public function isVisibleTo(?User $user): bool
+    {
+        if ($user?->seesAllUnits()) {
+            return true;
+        }
+
+        if ($this->unit_id) {
+            return (bool) $user?->canAccessUnit($this->unit_id);
+        }
+
+        return ! $this->isUnitForm() || ($user && (int) $this->created_by === (int) $user->id);
     }
 
     public function template(): BelongsTo

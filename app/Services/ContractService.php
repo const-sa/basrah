@@ -9,6 +9,7 @@ use App\Models\ContractTemplate;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Setting;
+use App\Models\Unit;
 use App\Support\ChaletContractTemplate;
 use App\Support\HallRentalContractTemplate;
 use App\Support\HallServicesContractTemplate;
@@ -65,6 +66,7 @@ class ContractService
             return Contract::create([
                 'number' => $number,
                 'booking_id' => $booking->id,
+                'unit_id' => $booking->unit_id,
                 'client_id' => $booking->client_id,
                 'contract_template_id' => $template->id,
                 'created_by' => $userId,
@@ -126,7 +128,7 @@ class ContractService
      * is drawn on the client and its equipment grid is filled by hand — the
      * value may be left blank for the same reason.
      */
-    public function generateDirect(Client $client, ?ContractTemplate $template = null, ?float $total = null, ?int $userId = null): Contract
+    public function generateDirect(Client $client, ?ContractTemplate $template = null, ?float $total = null, ?int $userId = null, ?Unit $unit = null): Contract
     {
         $template ??= ContractTemplate::defaultTemplate();
 
@@ -134,14 +136,23 @@ class ContractService
             throw new RuntimeException('لا يوجد قالب عقد فعّال — أضف قالبًا أولًا.');
         }
 
-        return DB::transaction(function () use ($client, $template, $total, $userId) {
+        return DB::transaction(function () use ($client, $template, $total, $userId, $unit) {
             $number = $this->nextNumber();
             $data = $this->buildDirectData($client, $number, $total, $template);
+
+            // A hall's or chalet's pad names the unit it is let on, as one
+            // drawn from a booking does — and the unit is what keeps it in
+            // that unit's register and out of every other's.
+            if ($unit) {
+                $data['unit_name'] = (string) $unit->name;
+                $data['lessor_name'] = (string) ($unit->name ?: $data['lessor_name']);
+            }
 
             return Contract::create([
                 'number' => $number,
                 'booking_id' => null,
                 'quotation_id' => null,
+                'unit_id' => $unit?->id,
                 'client_id' => $client->id,
                 'contract_template_id' => $template->id,
                 'created_by' => $userId,
