@@ -445,10 +445,6 @@ class ContractsController extends Controller
                 'terms' => $contract->terms,
                 'status' => $contract->status,
                 'status_label' => $contract->statusLabel(),
-                // The page offered «تعديل» on a draft alone, which read the
-                // rule off the status and so missed the services list — the one
-                // sheet that stays correctable after it goes out.
-                'is_correctable' => $contract->isCorrectable(),
                 'contract_date' => $data['contract_date'] ?? $contract->created_at?->toDateString(),
                 'contract_date_hijri' => $data['contract_date_hijri'] ?? null,
                 'client_name' => $contract->client?->name ?? ($data['client_name'] ?? null),
@@ -869,7 +865,7 @@ class ContractsController extends Controller
     {
         $this->authorizeContract($request, $contract, 'edit');
 
-        if (! $contract->isCorrectable()) {
+        if ($contract->isSent()) {
             return redirect()->route('contracts.show', $contract)
                 ->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
         }
@@ -970,9 +966,8 @@ class ContractsController extends Controller
         $this->authorizeContract($request, $contract, 'edit');
 
         // A sent or signed contract is the paper the client holds: correcting
-        // it under its own number forges what was signed. The services list is
-        // the exception — see Contract::isCorrectable().
-        if (! $contract->isCorrectable()) {
+        // it under its own number forges what was signed.
+        if ($contract->isSent()) {
             return back()->with('warning', 'لا يُعدَّل عقد أُرسل للعميل أو وُقِّع — ولّد عقدًا جديدًا بدله.');
         }
 

@@ -141,24 +141,6 @@ class Contract extends Model
     }
 
     /**
-     * May this sheet still be corrected under its own number?
-     *
-     * A rental or pools contract may not once it has gone out: it is the paper
-     * the client holds, and rewriting it under the same number forges what was
-     * signed — a new one is generated instead.
-     *
-     * The services list is the exception, and by its nature. It is the second
-     * paper of an event, an order sheet whose lines move until the day itself:
-     * a photographer is added, the coffee servers go from two to three. Locking
-     * it on the first send left the staff printing a sheet they knew was stale.
-     */
-    public function isCorrectable(): bool
-    {
-        return $this->status !== 'cancelled'
-            && (! $this->isSent() || $this->isHallServicesForm());
-    }
-
-    /**
      * A contract drawn from a quotation rather than a booking — the pools path
      * (sales, installation, maintenance).
      *

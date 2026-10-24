@@ -29,8 +29,6 @@ const props = defineProps<{
     contract: {
         id: number; number: string; body: string; terms: string | null;
         status: string; status_label: string;
-        /** هل تُصحَّح الورقة تحت رقمها؟ قائمة الخدمات تُصحَّح بعد الإرسال، والعقد لا. */
-        is_correctable: boolean;
         contract_date: string | null; contract_date_hijri: string | null;
         client_name: string | null; client_mobile: string | null; client_id_number: string | null;
         client_address: string | null;
@@ -245,7 +243,7 @@ const submitReceipt = () => {
                     </button>
                     <!-- تعديل العقد نفسه — بخلاف «تحديث من النموذج» الذي يعيد قراءة صياغته -->
                     <Link
-                        v-if="may.edit && contract.is_correctable"
+                        v-if="may.edit && contract.status === 'draft'"
                         :href="`/admin/contracts/${contract.id}/edit`"
                         class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
                     >
