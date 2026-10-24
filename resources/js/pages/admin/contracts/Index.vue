@@ -5,7 +5,7 @@ import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, ClipboardList, Eye, Pencil, Plus, Printer, ReceiptText, Search, Trash2, Unlock, X } from 'lucide-vue-next';
+import { CheckCircle2, ClipboardList, Eye, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -260,13 +260,6 @@ const sendReceipt = (c: Contract, r: Receipt) => {
 
 const markSigned = (c: Contract) => router.patch(`/admin/contracts/${c.id}/status`, { status: 'signed' }, { preserveScroll: true });
 
-// فكّ التوقيع يعيد العقد «مُرسلًا» فيُفتح للتصحيح — راجع صفحة العقد.
-const unsign = (c: Contract) => {
-    if (confirm(`إلغاء توقيع العقد ${c.number}؟ سيعود «مُرسلًا» فيمكن تعديله.`)) {
-        router.patch(`/admin/contracts/${c.id}/status`, { status: 'sent' }, { preserveScroll: true });
-    }
-};
-
 const destroy = (c: Contract) => {
     if (confirm(`حذف العقد ${c.number}؟`)) router.delete(`/admin/contracts/${c.id}`, { preserveScroll: true });
 };
@@ -430,13 +423,6 @@ const statusClass = (s: string) =>
                                             :icon="CheckCircle2"
                                             title="تعليم كموقّع"
                                             @click="markSigned(c)"
-                                        />
-                                        <TableActionButton
-                                            v-if="may.edit && c.status === 'signed'"
-                                            variant="warning"
-                                            :icon="Unlock"
-                                            title="إلغاء التوقيع — يفتح العقد للتعديل"
-                                            @click="unsign(c)"
                                         />
                                         <TableActionButton v-if="may.delete" variant="danger" :icon="Trash2" title="حذف" @click="destroy(c)" />
                                     </div>
