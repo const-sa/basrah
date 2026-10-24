@@ -9,7 +9,7 @@ import StayContractDocument from '@/components/contracts/StayContractDocument.vu
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowRight, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, Unlock, X } from 'lucide-vue-next';
+import { ArrowRight, Ban, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, Unlock, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 /** سند قبض مرحّل على العقد — العربون وما تلاه من دفعات. */
@@ -114,6 +114,19 @@ const hasReceipts = computed(() => props.contract.receipts.some((r) => r.status 
  * يبتلع الفرق المستحق للعميل — remainingAmount() تحدّ بصفر، وaddSettlement()
  * تحدّ المدفوع بالقيمة — فتُترك مقفلةً حتى يُردّ الفائض بسند صرف.
  */
+/**
+ * إلغاء العقد.
+ *
+ * الحذف يرفض ورقةً أُرسلت ويوجّه إلى الإلغاء — ولم يكن للإلغاء زرّ في الشاشة،
+ * فكانت الرسالة تحيل على بابٍ مغلق. والفرق بينهما أن الملغى يبقى في السجل
+ * بتاريخه ورقمه وسنداته: ما قُبض وصل الخزينة فعلًا، ورده سند صرف لا محوُ أثره.
+ */
+const cancelContract = () => {
+    if (confirm(`إلغاء العقد ${props.contract.number}؟ سيبقى في السجل بسنداته، ولن يُقبض عليه شيء بعد الإلغاء.`)) {
+        router.patch(`/admin/contracts/${props.contract.id}/status`, { status: 'cancelled' }, { preserveScroll: true });
+    }
+};
+
 const reopen = () => {
     if (confirm(`إرجاع العقد ${props.contract.number} إلى «مسوّدة» ليصبح قابلًا للتعديل؟ ستحتاج إلى إرساله للعميل من جديد بعد التعديل.`)) {
         router.patch(`/admin/contracts/${props.contract.id}/status`, { status: 'draft' }, { preserveScroll: true });
@@ -268,6 +281,16 @@ const submitReceipt = () => {
                     >
                         <WhatsappIcon class="h-4 w-4" /> إرسال عبر واتساب
                     </button>
+                    <!-- الإلغاء: الباب الذي تحيل عليه رسالة الحذف ولم يكن له زرّ -->
+                    <button
+                        v-if="may.edit && contract.status !== 'cancelled'"
+                        type="button"
+                        @click="cancelContract"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
+                    >
+                        <Ban class="h-4 w-4" /> إلغاء العقد
+                    </button>
+
                     <!-- المخرج من القفل: الورقة تعود مسوّدةً فتُصحَّح، ثم تُرسل من جديد -->
                     <button
                         v-if="may.edit && contract.status !== 'draft' && !hasReceipts"

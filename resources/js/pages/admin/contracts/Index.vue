@@ -5,7 +5,7 @@ import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, ClipboardList, Eye, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
+import { Ban, CheckCircle2, ClipboardList, Eye, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -260,6 +260,13 @@ const sendReceipt = (c: Contract, r: Receipt) => {
 
 const markSigned = (c: Contract) => router.patch(`/admin/contracts/${c.id}/status`, { status: 'signed' }, { preserveScroll: true });
 
+// الإلغاء هو ما تحيل عليه رسالة الحذف حين تُرفض ورقةٌ أُرسلت — راجع صفحة العقد.
+const cancelContract = (c: Contract) => {
+    if (confirm(`إلغاء العقد ${c.number}؟ سيبقى في السجل بسنداته.`)) {
+        router.patch(`/admin/contracts/${c.id}/status`, { status: 'cancelled' }, { preserveScroll: true });
+    }
+};
+
 const destroy = (c: Contract) => {
     if (confirm(`حذف العقد ${c.number}؟`)) router.delete(`/admin/contracts/${c.id}`, { preserveScroll: true });
 };
@@ -423,6 +430,13 @@ const statusClass = (s: string) =>
                                             :icon="CheckCircle2"
                                             title="تعليم كموقّع"
                                             @click="markSigned(c)"
+                                        />
+                                        <TableActionButton
+                                            v-if="may.edit && c.status !== 'cancelled'"
+                                            variant="muted"
+                                            :icon="Ban"
+                                            title="إلغاء العقد"
+                                            @click="cancelContract(c)"
                                         />
                                         <TableActionButton v-if="may.delete" variant="danger" :icon="Trash2" title="حذف" @click="destroy(c)" />
                                     </div>

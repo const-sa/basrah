@@ -1099,7 +1099,13 @@ class ContractsController extends Controller
 
         $this->whatsapp->contract($contract, $request->user()?->id, $this->pdf->publicUrl($path));
 
-        $contract->update(['status' => 'sent', 'sent_at' => now()]);
+        // الإرسال يتقدّم بالحالة ولا يرجع بها. وُقِّعت الورقة ثم أُعيد إرسالها
+        // للعميل — نسخةً ثانية أو تذكيرًا — فتبقى موقّعة: محو التوقيع هنا يُسقط
+        // ما سُجِّل بفعلٍ مقصود، ويُسقطه بصمت في أثناء إرسالٍ لا علاقة له به.
+        $contract->update([
+            'sent_at' => now(),
+            'status' => $contract->status === 'draft' ? 'sent' : $contract->status,
+        ]);
 
         return back()->with('success', 'تم إرسال العقد (PDF) على واتساب العميل');
     }
