@@ -9,7 +9,7 @@ import StayContractDocument from '@/components/contracts/StayContractDocument.vu
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowRight, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, X } from 'lucide-vue-next';
+import { ArrowRight, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, Unlock, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 /** سند قبض مرحّل على العقد — العربون وما تلاه من دفعات. */
@@ -92,6 +92,33 @@ const props = defineProps<{
 
 
 const may = computed(() => props.can);
+
+/**
+ * هل قُبض على هذه الورقة شيء؟ المرحَّل وحده قبض — المسوّدة ليست سندًا بعد.
+ */
+const hasReceipts = computed(() => props.contract.receipts.some((r) => r.status === 'posted'));
+
+/**
+ * إعادة العقد مسوّدةً ليُصحَّح.
+ *
+ * العقد يُقفل عن التعديل والحذف وإعادة البناء بمجرد إرساله — وهو ما يفعله زر
+ * واتساب نفسه. ولم يكن في الشاشة ما يفكّه: «ولّد عقدًا جديدًا بدله» تردّها
+ * الورقةُ الواحدة لكل نموذج على الحجز، و«ألغِه بدل حذفه» تشير إلى إلغاءٍ لا زرّ
+ * له. فبقيت قائمة خدمات المناسبة — وسطورها تتحرك إلى يوم المناسبة نفسها —
+ * مجمَّدةً بلا مخرج.
+ *
+ * فالمخرج هنا، لا قاعدة القفل: الحالة تعود مسوّدةً أمام الجميع، ويسجّل سجل
+ * التدقيق من أعادها ومتى، بدل أن يُصحَّح نصٌّ من تحت إرسالٍ قائم.
+ *
+ * ويُمنع على ورقةٍ قُبض عليها مال: قيمتها تُحرَّر مع نصها، وخفضُها تحت ما قُبض
+ * يبتلع الفرق المستحق للعميل — remainingAmount() تحدّ بصفر، وaddSettlement()
+ * تحدّ المدفوع بالقيمة — فتُترك مقفلةً حتى يُردّ الفائض بسند صرف.
+ */
+const reopen = () => {
+    if (confirm(`إرجاع العقد ${props.contract.number} إلى «مسوّدة» ليصبح قابلًا للتعديل؟ ستحتاج إلى إرساله للعميل من جديد بعد التعديل.`)) {
+        router.patch(`/admin/contracts/${props.contract.id}/status`, { status: 'draft' }, { preserveScroll: true });
+    }
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -241,6 +268,16 @@ const submitReceipt = () => {
                     >
                         <WhatsappIcon class="h-4 w-4" /> إرسال عبر واتساب
                     </button>
+                    <!-- المخرج من القفل: الورقة تعود مسوّدةً فتُصحَّح، ثم تُرسل من جديد -->
+                    <button
+                        v-if="may.edit && contract.status !== 'draft' && !hasReceipts"
+                        type="button"
+                        @click="reopen"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100"
+                    >
+                        <Unlock class="h-4 w-4" /> إرجاع إلى مسوّدة
+                    </button>
+
                     <!-- تعديل العقد نفسه — بخلاف «تحديث من النموذج» الذي يعيد قراءة صياغته -->
                     <Link
                         v-if="may.edit && contract.status === 'draft'"
