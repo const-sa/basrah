@@ -9,7 +9,7 @@ import StayContractDocument from '@/components/contracts/StayContractDocument.vu
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowRight, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, X } from 'lucide-vue-next';
+import { ArrowRight, FileDown, FileText, Pencil, Plus, Printer, ReceiptText, RefreshCw, Unlock, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 /** سند قبض مرحّل على العقد — العربون وما تلاه من دفعات. */
@@ -92,6 +92,20 @@ const props = defineProps<{
 
 
 const may = computed(() => props.can);
+
+/**
+ * فكّ توقيع العقد فيعود «مُرسلًا» قابلًا للتصحيح.
+ *
+ * العقد الموقّع مقفول عن التعديل عمدًا — هو الورقة التي بيد العميل. وقائمة
+ * خدمات المناسبة تتغيّر يوم المناسبة نفسها، فيحتاج الموظف أن يفتحها. يفتحها
+ * بفكّ التوقيع لا بتعديلٍ من تحته: الحالة تتبدّل أمام الجميع ويسجّلها سجل
+ * التدقيق، بدل أن تتغيّر الأسعار تحت توقيعٍ قائم.
+ */
+const unsign = () => {
+    if (confirm(`إلغاء توقيع العقد ${props.contract.number}؟ سيعود «مُرسلًا» فيمكن تعديله، ثم تُعلّمه موقّعًا من جديد.`)) {
+        router.patch(`/admin/contracts/${props.contract.id}/status`, { status: 'sent' }, { preserveScroll: true });
+    }
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'لوحة التحكم', href: '/admin' },
@@ -241,6 +255,16 @@ const submitReceipt = () => {
                     >
                         <WhatsappIcon class="h-4 w-4" /> إرسال عبر واتساب
                     </button>
+                    <!-- فكّ التوقيع يفتح العقد للتصحيح بلا مساس بقاعدة القفل نفسها -->
+                    <button
+                        v-if="may.edit && contract.status === 'signed'"
+                        type="button"
+                        @click="unsign"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100"
+                    >
+                        <Unlock class="h-4 w-4" /> إلغاء التوقيع
+                    </button>
+
                     <!-- تعديل العقد نفسه — بخلاف «تحديث من النموذج» الذي يعيد قراءة صياغته -->
                     <Link
                         v-if="may.edit && contract.status === 'draft'"
