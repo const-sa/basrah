@@ -85,14 +85,14 @@ class DashboardController extends Controller
         // الوحدات المشغولة اليوم تُحسب بالوحدات لا بالحجوزات: قاعةٌ فيها
         // حجزان صباحي ومسائي مشغولةٌ مرةً واحدة في نظر من يسأل «ما المتاح؟».
         $occupied = $base()->blocking()
-            ->whereDate('booking_date', $today->toDateString())
+            ->today()
             ->distinct()
             ->count('unit_id');
 
         $units = Unit::visibleTo($user)->where('is_active', true)->count();
 
         return [
-            'today' => $base()->blocking()->whereDate('booking_date', $today->toDateString())->count(),
+            'today' => $base()->blocking()->today()->count(),
             'upcoming' => $base()->blocking()->whereDate('booking_date', '>', $today->toDateString())->count(),
             'deposit_paid' => $base()->where('status', 'deposit_paid')->count(),
             'month_count' => (clone $monthly)->count(),
@@ -249,7 +249,7 @@ class DashboardController extends Controller
     {
         return Booking::visibleTo($user)->blocking()
             ->with(['unit:id,name', 'client:id,name,mobile', 'sections:id,name'])
-            ->whereDate('booking_date', $today->toDateString())
+            ->today()
             ->orderBy('starts_at')
             ->get()
             ->map(fn (Booking $b) => [

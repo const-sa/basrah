@@ -92,7 +92,7 @@ class UnitWorkspaceController extends Controller
         $profit = CostCenter::forUnit($unit)->profitability($from->toDateString(), $to->toDateString());
 
         return [
-            'today' => $base()->blocking()->whereDate('booking_date', $today->toDateString())->count(),
+            'today' => $base()->blocking()->today()->count(),
             'upcoming' => $base()->blocking()->whereDate('booking_date', '>', $today->toDateString())->count(),
             'month_count' => (clone $month)->count(),
             'month_value' => round((float) (clone $month)->sum('total_amount'), 2),

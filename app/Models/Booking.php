@@ -6,6 +6,7 @@ use App\Observers\BookingObserver;
 use App\Support\BookingPeriod;
 use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -551,6 +552,31 @@ class Booking extends Model
     public function scopeBlocking(Builder $query): Builder
     {
         return $query->whereIn('status', self::BLOCKING_STATUSES);
+    }
+
+    /**
+     * The bookings that count as today's.
+     *
+     * A hall is let from three in the afternoon until three the next morning,
+     * so between midnight and closing the event filling the room is dated to
+     * yesterday. Counting by the date alone answered «لا حجوزات اليوم» to an
+     * operator standing in a full hall.
+     *
+     * A booking still running is therefore counted as well, and only while it
+     * runs: once it ends, the date it was booked for is the only day that
+     * claims it. So the figure never drops below what the date alone gives,
+     * and never rises above what is actually happening.
+     */
+    public function scopeToday(Builder $query): Builder
+    {
+        $now = CarbonImmutable::now();
+
+        return $query->where(function (Builder $q) use ($now) {
+            $q->whereDate('booking_date', $now->toDateString())
+                ->orWhere(fn (Builder $running) => $running
+                    ->where('starts_at', '<=', $now)
+                    ->where('ends_at', '>', $now));
+        });
     }
 
     /**

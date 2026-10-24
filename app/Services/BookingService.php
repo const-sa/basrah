@@ -29,6 +29,9 @@ use RuntimeException;
  */
 class BookingService
 {
+    /** كسور الهللة لا تمنع إقفال حجزٍ اكتمل مبلغه. */
+    private const EPSILON = 0.009;
+
     use BuildsBookings;
 
     public function __construct(
@@ -89,8 +92,38 @@ class BookingService
             $booking->recalculatePaidAmount();
             $this->accounting->recordPayment($payment, $userId);
 
+            $this->settleIfCovered($booking->fresh(), $userId);
+
             return $payment;
         });
+    }
+
+    /**
+     * Close a booking whose money has arrived in full.
+     *
+     * Revenue was recognized only when an employee picked «مسدد كامل» off the
+     * status menu, while taking the money merely rewrote paid_amount. So a
+     * booking could be paid to the last riyal — or past it — and stay on
+     * «مدفوع العربون», its revenue never posted and its unit reading a loss
+     * for a month it had earned in. The money is what decides, not the menu.
+     *
+     * A booking already closed is left alone, and so is a refund that drops it
+     * back below its total: reopening a recognized sale is a reversal, which
+     * is its own decision and not one to take silently inside a payment.
+     */
+    private function settleIfCovered(Booking $booking, ?int $userId): void
+    {
+        $total = (float) $booking->total_amount;
+
+        if ($booking->status !== 'deposit_paid' || $total <= 0) {
+            return;
+        }
+
+        if (round((float) $booking->paid_amount, 2) + self::EPSILON < round($total, 2)) {
+            return;
+        }
+
+        $this->settleInFull($booking, $userId);
     }
 
     /**
