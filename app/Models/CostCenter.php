@@ -65,8 +65,54 @@ class CostCenter extends Model
      */
     public function profitability(?string $from = null, ?string $to = null): array
     {
+        return $this->profitOf([$this->id], $from, $to);
+    }
+
+    /**
+     * The unit's whole profit picture — its own centre and its rooms'.
+     *
+     * A hall let whole credits its revenue to the unit's centre; a hall let by
+     * room credits each room's, so «كم دخل من قسم الرجال؟» has an answer. Its
+     * costs are charged to the unit either way, so reading the unit's centre
+     * alone showed a hall that sells rooms as all expense and no income.
+     *
+     * profitability() above stays one centre to one number: the dashboard and
+     * the financial reports list every centre side by side, and folding rooms
+     * into the unit there would count the same riyal twice.
+     */
+    public function profitabilityWithSections(?string $from = null, ?string $to = null): array
+    {
+        return $this->profitOf($this->reportingIds(), $from, $to);
+    }
+
+    /**
+     * The centres this one answers for: itself, and the rooms of its unit.
+     *
+     * @return list<int>
+     */
+    private function reportingIds(): array
+    {
+        if ($this->unit_id === null) {
+            return [$this->id];
+        }
+
+        return [
+            $this->id,
+            ...static::query()
+                ->whereIn('unit_section_id', UnitSection::where('unit_id', $this->unit_id)->select('id'))
+                ->pluck('id')
+                ->all(),
+        ];
+    }
+
+    /**
+     * @param  list<int>  $centreIds
+     * @return array{revenue: float, expense: float, profit: float}
+     */
+    private function profitOf(array $centreIds, ?string $from, ?string $to): array
+    {
         $lines = JournalLine::query()
-            ->where('cost_center_id', $this->id)
+            ->whereIn('cost_center_id', $centreIds)
             ->whereHas('entry', fn ($q) => $q->whereIn('status', JournalEntry::EFFECTIVE_STATUSES)
                 ->when($from, fn ($sub) => $sub->whereDate('entry_date', '>=', $from))
                 ->when($to, fn ($sub) => $sub->whereDate('entry_date', '<=', $to)))

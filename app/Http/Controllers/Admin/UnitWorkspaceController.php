@@ -89,7 +89,9 @@ class UnitWorkspaceController extends Controller
             ->get()
             ->count();
 
-        $profit = CostCenter::forUnit($unit)->profitability($from->toDateString(), $to->toDateString());
+        // Rooms included: a hall let by room credits its revenue to each room's
+        // centre while its costs stay on the unit — see profitabilityWithSections().
+        $profit = CostCenter::forUnit($unit)->profitabilityWithSections($from->toDateString(), $to->toDateString());
 
         return [
             'today' => $base()->blocking()->today()->count(),
