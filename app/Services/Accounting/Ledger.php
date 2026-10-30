@@ -181,7 +181,7 @@ class Ledger
     /**
      * معرّف الحساب من كوده أو من معرّفه مباشرة.
      */
-    private function accountId(string|int $account): int
+    public function accountId(string|int $account): int
     {
         if (is_int($account)) {
             return $account;

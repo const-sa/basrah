@@ -18,12 +18,13 @@ interface Center {
     revenue: number;
     expense: number;
     profit: number;
+    deposits: number;
 }
 
 const props = defineProps<{
     centers: { data: Center[]; links: { url: string | null; label: string; active: boolean }[] };
     filters: { from: string; to: string; search: string | null; status: string | null };
-    totals: { revenue: number; expense: number; profit: number };
+    totals: { revenue: number; expense: number; profit: number; deposits: number };
 }>();
 
 const { can } = usePermissions();
@@ -90,10 +91,11 @@ const destroy = (c: Center) => {
                 </button>
             </div>
 
-            <div class="grid gap-3 sm:grid-cols-3">
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <StatPill label="إجمالي الإيراد" :value="money(totals.revenue)" variant="success" />
                 <StatPill label="إجمالي المصروف" :value="money(totals.expense)" variant="danger" />
                 <StatPill label="صافي الربح" :value="money(totals.profit)" :variant="totals.profit >= 0 ? 'info' : 'warning'" />
+                <StatPill label="عرابين محصَّلة مقدمًا" :value="money(totals.deposits)" variant="warning" />
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -120,6 +122,7 @@ const destroy = (c: Center) => {
                                 <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الإيراد</th>
                                 <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المصروف</th>
                                 <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الربح</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]" title="عرابين حجوزات لم تكتمل بعد — تصير إيرادًا عند سداد الحجز كاملًا">عرابين مقدمًا</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
@@ -138,6 +141,7 @@ const destroy = (c: Center) => {
                                 <td class="px-4 py-3 text-left font-bold text-emerald-600" dir="ltr">{{ money(c.revenue) }}</td>
                                 <td class="px-4 py-3 text-left font-bold text-red-600" dir="ltr">{{ money(c.expense) }}</td>
                                 <td class="px-4 py-3 text-left font-extrabold" :class="c.profit >= 0 ? 'text-slate-900' : 'text-red-700'" dir="ltr">{{ money(c.profit) }}</td>
+                                <td class="px-4 py-3 text-left font-bold text-amber-600" dir="ltr">{{ money(c.deposits) }}</td>
                                 <td class="px-4 py-3 text-center">
                                     <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="c.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'">{{ c.is_active ? 'نشط' : 'موقوف' }}</span>
                                 </td>
@@ -155,7 +159,7 @@ const destroy = (c: Center) => {
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="!centers.data.length"><td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">لا مراكز تكلفة</td></tr>
+                            <tr v-if="!centers.data.length"><td colspan="8" class="px-4 py-10 text-center text-sm text-slate-500">لا مراكز تكلفة</td></tr>
                         </tbody>
                     </table>
                 </div>

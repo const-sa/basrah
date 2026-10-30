@@ -141,6 +141,40 @@ class AccountingTest extends TestCase
         $this->assertSame(round($total - 650, 2), Account::where('code', Ledger::RECEIVABLES)->first()->balance());
     }
 
+    /** حجز a-51: رُفع إجماليه بعد إقفاله، فبقي الإيراد على القديم وعلق الفرق في العرابين. */
+    public function test_raising_a_closed_bookings_total_follows_into_its_revenue(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+        $total = (float) $booking->total_amount;
+
+        $service->recordPayment($booking, ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => $total + 1000]);
+        $this->assertSame('paid_in_full', $booking->fresh()->status);
+
+        $service->update($booking->fresh(), ['agreed_amount' => $total + 1000, 'is_taxable' => false]);
+        $raised = (float) $booking->fresh()->total_amount;
+
+        $this->assertSame($raised, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(round($total + 1000 - $raised, 2), Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(1, JournalEntry::where('source', 'booking')->where('reference_id', $booking->id)->where('status', 'posted')->count());
+    }
+
+    /** حجز a-46: أُقفل يدويًا قبل السداد، فدخل باقيه العرابين بدل أن يسدّ ذمّة العميل. */
+    public function test_money_taken_after_a_manual_close_settles_the_receivable(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+        $total = (float) $booking->total_amount;
+
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
+        $service->settleInFull($booking->fresh());
+        $service->recordPayment($booking->fresh(), ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => round($total - 650, 2)]);
+
+        $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::RECEIVABLES)->first()->balance());
+    }
+
     public function test_revenue_is_never_recognized_twice_for_one_booking(): void
     {
         $booking = $this->makeBooking();

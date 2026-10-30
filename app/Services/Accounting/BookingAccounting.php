@@ -146,26 +146,101 @@ class BookingAccounting
             return null;
         }
 
-        $booking->loadMissing('unit');
-        $costCenter = $this->costCenter($booking);
+        return $this->postRevenue($booking, now()->toDateString(), $userId);
+    }
 
-        $collected = min((float) $booking->paid_amount, $total);
-        $outstanding = round($total - $collected, 2);
+    /**
+     * إعادة إثبات إيراد حجزٍ مقفَل تغيّر مبلغه أو ما سُدِّد عليه بعد إقفاله.
+     *
+     * قيد الإيراد يُكتب مرة عند الإقفال، فإذا رُفع إجمالي الحجز بعدها بقي
+     * الإيراد على المبلغ القديم وعلق الفرق في العرابين غير المكتسبة (حجز a-51:
+     * 9,000 مسدَّدة و8,000 إيراد). فيُعكس القيد القديم ويُكتب بديله بتاريخه
+     * نفسه، كي لا ينتقل إيراد الحجز إلى شهرٍ غير شهره.
+     */
+    public function reviseRevenue(Booking $booking, ?int $userId = null): ?JournalEntry
+    {
+        $entry = JournalEntry::with('lines')
+            ->where('source', 'booking')
+            ->where('reference_type', Booking::class)
+            ->where('reference_id', $booking->id)
+            ->where('status', 'posted')
+            ->latest('id')
+            ->first();
 
-        $lines = [
-            ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $collected, 'cost_center_id' => $costCenter],
-            ['account' => Ledger::RECEIVABLES, 'debit' => $outstanding, 'cost_center_id' => $costCenter],
-            ...$this->revenueLines($booking, $total, $costCenter),
-        ];
+        if (! $entry) {
+            return null;
+        }
 
+        $expected = (float) $booking->total_amount > 0 ? $this->revenueEntryLines($booking) : [];
+
+        if ($this->signature($entry->lines->map(fn ($l) => [
+            'account' => $l->account_id,
+            'debit' => (float) $l->debit,
+            'credit' => (float) $l->credit,
+            'cost_center_id' => $l->cost_center_id,
+        ])->all()) === $this->signature($expected)) {
+            return null;
+        }
+
+        $date = $entry->entry_date->toDateString();
+        $this->ledger->reverse($entry, "تعديل الحجز {$booking->reference}", $userId);
+
+        return $expected ? $this->postRevenue($booking, $date, $userId) : null;
+    }
+
+    private function postRevenue(Booking $booking, string $date, ?int $userId): JournalEntry
+    {
         return $this->ledger->post(
-            now()->toDateString(),
+            $date,
             "إثبات إيراد الحجز {$booking->reference}",
-            $lines,
+            $this->revenueEntryLines($booking),
             'booking',
             $booking,
             $userId,
         );
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function revenueEntryLines(Booking $booking): array
+    {
+        $booking->loadMissing('unit');
+        $costCenter = $this->costCenter($booking);
+
+        $total = (float) $booking->total_amount;
+        $collected = min((float) $booking->paid_amount, $total);
+        $outstanding = round($total - $collected, 2);
+
+        return [
+            ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $collected, 'cost_center_id' => $costCenter],
+            ['account' => Ledger::RECEIVABLES, 'debit' => $outstanding, 'cost_center_id' => $costCenter],
+            ...$this->revenueLines($booking, $total, $costCenter),
+        ];
+    }
+
+    /**
+     * The entry's lines as a comparable fingerprint: account codes resolved to
+     * ids and zero lines dropped, the way the ledger stores them.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     */
+    private function signature(array $lines): string
+    {
+        $rows = [];
+
+        foreach ($lines as $line) {
+            $debit = round((float) ($line['debit'] ?? 0), 2);
+            $credit = round((float) ($line['credit'] ?? 0), 2);
+
+            if ($debit <= 0 && $credit <= 0) {
+                continue;
+            }
+
+            $rows[] = implode('|', [$this->ledger->accountId($line['account']), (int) ($line['cost_center_id'] ?? 0), number_format($debit, 2, '.', ''), number_format($credit, 2, '.', '')]);
+        }
+
+        sort($rows);
+
+        return implode(';', $rows);
     }
 
     /**

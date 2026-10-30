@@ -40,11 +40,9 @@ class CostCentersController extends Controller
 
         // Totals cover every matching centre, not one page of them, so the
         // figure does not shift as the user pages through.
-        $profitability = $this->statements->profitabilityForMany(
-            (clone $query)->pluck('id')->map(fn ($id) => (int) $id)->all(),
-            $from,
-            $to,
-        );
+        $ids = (clone $query)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $profitability = $this->statements->profitabilityForMany($ids, $from, $to);
+        $deposits = $this->statements->depositsHeldForMany($ids, $to);
 
         $centers = $query->orderByDesc('is_active')
             ->orderBy('name')
@@ -59,6 +57,7 @@ class CostCentersController extends Controller
                 'is_active' => $center->is_active,
                 'is_system' => $center->isSystem(),
                 ...($profitability[$center->id] ?? ['revenue' => 0.0, 'expense' => 0.0, 'profit' => 0.0]),
+                'deposits' => $deposits[$center->id] ?? 0.0,
             ]);
 
         return Inertia::render('admin/accounting/CostCenters', [
@@ -68,6 +67,7 @@ class CostCentersController extends Controller
                 'revenue' => round(collect($profitability)->sum('revenue'), 2),
                 'expense' => round(collect($profitability)->sum('expense'), 2),
                 'profit' => round(collect($profitability)->sum('profit'), 2),
+                'deposits' => round(array_sum($deposits), 2),
             ],
         ]);
     }

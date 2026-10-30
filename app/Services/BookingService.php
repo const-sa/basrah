@@ -92,7 +92,12 @@ class BookingService
             $booking->recalculatePaidAmount();
             $this->accounting->recordPayment($payment, $userId);
 
-            $this->settleIfCovered($booking->fresh(), $userId);
+            // Money taken on a booking already closed settles its receivable
+            // rather than sitting in unearned revenue it no longer has.
+            $fresh = $booking->fresh();
+            $fresh->status === 'paid_in_full' && ! $payment->isSecurity()
+                ? $this->accounting->reviseRevenue($fresh, $userId)
+                : $this->settleIfCovered($fresh, $userId);
 
             return $payment;
         });
@@ -353,6 +358,13 @@ class BookingService
 
             $this->syncSections($booking, $scope, $quote['lines']);
             $this->syncAddons($booking, $quote['lines']);
+
+            // Repriced after it was closed: its revenue follows the new total.
+            // Repriced down to what is already paid: it closes now.
+            $fresh = $booking->fresh();
+            $fresh->status === 'paid_in_full'
+                ? $this->accounting->reviseRevenue($fresh)
+                : $this->settleIfCovered($fresh, null);
 
             return $booking->fresh(['unit', 'client', 'sections', 'addons']);
         });

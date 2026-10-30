@@ -124,6 +124,40 @@ class CostCenterStatementService
     }
 
     /**
+     * Booking deposits each centre holds on the given day — collected, not yet earned.
+     *
+     * A deposit is a liability until the booking closes, so it never shows as
+     * revenue; without this figure a hall that took 12,500 in deposits reads
+     * as having taken nothing. A balance, so it runs from the start of the books.
+     *
+     * @param  list<int>  $centerIds
+     * @return array<int, float>
+     */
+    public function depositsHeldForMany(array $centerIds, ?string $to = null): array
+    {
+        $held = array_fill_keys($centerIds, 0.0);
+
+        if ($centerIds === []) {
+            return $held;
+        }
+
+        $rows = $this->linesQuery($centerIds, null, $to)
+            ->join('accounts', 'accounts.id', '=', 'journal_lines.account_id')
+            ->where('accounts.code', Ledger::UNEARNED_REVENUE)
+            ->groupBy('journal_lines.cost_center_id')
+            ->selectRaw('journal_lines.cost_center_id AS center_id, SUM(journal_lines.credit) - SUM(journal_lines.debit) AS balance')
+            ->get();
+
+        foreach ($rows as $row) {
+            if (isset($held[(int) $row->center_id])) {
+                $held[(int) $row->center_id] = round((float) $row->balance, 2);
+            }
+        }
+
+        return $held;
+    }
+
+    /**
      * Revenue grows on the credit side, expense on the debit side.
      */
     private function net(string $type, float $debit, float $credit): float
