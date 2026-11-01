@@ -66,6 +66,8 @@ class AccountsSeeder extends Seeder
         ['5000', 'المصروفات', 'expense', true, null],
         ['5100', 'تكلفة المبيعات', 'expense', true, '5000'],
         [Ledger::COGS, 'تكلفة البضاعة المباعة', 'expense', false, '5100'],
+        // فرق الجرد تكلفةُ بضاعةٍ خرجت بلا بيع، لا مصروفٌ عموميّ.
+        [Ledger::STOCK_VARIANCE, 'عجز وفائض الجرد', 'expense', false, '5100'],
         ['5200', 'مصروفات الرواتب', 'expense', true, '5000'],
         [Ledger::SALARIES_EXPENSE, 'الرواتب والأجور', 'expense', false, '5200'],
         ['5300', 'مصروفات عمومية', 'expense', true, '5000'],

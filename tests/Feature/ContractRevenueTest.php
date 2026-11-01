@@ -8,7 +8,10 @@ use App\Models\Contract;
 use App\Models\ContractTemplate;
 use App\Models\CostCenter;
 use App\Models\Department;
+use App\Models\Item;
 use App\Models\JournalEntry;
+use App\Models\Quotation;
+use App\Models\QuotationItem;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Accounting\ContractAccounting;
@@ -184,6 +187,83 @@ class ContractRevenueTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+    }
+
+    /**
+     * An invoice raised off a contract earns where the contract does.
+     *
+     * The contract's centre is frozen when it is signed, but a quotation's
+     * department can still be edited after it. Re-deriving the invoice from
+     * the quotation would then split one job's money between the centre its
+     * receipts went to and another one.
+     */
+    public function test_an_invoice_from_a_contract_earns_on_the_contracts_centre(): void
+    {
+        $quotation = $this->quotationWithAnItem();
+
+        $this->actingAs($this->owner)
+            ->post('/admin/contracts/from-quotation', ['quotation_id' => $quotation->id])
+            ->assertRedirect();
+
+        $contract = Contract::latest('id')->firstOrFail();
+        $pools = app(ContractAccounting::class)->bindCostCenter($contract)->cost_center_id;
+
+        // The offer is re-pointed at another department after the contract.
+        $other = Department::firstOrCreate(
+            ['code' => 'VENUES'],
+            ['name' => 'القاعات والشاليهات', 'sells' => true, 'is_active' => true, 'sort_order' => 2],
+        );
+        $quotation->update(['department_id' => $other->id]);
+
+        $this->actingAs($this->owner)
+            ->post("/admin/quotations/{$quotation->id}/invoice", [
+                'payment_method_id' => $this->paymentMethodId(),
+                'paid_amount' => 0,
+            ]);
+
+        $entry = JournalEntry::where('source', 'sale')->latest('id')->firstOrFail();
+
+        $this->assertTrue(
+            $entry->lines->every(fn ($line) => (int) $line->cost_center_id === (int) $pools),
+            'the invoice follows the contract, not the offer that was moved',
+        );
+    }
+
+    private function quotationWithAnItem(): Quotation
+    {
+        $pools = Department::where('code', 'POOLS')->firstOrFail();
+
+        $quotation = Quotation::create([
+            'number' => 'QT-000001',
+            'client_id' => $this->client->id,
+            'user_id' => $this->owner->id,
+            'department_id' => $pools->id,
+            'status' => 'pending',
+            'subtotal' => 500,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 500,
+            'valid_until' => '2027-10-01',
+        ]);
+
+        $item = Item::create([
+            'department_id' => $pools->id,
+            'code' => 'IT-PUMP',
+            'name' => 'مضخة مسبح',
+            'price' => 500,
+            'is_active' => true,
+        ]);
+
+        QuotationItem::create([
+            'quotation_id' => $quotation->id,
+            'item_id' => $item->id,
+            'quantity' => 1,
+            'unit_price' => 500,
+            'total_price' => 500,
+            'is_taxable' => false,
+        ]);
+
+        return $quotation->fresh();
     }
 
     private function installation(float $total, float $deposit): Contract

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Item;
 use App\Models\StockMovement;
+use App\Services\Accounting\StockAccounting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -16,6 +17,8 @@ use RuntimeException;
  */
 class InventoryService
 {
+    public function __construct(private readonly StockAccounting $books) {}
+
     /**
      * تسجيل حركة وتحديث الرصيد.
      *
@@ -139,7 +142,11 @@ class InventoryService
             return null;
         }
 
-        return $this->move($item, $quantity, 'opening', null, $userId, null, 'رصيد افتتاحي عند إنشاء الصنف');
+        $movement = $this->move($item, $quantity, 'opening', null, $userId, null, 'رصيد افتتاحي عند إنشاء الصنف');
+
+        // Capitalised as it comes in, or the stock the business started with
+        // exists on the shelf and nowhere in the books.
+        return $movement ? tap($movement, fn ($m) => $this->books->post($m, $userId)) : null;
     }
 
     /**
@@ -157,7 +164,7 @@ class InventoryService
             return null;
         }
 
-        return $this->move(
+        $movement = $this->move(
             $item,
             $difference,
             'adjustment',
@@ -166,6 +173,10 @@ class InventoryService
             null,
             $notes ?? 'تسوية جرد: المعدود '.$countedQty.' مقابل الدفتري '.$item->stock_qty,
         );
+
+        // A shortage is charged as it is found, not left to drain the stock
+        // account silently.
+        return $movement ? tap($movement, fn ($m) => $this->books->post($m, $userId)) : null;
     }
 
     /**

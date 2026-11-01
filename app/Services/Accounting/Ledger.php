@@ -50,6 +50,9 @@ class Ledger
      */
     public const REFUNDABLE_DEPOSITS = '2410';
 
+    /** What the owner put into the business — an opening stock is credited here. */
+    public const CAPITAL = '3100';
+
     public const BOOKING_REVENUE = '4110';
 
     public const SALES_REVENUE = '4120';
@@ -58,6 +61,9 @@ class Ledger
     public const PURCHASE_DISCOUNT = '4210';
 
     public const COGS = '5110';
+
+    /** What a stocktake finds missing, or finds over. */
+    public const STOCK_VARIANCE = '5120';
 
     public const SALARIES_EXPENSE = '5210';
 

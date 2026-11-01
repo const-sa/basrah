@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Client;
+use App\Models\Contract;
 use App\Models\CostCenter;
 use App\Models\Item;
 use App\Models\JournalEntry;
@@ -584,6 +585,23 @@ class SalesService
      */
     public function costCenterFor(Sale $sale): int
     {
+        // A return lands where the invoice it reverses landed. It does not
+        // carry the quotation forward, so deriving it afresh would credit one
+        // centre and debit another for the same goods.
+        if ($sale->original_sale_id && ($original = $sale->originalSale) && $original->id !== $sale->id) {
+            return $this->costCenterFor($original);
+        }
+
+        // An invoice raised off a contract earns where the contract does. The
+        // contract's centre was frozen when it was signed, and a quotation's
+        // department may be edited after it — re-deriving here would split one
+        // job's money between the centre its receipts went to and another.
+        if ($sale->quotation_id && $frozen = Contract::where('quotation_id', $sale->quotation_id)
+            ->whereNotNull('cost_center_id')
+            ->value('cost_center_id')) {
+            return (int) $frozen;
+        }
+
         if ($sale->unit_id && $sale->unit) {
             return CostCenter::forUnit($sale->unit)->id;
         }
