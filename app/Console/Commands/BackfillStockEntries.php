@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\StockMovement;
 use App\Services\Accounting\StockAccounting;
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Builder;
 use Throwable;
 
 /**
@@ -27,11 +28,19 @@ class BackfillStockEntries extends Command
 
     protected $description = 'Post opening balances and stocktake differences that never reached the ledger';
 
+    /** Movements still owed an entry — and worth one. */
+    private function pending(): Builder
+    {
+        return StockMovement::whereNull('journal_entry_id')
+            ->whereIn('type', StockAccounting::POSTS)
+            // A movement worth nothing posts nothing, so counting it leaves
+            // the command reporting work it can never do.
+            ->whereRaw('ABS(quantity * COALESCE(unit_cost, 0)) > 0');
+    }
+
     public function handle(StockAccounting $books): int
     {
-        $pending = StockMovement::whereNull('journal_entry_id')
-            ->whereIn('type', StockAccounting::POSTS)
-            ->count();
+        $pending = $this->pending()->count();
 
         if ($pending === 0) {
             $this->info('Every opening balance and stocktake is already in the books.');
@@ -46,8 +55,7 @@ class BackfillStockEntries extends Command
         $failed = 0;
         $byType = [];
 
-        StockMovement::whereNull('journal_entry_id')
-            ->whereIn('type', StockAccounting::POSTS)
+        $this->pending()
             ->with('item.department')
             ->orderBy('id')
             ->chunkById(200, function ($chunk) use ($books, $pretend, &$posted, &$failed, &$byType) {
