@@ -26,6 +26,9 @@ class Ledger
 
     public const RECEIVABLES = '1210';
 
+    /** Tax paid on a purchase — a claim on the authority, not part of the cost. */
+    public const INPUT_VAT = '1220';
+
     public const INVENTORY = '1310';
 
     public const PAYABLES = '2110';
@@ -50,6 +53,9 @@ class Ledger
     public const BOOKING_REVENUE = '4110';
 
     public const SALES_REVENUE = '4120';
+
+    /** A discount earned off a supplier — income, but not operating income. */
+    public const PURCHASE_DISCOUNT = '4210';
 
     public const COGS = '5110';
 

@@ -131,7 +131,7 @@ class AccountingTest extends TestCase
         $service = app(BookingService::class);
 
         $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
-        $service->settleInFull($booking->fresh());
+        $this->settleAsDelivered($booking);
 
         $total = (float) $booking->fresh()->total_amount;
 
@@ -151,6 +151,9 @@ class AccountingTest extends TestCase
         $service->recordPayment($booking, ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => $total + 1000]);
         $this->assertSame('paid_in_full', $booking->fresh()->status);
 
+        // Revenue posts on delivery, so the raise after it is what we track.
+        $this->settleAsDelivered($booking);
+
         $service->update($booking->fresh(), ['agreed_amount' => $total + 1000, 'is_taxable' => false]);
         $raised = (float) $booking->fresh()->total_amount;
 
@@ -167,7 +170,7 @@ class AccountingTest extends TestCase
         $total = (float) $booking->total_amount;
 
         $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
-        $service->settleInFull($booking->fresh());
+        $this->settleAsDelivered($booking);
         $service->recordPayment($booking->fresh(), ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => round($total - 650, 2)]);
 
         $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
@@ -178,13 +181,62 @@ class AccountingTest extends TestCase
     public function test_revenue_is_never_recognized_twice_for_one_booking(): void
     {
         $booking = $this->makeBooking();
-        $service = app(BookingService::class);
 
-        $service->settleInFull($booking);
-        $service->settleInFull($booking->fresh());
+        $this->settleAsDelivered($booking);
+        $this->settleAsDelivered($booking);
 
         $entries = JournalEntry::where('source', 'booking')->where('reference_id', $booking->id)->count();
         $this->assertSame(1, $entries);
+    }
+
+    /**
+     * Money taken before the date is not revenue, even paid in full.
+     *
+     * Payment says who owes what; delivery says what was earned. An event
+     * paid months ahead must not weigh on the month that took the money.
+     */
+    public function test_paying_in_full_before_the_date_recognizes_nothing(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+        $total = (float) $booking->total_amount;
+
+        $service->recordPayment($booking, ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => $total]);
+
+        $this->assertSame('paid_in_full', $booking->fresh()->status);
+        $this->assertSame(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame($total, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+
+        // It earns once its date passes and the scheduled sweep runs.
+        $this->travelTo($booking->fresh()->ends_at->copy()->addDay());
+        $this->artisan('accounting:recognize-delivered')->assertSuccessful();
+
+        $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+    }
+
+    /** In pretend mode the sweep writes nothing to the books. */
+    public function test_the_sweep_pretends_without_posting(): void
+    {
+        $booking = $this->makeBooking();
+
+        $this->travelTo($booking->fresh()->ends_at->copy()->addDay());
+        $this->artisan('accounting:recognize-delivered --pretend')->assertSuccessful();
+
+        $this->assertSame(0, JournalEntry::where('source', 'booking')->where('reference_id', $booking->id)->count());
+    }
+
+    /** Cancelling a recognized booking reverses it, so the hall stops earning it. */
+    public function test_cancelling_a_recognized_booking_reverses_its_revenue(): void
+    {
+        $booking = $this->makeBooking();
+        $this->settleAsDelivered($booking);
+
+        $this->assertGreaterThan(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+
+        app(BookingService::class)->cancel($booking->fresh(), 'اعتذر العميل');
+
+        $this->assertSame(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
     }
 
     public function test_refund_reduces_the_paid_amount_and_the_liability(): void
@@ -217,16 +269,18 @@ class AccountingTest extends TestCase
 
         $service = app(BookingService::class);
 
-        foreach ([[$unitA, '2026-09-10'], [$unitB, '2026-09-11']] as [$unit, $date]) {
-            $booking = $service->create([
-                'unit_id' => $unit->id,
+        // Both are created first: recognizing moves the clock past the date,
+        // and a booking made after that would fall in a day gone by.
+        $bookings = collect([[$unitA, '2026-09-10'], [$unitB, '2026-09-11']])
+            ->map(fn (array $row) => $service->create([
+                'unit_id' => $row[0]->id,
                 'scope' => 'whole',
-                'booking_date' => $date,
+                'booking_date' => $row[1],
                 'period' => 'full_day',
                 'status' => 'deposit_paid',
-            ]);
-            $service->settleInFull($booking);
-        }
+            ]));
+
+        $bookings->each(fn ($booking) => $this->settleAsDelivered($booking));
 
         $profitA = CostCenter::forUnit($unitA)->profitability();
         $profitB = CostCenter::forUnit($unitB)->profitability();

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Accounting\CostCenterStatementService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -82,27 +83,8 @@ class CostCenter extends Model
      */
     public function profitabilityWithSections(?string $from = null, ?string $to = null): array
     {
-        return $this->profitOf($this->reportingIds(), $from, $to);
-    }
-
-    /**
-     * The centres this one answers for: itself, and the rooms of its unit.
-     *
-     * @return list<int>
-     */
-    private function reportingIds(): array
-    {
-        if ($this->unit_id === null) {
-            return [$this->id];
-        }
-
-        return [
-            $this->id,
-            ...static::query()
-                ->whereIn('unit_section_id', UnitSection::where('unit_id', $this->unit_id)->select('id'))
-                ->pluck('id')
-                ->all(),
-        ];
+        return app(CostCenterStatementService::class)
+            ->profitabilityRolledUp([$this->id], $from, $to)[$this->id];
     }
 
     /**

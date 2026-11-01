@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ItemGroupOptionResource;
 use App\Http\Resources\ItemOptionResource;
 use App\Models\Client;
+use App\Models\Contract;
 use App\Models\Department;
 use App\Models\Item;
 use App\Models\ItemGroup;
 use App\Models\PaymentMethod;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
+use App\Services\Accounting\ContractAccounting;
 use App\Services\QuotationPdf;
 use App\Services\SalesService;
 use App\Services\Whatsapp\WhatsappAccounts;
@@ -310,6 +312,16 @@ class QuotationController extends Controller
             return back()->with('warning', 'عرض السعر بلا أصناف — لا فاتورة له.');
         }
 
+        // A contract drawn from this offer may already have earned its revenue.
+        // Invoicing it again would credit the same work twice.
+        $contracts = app(ContractAccounting::class);
+        $recognized = $quotation->contracts()->get()
+            ->first(fn (Contract $contract) => $contracts->recognizedEntry($contract) !== null);
+
+        if ($recognized) {
+            return back()->with('warning', "أُثبت إيراد العقد {$recognized->number} من هذا العرض — تراجع عن تنفيذه قبل إصدار الفاتورة.");
+        }
+
         try {
             $sale = $sales->checkout([
                 'lines' => $quotation->items->map(fn (QuotationItem $line) => [
@@ -340,6 +352,13 @@ class QuotationController extends Controller
 
         if ($quotation->status !== 'accepted') {
             $quotation->update(['status' => 'accepted']);
+        }
+
+        // What the contract already collected is held as a liability; the
+        // invoice has just raised a receivable for the whole amount. Without
+        // this the client reads as owing all of it and having paid none.
+        foreach ($quotation->contracts()->get() as $contract) {
+            $contracts->applyDepositsToInvoice($contract, $sale, $request->user()?->id);
         }
 
         // `sales.show` نقطة JSON تخدم النافذة المنبثقة ولا صفحة خلفها، فالتحويل

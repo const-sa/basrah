@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\UnitPrice;
+use App\Models\UnitSection;
 use App\Models\User;
 use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
@@ -16,6 +17,7 @@ use Database\Seeders\DepartmentsSeeder;
 use Database\Seeders\FacilitiesSeeder;
 use Database\Seeders\RolesSeeder;
 use Database\Seeders\UnitsSeeder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -149,6 +151,71 @@ class ChaletHourlyBookingTest extends TestCase
             ->assertSessionHasErrors('availability');
 
         $this->assertSame(1, Booking::count());
+    }
+
+    /**
+     * An hourly booking of two rooms keeps both.
+     *
+     * The pivot is built from the quote's lines, and this form wrote one line
+     * for the first room only — so the second was never booked at all: it
+     * stayed on sale in its own hours, and no revenue ever reached it.
+     */
+    public function test_an_hourly_booking_of_two_rooms_keeps_both(): void
+    {
+        [$chalet, $sections] = $this->chaletWithTwoRooms();
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->payload([
+                'unit_id' => $chalet->id,
+                'scope' => 'sections',
+                'section_ids' => $sections->pluck('id')->all(),
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $booking = Booking::latest('id')->firstOrFail();
+
+        $this->assertEqualsCanonicalizing(
+            $sections->pluck('id')->all(),
+            $booking->sections->pluck('id')->all(),
+            'both rooms were let, so both are written to the pivot',
+        );
+
+        // The amount is agreed and this form has no price row, so it splits evenly.
+        $this->assertSame([375.0, 375.0], $booking->sections->map(fn ($s) => (float) $s->pivot->price)->all());
+    }
+
+    public function test_the_second_room_of_an_hourly_booking_is_no_longer_free(): void
+    {
+        [$chalet, $sections] = $this->chaletWithTwoRooms();
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->payload([
+                'unit_id' => $chalet->id,
+                'scope' => 'sections',
+                'section_ids' => $sections->pluck('id')->all(),
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($this->owner)
+            ->post('/admin/bookings/chalets', $this->payload([
+                'unit_id' => $chalet->id,
+                'scope' => 'sections',
+                'section_ids' => [$sections[1]->id],
+            ]))
+            ->assertSessionHasErrors('availability');
+
+        $this->assertSame(1, Booking::count());
+    }
+
+    /** @return array{0: Unit, 1: Collection<int, UnitSection>} */
+    private function chaletWithTwoRooms(): array
+    {
+        $chalet = Unit::where('type', 'chalet')->whereHas('sections')->firstOrFail();
+        $sections = $chalet->sections()->take(2)->get();
+
+        $this->assertCount(2, $sections, 'the fixture chalet holds at least two rooms');
+
+        return [$chalet, $sections];
     }
 
     /**

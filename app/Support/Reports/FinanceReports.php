@@ -11,6 +11,7 @@ use App\Models\JournalLine;
 use App\Models\Sale;
 use App\Models\User;
 use App\Models\Voucher;
+use App\Services\Accounting\CostCenterStatementService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -617,11 +618,22 @@ class FinanceReports
                 ['key' => 'margin', 'label' => 'الهامش %', 'type' => 'number'],
             ],
             builder: function (array $filters) {
-                $rows = CostCenter::with('unit:id,name')
+                // The unit carries what its rooms earned: a row each beside it
+                // reads the same riyal twice and shows the unit at a loss.
+                $centres = CostCenter::with('unit:id,name')
                     ->where('is_active', true)
-                    ->get()
-                    ->map(function (CostCenter $center) use ($filters) {
-                        $p = $center->profitability($filters['from'] ?? null, $filters['to'] ?? null);
+                    ->whereNull('unit_section_id')
+                    ->get();
+
+                $profit = app(CostCenterStatementService::class)->profitabilityRolledUp(
+                    $centres->pluck('id')->map(fn ($id) => (int) $id)->all(),
+                    $filters['from'] ?? null,
+                    $filters['to'] ?? null,
+                );
+
+                $rows = $centres
+                    ->map(function (CostCenter $center) use ($profit) {
+                        $p = $profit[$center->id];
 
                         return [
                             'unit' => $center->unit?->name ?? $center->name,

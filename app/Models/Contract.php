@@ -25,8 +25,9 @@ class Contract extends Model
     ];
 
     protected $fillable = [
-        'number', 'booking_id', 'quotation_id', 'unit_id', 'client_id', 'contract_template_id', 'created_by',
-        'body', 'terms', 'data', 'paid_amount', 'status', 'sent_at', 'signed_at', 'pdf_path',
+        'number', 'booking_id', 'quotation_id', 'unit_id', 'cost_center_id', 'client_id',
+        'contract_template_id', 'created_by', 'body', 'terms', 'data', 'paid_amount',
+        'status', 'sent_at', 'signed_at', 'completed_at', 'pdf_path',
     ];
 
     /** The printed pads that are let on a unit — a hall's two and the chalet's. */
@@ -46,7 +47,20 @@ class Contract extends Model
             'paid_amount' => 'decimal:2',
             'sent_at' => 'datetime',
             'signed_at' => 'datetime',
+            'completed_at' => 'datetime',
         ];
+    }
+
+    /** The centre the contract earns on, frozen when it is signed. */
+    public function costCenter(): BelongsTo
+    {
+        return $this->belongsTo(CostCenter::class);
+    }
+
+    /** Has the work been handed over? That is when an installation earns. */
+    public function isCompleted(): bool
+    {
+        return $this->completed_at !== null;
     }
 
     public function booking(): BelongsTo
@@ -259,9 +273,17 @@ class Contract extends Model
 
     /**
      * المتبقي على العقد. عقدٌ بلا قيمة مكتوبة لا متبقي له يُحسب.
+     *
+     * A maintenance sheet has none either: its value is one month's fee, not
+     * the term's, so treating it as a balance closed the contract after the
+     * first month and refused the second month's receipt.
      */
     public function remainingAmount(): ?float
     {
+        if ($this->isMaintenanceForm()) {
+            return null;
+        }
+
         $total = $this->totalAmount();
 
         return $total === null ? null : round(max(0, $total - $this->paidAmount()), 2);
@@ -296,7 +318,11 @@ class Contract extends Model
         $paid = $this->paidAmount() + $amount;
         $total = $this->totalAmount();
 
-        $this->update(['paid_amount' => round($total === null ? $paid : min($total, $paid), 2)]);
+        // No cap on monthly maintenance: its value is one month, and every
+        // month after the first would be hidden by it.
+        $uncapped = $total === null || $this->isMaintenanceForm();
+
+        $this->update(['paid_amount' => round($uncapped ? $paid : min($total, $paid), 2)]);
     }
 
     /** إلغاء سند مرحَّل يعيد ما أضافه. */

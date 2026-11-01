@@ -171,11 +171,18 @@ class Booking extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * Ordered, because the revenue split hands the remainder to the last room:
+     * an unordered read can move a halala between rooms from one call to the
+     * next, and reviseRevenue() would then keep reposting the same entry.
+     */
     public function sections(): BelongsToMany
     {
         return $this->belongsToMany(UnitSection::class, 'booking_section')
             ->withPivot('price')
-            ->withTimestamps();
+            ->withTimestamps()
+            ->orderBy('unit_sections.sort_order')
+            ->orderBy('unit_sections.id');
     }
 
     public function addons(): BelongsToMany

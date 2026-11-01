@@ -13,6 +13,7 @@ use App\Models\Quotation;
 use App\Models\Treasury;
 use App\Models\Unit;
 use App\Models\Voucher;
+use App\Services\Accounting\ContractAccounting;
 use App\Services\Accounting\ContractReceipts;
 use App\Services\ContractPdf;
 use App\Services\ContractReceiptPdf;
@@ -278,6 +279,12 @@ class ContractsController extends Controller
                         'remaining_amount' => $c->takesReceipts() && $c->remainingAmount() !== null
                             ? number_format($c->remainingAmount(), 2)
                             : null,
+                        'completed_at' => $c->completed_at?->toDateString(),
+                        // Only a sheet whose revenue waits on handover shows the
+                        // button — a monthly one earns with each receipt instead.
+                        'awaits_handover' => $c->isInstallationForm()
+                            && $c->status !== 'cancelled'
+                            && $c->completed_at === null,
                         'receipts' => $c->takesReceipts()
                             ? $c->vouchers->map(fn (Voucher $v) => [
                                 'id' => $v->id,
@@ -1123,7 +1130,58 @@ class ContractsController extends Controller
             'signed_at' => $data['status'] === 'signed' ? now() : $contract->signed_at,
         ]);
 
+        // Frozen at signing: a quotation re-pointed later must not take the
+        // contract's next receipt to a different centre than its last.
+        if ($data['status'] === 'signed') {
+            app(ContractAccounting::class)->bindCostCenter($contract->fresh());
+        }
+
+        // A cancelled contract earns nothing — its entry is reversed, and
+        // what was collected on it stays as a liability to be refunded.
+        if ($data['status'] === 'cancelled') {
+            app(ContractAccounting::class)->reverseRevenue($contract->fresh(), "إلغاء العقد {$contract->number}", $request->user()?->id);
+        }
+
         return back()->with('success', 'تم تحديث حالة العقد');
+    }
+
+    /**
+     * «تم التنفيذ» — the handover that earns an installation contract.
+     *
+     * Signing is not delivery: the terms are half at signing and half when
+     * the equipment is ordered, so the pool is still to be dug. Revenue waits
+     * for this, and the money collected meanwhile sits as a liability.
+     */
+    public function complete(Request $request, Contract $contract): RedirectResponse
+    {
+        $this->authorizeContract($request, $contract, 'edit');
+
+        $accounting = app(ContractAccounting::class);
+
+        $contract->update(['completed_at' => $contract->completed_at ?? now()]);
+
+        if ($reason = $accounting->refusal($contract->fresh())) {
+            return back()->with('warning', $reason);
+        }
+
+        $entry = $accounting->recognizeRevenue($contract->fresh(), $request->user()?->id);
+
+        return back()->with('success', $entry
+            ? "تم إثبات إيراد العقد {$contract->number} بالقيد {$entry->number}"
+            : 'تم تسجيل تنفيذ العقد');
+    }
+
+    /** Undo a handover recorded by mistake, and the revenue it posted. */
+    public function uncomplete(Request $request, Contract $contract): RedirectResponse
+    {
+        $this->authorizeContract($request, $contract, 'edit');
+
+        app(ContractAccounting::class)
+            ->reverseRevenue($contract, "إلغاء إثبات إيراد العقد {$contract->number}", $request->user()?->id);
+
+        $contract->update(['completed_at' => null]);
+
+        return back()->with('success', 'تم التراجع عن تنفيذ العقد');
     }
 
     public function destroy(Request $request, Contract $contract): RedirectResponse

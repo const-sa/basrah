@@ -7,6 +7,7 @@ use App\Models\EventType;
 use App\Models\Package;
 use App\Models\Unit;
 use App\Models\UnitPrice;
+use App\Support\Accounting\SectionShares;
 use App\Support\BookingPeriod;
 use App\Support\HourlyPeriod;
 use App\Support\StayPeriod;
@@ -312,17 +313,30 @@ class BookingPricing
         $base = round(max(0, $amount), 2);
         $scope = $sectionIds === [] ? 'whole' : 'sections';
 
-        // السطر يقول ما بيع وبكم: القسم يحمل المبلغ كله لأنه المحجوز وحده،
-        // وبه يُكتب سعر القسم في جدول الربط كما يُكتب في سائر الأشكال.
-        $label = $scope === 'whole'
-            ? "{$unit->name} — الوحدة كاملة"
-            : "{$unit->name} — ".$unit->sections()->whereIn('id', $sectionIds)->pluck('name')->implode('، ');
+        $hoursLabel = HourlyPeriod::label($hours);
 
-        $lines = [[
-            'label' => $label.' ('.HourlyPeriod::label($hours).')',
-            'amount' => $base,
-            ...($scope === 'sections' ? ['section_id' => (int) $sectionIds[0]] : []),
-        ]];
+        if ($scope === 'whole') {
+            $lines = [[
+                'label' => "{$unit->name} — الوحدة كاملة ({$hoursLabel})",
+                'amount' => $base,
+            ]];
+        } else {
+            // A line per room booked: the pivot is built from these lines, and
+            // clashes and revenue both read it — a room with no line stays on
+            // sale after it was let. No price row for this form, so split evenly.
+            $sections = $unit->sections()->whereIn('id', $sectionIds)->get();
+            $shares = $this->splitAmount($base, array_fill(0, $sections->count(), 0.0));
+
+            $lines = [];
+
+            foreach ($sections as $i => $section) {
+                $lines[] = [
+                    'label' => "{$unit->name} — {$section->name} ({$hoursLabel})",
+                    'amount' => $shares[$i],
+                    'section_id' => (int) $section->id,
+                ];
+            }
+        }
 
         [$addonsTotal, $addonLines] = $this->addonsTotal($addons);
 
@@ -394,29 +408,15 @@ class BookingPricing
     }
 
     /**
-     * Split an amount by weights, the remainder on the last share so the
-     * shares still add up to it.
+     * Split an amount by weights — the same rule the ledger splits revenue by,
+     * so what is frozen on the booking and what is posted for it agree.
      *
      * @param  list<float>  $weights
      * @return list<float>
      */
     private function splitAmount(float $amount, array $weights): array
     {
-        $count = count($weights);
-        $total = array_sum($weights);
-        $shares = [];
-        $left = $amount;
-
-        foreach ($weights as $i => $weight) {
-            $share = $i === $count - 1
-                ? round($left, 2)
-                : round($total > 0 ? $amount * $weight / $total : $amount / $count, 2);
-
-            $shares[] = $share;
-            $left = round($left - $share, 2);
-        }
-
-        return $shares;
+        return array_values(SectionShares::split($amount, $weights));
     }
 
     /**
@@ -650,7 +650,8 @@ class BookingPricing
     }
 
     /**
-     * العربون المطلوب — يؤخذ من تسعيرة الوحدة، وإن كان الحجز بالأقسام فمن أول قسم مسعَّر.
+     * The deposit asked for — from the unit's price row, or from the first
+     * booked room that names one.
      *
      * @param  list<int>  $sectionIds
      */
@@ -658,11 +659,21 @@ class BookingPricing
     {
         // العربون يتبع الصفّ الذي سُعِّر به الحجز نفسه: قسمٌ أخذ سعر الشاليه
         // يأخذ شروط عربونه معه، فلا يُطالَب بعربون صفر على مبلغٍ غير صفر.
-        $price = $scope === 'whole' || $sectionIds === []
-            ? $this->priceRow($unit->id, null, $period)
-            : $this->sectionPriceRow($unit, $sectionIds[0], $period)[0];
+        if ($scope === 'whole' || $sectionIds === []) {
+            return $this->priceRow($unit->id, null, $period)?->depositFor($total) ?? 0.0;
+        }
 
-        return $price?->depositFor($total) ?? 0.0;
+        // One deposit per booking, ruled by the first room that names one: a
+        // room with no terms must not cancel the terms of those after it.
+        foreach ($sectionIds as $sectionId) {
+            $deposit = $this->sectionPriceRow($unit, (int) $sectionId, $period)[0]?->depositFor($total) ?? 0.0;
+
+            if ($deposit > 0) {
+                return $deposit;
+            }
+        }
+
+        return 0.0;
     }
 
     /**

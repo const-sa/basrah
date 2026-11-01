@@ -2,9 +2,11 @@
 
 namespace Tests;
 
+use App\Models\Booking;
 use App\Models\PaymentMethod;
 use App\Models\Setting;
 use App\Models\Unit;
+use App\Services\BookingService;
 use App\Support\Vat;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
@@ -55,6 +57,20 @@ abstract class TestCase extends BaseTestCase
         ]);
 
         Vat::forget();
+    }
+
+    /**
+     * Close a booking and recognize it, by travelling past its date.
+     *
+     * Revenue posts on delivery, and a booking cannot be made in a day gone
+     * by — so a test that wants a served booking makes it on its date and
+     * then travels. The clock resets itself when the test ends.
+     */
+    protected function settleAsDelivered(Booking $booking, ?int $userId = null): Booking
+    {
+        $this->travelTo($booking->fresh()->ends_at->copy()->addDay());
+
+        return app(BookingService::class)->settleInFull($booking->fresh(), $userId);
     }
 
     /**

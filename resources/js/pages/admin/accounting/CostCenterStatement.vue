@@ -143,7 +143,10 @@ const exportCsv = () => {
                         </tbody>
                         <tfoot v-if="statement.rows.length">
                             <tr class="border-t-2 border-slate-200 bg-slate-50">
-                                <td class="px-4 py-3 text-xs font-extrabold text-slate-700" colspan="4">الإجمالي</td>
+                                <!-- Movement, not result: both sides of a cash entry are tagged
+                                     with the centre, so this total is not an economic figure. -->
+                                <td class="px-4 py-3 text-xs font-extrabold text-slate-700" colspan="4"
+                                    title="مجموع حركة المركز مدينًا ودائنًا — وليس أثره على النتيجة">مجموع الحركة</td>
                                 <td class="px-4 py-3 text-left font-extrabold text-slate-900" dir="ltr">{{ money(statement.total_debit) }}</td>
                                 <td class="px-4 py-3 text-left font-extrabold text-slate-900" dir="ltr">{{ money(statement.total_credit) }}</td>
                             </tr>

@@ -27,6 +27,8 @@ class AccountsSeeder extends Seeder
         [Ledger::BANK, 'البنك', 'asset', false, '1100'],
         ['1200', 'المدينون', 'asset', true, '1000'],
         [Ledger::RECEIVABLES, 'ذمم العملاء', 'asset', false, '1200'],
+        // ضريبة المشتريات مطالبةٌ على الهيئة لا جزءٌ من تكلفة البضاعة.
+        [Ledger::INPUT_VAT, 'ضريبة القيمة المضافة — مدخلات', 'asset', false, '1200'],
         ['1300', 'المخزون', 'asset', true, '1000'],
         [Ledger::INVENTORY, 'مخزون البضاعة', 'asset', false, '1300'],
         ['1400', 'الأصول الثابتة', 'asset', true, '1000'],
@@ -58,6 +60,8 @@ class AccountsSeeder extends Seeder
         [Ledger::BOOKING_REVENUE, 'إيرادات الحجوزات', 'revenue', false, '4100'],
         [Ledger::SALES_REVENUE, 'إيرادات المبيعات', 'revenue', false, '4100'],
         ['4130', 'إيرادات الخدمات الإضافية', 'revenue', false, '4100'],
+        ['4200', 'إيرادات أخرى', 'revenue', true, '4000'],
+        [Ledger::PURCHASE_DISCOUNT, 'خصم مكتسب على المشتريات', 'revenue', false, '4200'],
 
         ['5000', 'المصروفات', 'expense', true, null],
         ['5100', 'تكلفة المبيعات', 'expense', true, '5000'],

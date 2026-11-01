@@ -13,6 +13,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Sale;
 use App\Models\Unit;
+use App\Services\Accounting\CostCenterStatementService;
 use App\Support\LandingPage;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -293,14 +294,21 @@ class DashboardController extends Controller
      */
     private function profitability(CarbonImmutable $from, CarbonImmutable $to): array
     {
-        return CostCenter::with('unit:id,name')
+        // Rooms fold into their unit: a row of their own beside it reads the
+        // same riyal twice, and leaves the unit all expense and no income.
+        $centres = CostCenter::with('unit:id,name')
             ->where('is_active', true)
-            ->get()
-            ->map(function (CostCenter $cc) use ($from, $to) {
-                $p = $cc->profitability($from->toDateString(), $to->toDateString());
+            ->whereNull('unit_section_id')
+            ->get();
 
-                return ['name' => $cc->name, 'revenue' => $p['revenue'], 'expense' => $p['expense'], 'profit' => $p['profit']];
-            })
+        $profit = app(CostCenterStatementService::class)->profitabilityRolledUp(
+            $centres->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            $from->toDateString(),
+            $to->toDateString(),
+        );
+
+        return $centres
+            ->map(fn (CostCenter $cc) => ['name' => $cc->name, ...$profit[$cc->id]])
             ->filter(fn ($r) => $r['revenue'] > 0 || $r['expense'] > 0)
             ->sortByDesc('profit')
             ->take(5)

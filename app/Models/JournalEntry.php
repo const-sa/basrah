@@ -37,6 +37,8 @@ class JournalEntry extends Model
         'voucher' => 'سند',
         'payroll' => 'رواتب',
         'stock_issue' => 'إذن صرف مخزني',
+        'contract' => 'عقد',
+        'purchase' => 'مشتريات',
     ];
 
     protected $fillable = [

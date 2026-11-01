@@ -11,6 +11,7 @@ use App\Models\JournalLine;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Services\Accounting\CashFlowStatement;
+use App\Services\Accounting\CostCenterStatementService;
 use App\Support\Vat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -24,7 +25,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class FinancialReportsController extends Controller
 {
-    public function __construct(private readonly CashFlowStatement $cashFlow) {}
+    public function __construct(
+        private readonly CashFlowStatement $cashFlow,
+        private readonly CostCenterStatementService $statements,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -255,11 +259,22 @@ class FinancialReportsController extends Controller
      */
     private function unitProfitability(string $from, string $to): array
     {
-        return CostCenter::with('unit:id,name,type')
+        // Rooms fold into their unit, or a room's revenue is read twice and
+        // the unit shows a loss it never made.
+        $centres = CostCenter::with('unit:id,name,type')
             ->where('is_active', true)
-            ->get()
-            ->map(function (CostCenter $cc) use ($from, $to) {
-                $p = $cc->profitability($from, $to);
+            ->whereNull('unit_section_id')
+            ->get();
+
+        $profit = $this->statements->profitabilityRolledUp(
+            $centres->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            $from,
+            $to,
+        );
+
+        return $centres
+            ->map(function (CostCenter $cc) use ($profit) {
+                $p = $profit[$cc->id];
 
                 return [
                     'id' => $cc->id,

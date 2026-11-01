@@ -4,8 +4,6 @@ namespace App\Services\Accounting;
 
 use App\Models\Account;
 use App\Models\Contract;
-use App\Models\CostCenter;
-use App\Models\Department;
 use App\Models\PaymentMethod;
 use App\Models\Treasury;
 use App\Models\Voucher;
@@ -28,15 +26,22 @@ use RuntimeException;
  *
  * The credit is unearned revenue, not a sale: a deposit is taken before the
  * pool is dug, and calling it revenue the day it is received would put the
- * income in the wrong month. Revenue is recognized when the work is invoiced,
- * exactly as a booking's is on completion.
+ * income in the wrong month. ContractAccounting moves it to revenue on handover.
+ *
+ * A monthly maintenance sheet is the exception — «يدفع المبلغ بداية كل شهر
+ * ميلادي», so each receipt is that month's fee and is earned the month it is
+ * taken. Parking it in a liability nothing ever cleared is what left the pools
+ * reading a loss against money already in the till.
  */
 class ContractReceipts
 {
     /** كسور الهللة لا تمنع قبض المتبقي. */
     private const EPSILON = 0.009;
 
-    public function __construct(private readonly VoucherService $vouchers) {}
+    public function __construct(
+        private readonly VoucherService $vouchers,
+        private readonly ContractAccounting $contracts,
+    ) {}
 
     /**
      * قبض مبلغ على عقد وترحيل سنده.
@@ -61,11 +66,7 @@ class ContractReceipts
             throw new RuntimeException('المبلغ المقبوض يتجاوز المتبقي على العقد ('.number_format($remaining, 2).').');
         }
 
-        $unearned = Account::where('code', Ledger::UNEARNED_REVENUE)->value('id');
-
-        if (! $unearned) {
-            throw new RuntimeException('حساب الإيرادات غير المكتسبة غير موجود في شجرة الحسابات.');
-        }
+        $counter = $this->counterAccountFor($contract);
 
         $method = isset($data['payment_method_id'])
             ? PaymentMethod::find($data['payment_method_id']) ?? PaymentMethod::default()
@@ -77,14 +78,16 @@ class ContractReceipts
         // نفسه بذلك فيُقرأ في دفتر القبض بلا رجوع إلى العقد.
         $isDeposit = $contract->paidAmount() <= self::EPSILON;
 
-        return DB::transaction(function () use ($contract, $amount, $method, $treasury, $unearned, $isDeposit, $data, $userId) {
+        return DB::transaction(function () use ($contract, $amount, $method, $treasury, $counter, $isDeposit, $data, $userId) {
             $voucher = $this->vouchers->create([
                 'type' => 'receipt',
                 'voucher_date' => $data['voucher_date'] ?? now()->toDateString(),
                 'amount' => $amount,
                 'treasury_id' => $treasury->id,
-                'account_id' => $unearned,
-                'cost_center_id' => $this->costCenterFor($contract),
+                'account_id' => $counter,
+                // Frozen by the first money event, so a later edit to the
+                // quotation cannot send the next receipt to another centre.
+                'cost_center_id' => $this->contracts->bindCostCenter($contract)->cost_center_id,
                 'client_id' => $contract->client_id,
                 'contract_id' => $contract->id,
                 'payment_method_id' => $method->id,
@@ -121,34 +124,25 @@ class ContractReceipts
     }
 
     /**
-     * The contract's cost centre — its quotation's department, the unit its
-     * booking earns on, else the activity whose form it is printed on.
+     * The account the receipt credits.
+     *
+     * Monthly maintenance earns the month it is collected, so its receipt
+     * credits revenue outright. Everything else is money held before the work
+     * is delivered, and waits in unearned revenue until it is recognized.
      */
+    private function counterAccountFor(Contract $contract): int
+    {
+        if ($contract->isMaintenanceForm()) {
+            return $this->contracts->revenueAccountFor($contract);
+        }
+
+        return Account::where('code', Ledger::UNEARNED_REVENUE)->value('id')
+            ?? throw new RuntimeException('حساب الإيرادات غير المكتسبة غير موجود في شجرة الحسابات.');
+    }
+
+    /** The contract's cost centre — one answer, kept in ContractAccounting. */
     public function costCenterFor(Contract $contract): int
     {
-        $contract->loadMissing(['quotation.department', 'booking.unit']);
-
-        if ($department = $contract->quotation?->department) {
-            return CostCenter::forDepartment($department)->id;
-        }
-
-        // A services list earns where its hall does, as the rental payments do.
-        if ($unit = $contract->booking?->unit) {
-            return CostCenter::forUnit($unit)->id;
-        }
-
-        $code = match (true) {
-            $contract->isPoolsForm() => 'POOLS',
-            $contract->isChaletRentalForm(),
-            $contract->isHallRentalForm(),
-            $contract->isHallServicesForm() => 'VENUES',
-            default => null,
-        };
-
-        if ($code && $department = Department::where('code', $code)->first()) {
-            return CostCenter::forDepartment($department)->id;
-        }
-
-        return CostCenter::general()->id;
+        return $this->contracts->costCenterFor($contract);
     }
 }

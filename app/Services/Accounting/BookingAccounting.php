@@ -6,6 +6,8 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
+use App\Support\Accounting\SectionShares;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * القيود التلقائية من نظام الحجوزات (§الطبقة أ - بند 4).
@@ -123,11 +125,14 @@ class BookingAccounting
     }
 
     /**
-     * الاعتراف بالإيراد عند اكتمال الحجز.
-     * مدين: إيراد غير مكتسب (بقدر المحصَّل) + ذمم العملاء (بقدر المتبقي)
-     * دائن: إيرادات الحجوزات (بالإجمالي).
+     * Revenue recognized when the service is delivered.
+     * Dr unearned revenue (what was collected) + receivables (the rest),
+     * Cr booking revenue (the total).
+     *
+     * Dated on the day it was served, not today: an event held last month
+     * earns in that month however late the entry is written.
      */
-    public function recognizeRevenue(Booking $booking, ?int $userId = null): ?JournalEntry
+    public function recognizeRevenue(Booking $booking, ?int $userId = null, ?string $date = null): ?JournalEntry
     {
         $total = (float) $booking->total_amount;
 
@@ -135,18 +140,70 @@ class BookingAccounting
             return null;
         }
 
-        // لا يُعترف بالإيراد مرتين على نفس الحجز.
-        $exists = JournalEntry::where('source', 'booking')
-            ->where('reference_type', Booking::class)
-            ->where('reference_id', $booking->id)
-            ->where('status', 'posted')
-            ->exists();
-
-        if ($exists) {
+        // Never recognized twice for one booking.
+        if ($this->recognizedEntry($booking)) {
             return null;
         }
 
-        return $this->postRevenue($booking, now()->toDateString(), $userId);
+        return $this->postRevenue($booking, $date ?? $this->deliveryDate($booking), $userId);
+    }
+
+    /**
+     * Has this booking's revenue ever been recognized? A reversed entry counts.
+     *
+     * A reversal is a decision taken — the event was cancelled, or the entry
+     * was revised — so reading only the standing entry would invite the
+     * nightly sweep to post the revenue a second time.
+     */
+    public function recognizedEntry(Booking $booking): ?JournalEntry
+    {
+        return $this->revenueEntries($booking)
+            ->whereIn('status', JournalEntry::EFFECTIVE_STATUSES)
+            ->latest('id')
+            ->first();
+    }
+
+    /** The entry that still stands, the one a revision or a cancellation reverses. */
+    public function standingEntry(Booking $booking): ?JournalEntry
+    {
+        return $this->revenueEntries($booking)->where('status', 'posted')->latest('id')->first();
+    }
+
+    /**
+     * The day the booking was served — the month its revenue belongs to.
+     *
+     * A stay ends when the guest leaves; everything else ends on its last day,
+     * which keeps an evening that runs past midnight in the day it was held.
+     */
+    public function deliveryDate(Booking $booking): string
+    {
+        return $booking->isStay() ? $booking->checkOutDate() : $booking->lastDayDate();
+    }
+
+    /**
+     * Undo a cancelled booking's revenue with a counter-entry, not by deleting it.
+     *
+     * Without this the hall keeps earning an event it never held, and the
+     * client keeps owing a balance they no longer owe.
+     */
+    public function reverseRevenue(Booking $booking, string $reason, ?int $userId = null): ?JournalEntry
+    {
+        $entry = $this->standingEntry($booking);
+
+        return $entry ? $this->ledger->reverse($entry, $reason, $userId) : null;
+    }
+
+    /** Has the service been delivered? */
+    public function isDelivered(Booking $booking, ?string $asOf = null): bool
+    {
+        return $this->deliveryDate($booking) <= ($asOf ?? now()->toDateString());
+    }
+
+    private function revenueEntries(Booking $booking): Builder
+    {
+        return JournalEntry::where('source', 'booking')
+            ->where('reference_type', Booking::class)
+            ->where('reference_id', $booking->id);
     }
 
     /**
@@ -159,13 +216,7 @@ class BookingAccounting
      */
     public function reviseRevenue(Booking $booking, ?int $userId = null): ?JournalEntry
     {
-        $entry = JournalEntry::with('lines')
-            ->where('source', 'booking')
-            ->where('reference_type', Booking::class)
-            ->where('reference_id', $booking->id)
-            ->where('status', 'posted')
-            ->latest('id')
-            ->first();
+        $entry = $this->standingEntry($booking)?->load('lines');
 
         if (! $entry) {
             return null;
@@ -286,10 +337,10 @@ class BookingAccounting
      * total also carries addons, a discount and tax, and none of those are
      * recorded room by room.
      *
-     * The last room takes the remainder rather than its own rounded share,
-     * so three rooms splitting an odd riyal still credit the total exactly —
-     * an unbalanced entry is refused outright, and a booking that cannot be
-     * posted is worse than one reported coarsely.
+     * The split itself is SectionShares: weighted by those prices only when
+     * every room carries one, so a room the price list forgot still gets its
+     * share instead of dropping out of the books while its neighbour takes
+     * the lot. The last room takes the remainder, so the credit adds up exactly.
      *
      * The account is the one the operator has put this activity's income on —
      * halls and chalets may be kept apart, or share one line as they always
@@ -309,26 +360,15 @@ class BookingAccounting
             return [['account' => $account, 'credit' => $amount, 'cost_center_id' => $unitCenter]];
         }
 
-        $prices = $sections->map(fn ($s) => (float) ($s->pivot->price ?? 0));
-        $base = round($prices->sum(), 2);
+        $ordered = $sections->values();
+        $shares = SectionShares::split($amount, $ordered->map(fn ($s) => (float) ($s->pivot->price ?? 0))->all());
 
         $lines = [];
-        $left = round($amount, 2);
-        $last = $sections->count() - 1;
 
-        foreach ($sections->values() as $i => $section) {
-            // Priced at nothing — a comped room, or a day rate the sections
-            // never carried — the rooms share it evenly rather than the first
-            // one taking the lot.
-            $share = $i === $last
-                ? $left
-                : round($base > 0 ? $amount * ((float) $section->pivot->price / $base) : $amount / $sections->count(), 2);
-
-            $left = round($left - $share, 2);
-
+        foreach ($ordered as $i => $section) {
             $lines[] = [
                 'account' => $account,
-                'credit' => $share,
+                'credit' => $shares[$i],
                 'cost_center_id' => CostCenter::forSection($section)->id,
                 'description' => $section->name,
             ];

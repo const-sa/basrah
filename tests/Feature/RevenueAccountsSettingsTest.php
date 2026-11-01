@@ -170,7 +170,7 @@ class RevenueAccountsSettingsTest extends TestCase
             ])
             ->assertSessionHasNoErrors();
 
-        app(BookingService::class)->settleInFull($this->stay());
+        $this->settleAsDelivered($this->stay());
 
         $byAccount = $this->revenueByAccount();
 
@@ -184,7 +184,7 @@ class RevenueAccountsSettingsTest extends TestCase
      */
     public function test_changing_the_account_leaves_posted_entries_alone(): void
     {
-        app(BookingService::class)->settleInFull($this->stay('2027-06-10', '2027-06-11'));
+        $this->settleAsDelivered($this->stay('2027-06-10', '2027-06-11'));
 
         $before = $this->revenueByAccount();
         $this->assertArrayHasKey(Ledger::BOOKING_REVENUE, $before);

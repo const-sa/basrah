@@ -2,12 +2,10 @@
 
 namespace App\Support\Accounting;
 
-use App\Models\Account;
 use App\Models\Booking;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
-use App\Services\Accounting\Ledger;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,12 +31,6 @@ class SectionRevenueAttribution
      */
     public function apply(): array
     {
-        $revenueAccountId = Account::where('code', Ledger::BOOKING_REVENUE)->value('id');
-
-        if (! $revenueAccountId) {
-            return ['entries' => 0, 'lines' => 0];
-        }
-
         $entries = 0;
         $lines = 0;
 
@@ -46,9 +38,9 @@ class SectionRevenueAttribution
             ->where('reference_type', Booking::class)
             ->whereNotNull('reference_id')
             ->orderBy('id')
-            ->chunkById(200, function ($chunk) use ($revenueAccountId, &$entries, &$lines) {
+            ->chunkById(200, function ($chunk) use (&$entries, &$lines) {
                 foreach ($chunk as $entry) {
-                    $moved = $this->split($entry, $revenueAccountId);
+                    $moved = $this->split($entry);
 
                     if ($moved > 0) {
                         $entries++;
@@ -64,7 +56,7 @@ class SectionRevenueAttribution
      * The number of room lines written in place of one unit line, or zero when
      * the entry is left alone.
      */
-    private function split(JournalEntry $entry, int $revenueAccountId): int
+    private function split(JournalEntry $entry): int
     {
         $booking = Booking::with('sections')->find($entry->reference_id);
 
@@ -72,11 +64,15 @@ class SectionRevenueAttribution
             return 0;
         }
 
+        // Whichever revenue account the activity is set to post on, not just
+        // the default one: the operator may have moved halls or chalets onto
+        // their own, and those entries need re-attributing no less.
+        //
         // More than one already means it has been split — running twice must
         // not shred a line into ever smaller pieces.
         $credits = $entry->lines()
-            ->where('account_id', $revenueAccountId)
             ->where('credit', '>', 0)
+            ->whereHas('account', fn ($q) => $q->where('type', 'revenue'))
             ->get();
 
         if ($credits->count() !== 1) {
@@ -85,6 +81,7 @@ class SectionRevenueAttribution
 
         /** @var JournalLine $line */
         $line = $credits->first();
+        $revenueAccountId = (int) $line->account_id;
         $amount = round((float) $line->credit, 2);
 
         if ($amount <= 0) {
@@ -92,18 +89,14 @@ class SectionRevenueAttribution
         }
 
         $sections = $booking->sections->values();
-        $base = round($sections->sum(fn ($s) => (float) ($s->pivot->price ?? 0)), 2);
-        $last = $sections->count() - 1;
-        $left = $amount;
+        $shares = SectionShares::split($amount, $sections->map(fn ($s) => (float) ($s->pivot->price ?? 0))->all());
         $rows = [];
 
         foreach ($sections as $i => $section) {
-            $share = $i === $last
-                ? $left
-                : round($base > 0 ? $amount * ((float) $section->pivot->price / $base) : $amount / $sections->count(), 2);
+            $share = $shares[$i];
 
-            $left = round($left - $share, 2);
-
+            // Only a room whose whole booking was free, which the amount check
+            // above has already ruled out — kept so an insert is never zero.
             if ($share <= 0) {
                 continue;
             }

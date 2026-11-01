@@ -26,6 +26,13 @@ Schedule::command('backup:run --trigger=schedule')
     ->withoutOverlapping()
     ->onFailure(fn () => logger()->error('فشلت مهمة النسخ الاحتياطي المجدولة'));
 
+// Revenue for what was served: 1am — after the day closes and before the
+// backup, so the backup carries the day's books complete.
+Schedule::command('accounting:recognize-delivered')
+    ->dailyAt('01:00')
+    ->withoutOverlapping()
+    ->onFailure(fn () => logger()->error('Scheduled revenue recognition failed'));
+
 // تذكير الحجوزات: التاسعة صباحًا — ساعةٌ يُقرأ فيها الواتساب ولا تُزعج.
 Schedule::command('bookings:send-reminders')
     ->dailyAt('09:00')

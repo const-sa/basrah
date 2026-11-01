@@ -11,9 +11,10 @@ use App\Models\JournalLine;
 use App\Models\Role;
 use App\Models\Unit;
 use App\Models\UnitPrice;
+use App\Models\UnitSection;
 use App\Models\User;
+use App\Services\Accounting\BookingAccounting;
 use App\Services\Accounting\Ledger;
-use App\Services\BookingService;
 use App\Services\ChaletBookingService;
 use App\Support\Accounting\SectionRevenueAttribution;
 use App\Support\StayPeriod;
@@ -23,6 +24,7 @@ use Database\Seeders\DepartmentsSeeder;
 use Database\Seeders\FacilitiesSeeder;
 use Database\Seeders\RolesSeeder;
 use Database\Seeders\UnitsSeeder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -112,7 +114,7 @@ class SectionRevenueTest extends TestCase
         $this->priceSection($section->id, 500);
 
         $booking = $this->stayInRoom($section->id);
-        app(BookingService::class)->settleInFull($booking);
+        $this->settleAsDelivered($booking);
 
         $centre = CostCenter::where('unit_section_id', $section->id)->value('id');
         $unitCentre = CostCenter::where('unit_id', $this->chalet->id)->value('id');
@@ -140,7 +142,7 @@ class SectionRevenueTest extends TestCase
             'status' => 'deposit_paid',
         ]);
 
-        app(BookingService::class)->settleInFull($booking);
+        $this->settleAsDelivered($booking);
 
         $total = round((float) $booking->fresh()->total_amount, 2);
         $byCentre = $this->revenueByCenter();
@@ -153,6 +155,75 @@ class SectionRevenueTest extends TestCase
 
         // Split or not, the books add up to the same total.
         $this->assertEqualsWithDelta($total, array_sum($byCentre), 0.01);
+    }
+
+    public function test_a_room_the_price_list_forgot_still_reaches_its_centre(): void
+    {
+        $sections = $this->twoRooms();
+
+        $this->priceSection($sections[0]->id, 400);
+        $this->priceSection($sections[1]->id, 400);
+
+        $booking = $this->stayInRooms($sections->pluck('id')->all(), '2027-04-10', '2027-04-11');
+
+        // The gap that used to lose «قسم الرجال»: its share came out zero, a
+        // zero line is never written, and the room beside it took the lot.
+        $booking->sections()->updateExistingPivot($sections[0]->id, ['price' => 0]);
+
+        $this->settleAsDelivered($booking);
+
+        $total = round((float) $booking->fresh()->total_amount, 2);
+        $byCentre = $this->revenueByCenter();
+
+        $first = CostCenter::where('unit_section_id', $sections[0]->id)->value('id');
+        $second = CostCenter::where('unit_section_id', $sections[1]->id)->value('id');
+
+        $this->assertArrayHasKey($first, $byCentre, 'the unpriced room is still in the books');
+        $this->assertEqualsWithDelta($total / 2, $byCentre[$first] ?? 0.0, 0.01);
+        $this->assertEqualsWithDelta($total / 2, $byCentre[$second] ?? 0.0, 0.01);
+        $this->assertEqualsWithDelta($total, array_sum($byCentre), 0.01);
+    }
+
+    public function test_the_same_booking_splits_the_same_way_every_time(): void
+    {
+        $sections = $this->twoRooms();
+
+        // An odd total, so the remainder is a real halala that has to keep
+        // landing on the same room — an unordered read would move it, and
+        // reviseRevenue() would repost the entry for a difference it invented.
+        $this->priceSection($sections[0]->id, 333);
+        $this->priceSection($sections[1]->id, 334);
+
+        $booking = $this->stayInRooms($sections->pluck('id')->all(), '2027-05-10', '2027-05-11');
+        $this->settleAsDelivered($booking);
+
+        $this->assertNull(
+            app(BookingAccounting::class)->reviseRevenue($booking->fresh()),
+            'reading the booking again must not change where a riyal sits',
+        );
+    }
+
+    /** @return Collection<int, UnitSection> */
+    private function twoRooms()
+    {
+        $sections = $this->chalet->sections()->take(2)->get();
+        $this->assertCount(2, $sections, 'the fixture chalet holds at least two rooms');
+
+        return $sections;
+    }
+
+    /** @param  list<int>  $sectionIds */
+    private function stayInRooms(array $sectionIds, string $from, string $to): Booking
+    {
+        return app(ChaletBookingService::class)->create([
+            'unit_id' => $this->chalet->id,
+            'client_id' => Client::first()?->id,
+            'scope' => 'sections',
+            'section_ids' => $sectionIds,
+            'booking_date' => $from,
+            'check_out_date' => $to,
+            'status' => 'deposit_paid',
+        ]);
     }
 
     public function test_a_chalet_taken_whole_still_credits_the_chalet(): void
@@ -168,7 +239,7 @@ class SectionRevenueTest extends TestCase
             'status' => 'deposit_paid',
         ]);
 
-        app(BookingService::class)->settleInFull($booking);
+        $this->settleAsDelivered($booking);
 
         $unitCentre = CostCenter::where('unit_id', $whole->id)->value('id');
 
@@ -185,7 +256,7 @@ class SectionRevenueTest extends TestCase
         $this->priceSection($section->id, 400);
 
         $booking = $this->stayInRoom($section->id);
-        app(BookingService::class)->settleInFull($booking);
+        $this->settleAsDelivered($booking);
 
         $centre = CostCenter::where('unit_section_id', $section->id)->value('id');
         $total = round((float) $booking->fresh()->total_amount, 2);
@@ -220,7 +291,7 @@ class SectionRevenueTest extends TestCase
         $this->priceSection($section->id, 500);
 
         $booking = $this->stayInRoom($section->id, '2027-08-10', '2027-08-11');
-        app(BookingService::class)->settleInFull($booking);
+        $this->settleAsDelivered($booking);
 
         $account = Account::where('code', Ledger::BOOKING_REVENUE)->value('id');
         $entry = JournalEntry::where('reference_type', Booking::class)
@@ -266,7 +337,7 @@ class SectionRevenueTest extends TestCase
             'status' => 'deposit_paid',
         ]);
 
-        app(BookingService::class)->settleInFull($booking);
+        $this->settleAsDelivered($booking);
 
         $account = Account::where('code', Ledger::BOOKING_REVENUE)->value('id');
         $entry = JournalEntry::where('reference_type', Booking::class)

@@ -5,7 +5,7 @@ import WhatsappIcon from '@/components/WhatsappIcon.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Ban, CheckCircle2, ClipboardList, Eye, Pencil, Plus, Printer, ReceiptText, Search, Trash2, X } from 'lucide-vue-next';
+import { Ban, CheckCircle2, ClipboardList, Eye, PackageCheck, Pencil, Plus, Printer, ReceiptText, Search, Trash2, Undo2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Contract {
@@ -18,6 +18,9 @@ interface Contract {
     paid_amount: string | null; remaining_amount: string | null;
     /** سندات القبض المرحّلة على العقد — للطباعة والإرسال من السجلّ. */
     receipts: Receipt[];
+    /** Handover: an installation earns its revenue here, not at signing. */
+    completed_at: string | null;
+    awaits_handover: boolean;
     sent_at: string | null; created_at: string;
     // عقد الخدمات الإضافية على نفس الحجز — سجل القاعات وحده يحمله، وغيابه
     // يعني أن العميل لم يطلب خدمات إضافية على هذا الحجز.
@@ -271,6 +274,19 @@ const destroy = (c: Contract) => {
     if (confirm(`حذف العقد ${c.number}؟`)) router.delete(`/admin/contracts/${c.id}`, { preserveScroll: true });
 };
 
+// Handover is what earns an installation: signing is only half the money.
+const markCompleted = (c: Contract) => {
+    if (confirm(`تأكيد تنفيذ العقد ${c.number}؟ سيُثبت إيراده في الدفاتر.`)) {
+        router.post(`/admin/contracts/${c.id}/complete`, {}, { preserveScroll: true });
+    }
+};
+
+const undoCompleted = (c: Contract) => {
+    if (confirm(`التراجع عن تنفيذ العقد ${c.number}؟ سيُعكس قيد إيراده.`)) {
+        router.delete(`/admin/contracts/${c.id}/complete`, { preserveScroll: true });
+    }
+};
+
 const statusClass = (s: string) =>
     ({ draft: 'bg-amber-100 text-amber-700', sent: 'bg-sky-100 text-sky-700', signed: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-slate-200 text-slate-600' })[s] ??
     'bg-slate-100 text-slate-700';
@@ -430,6 +446,20 @@ const statusClass = (s: string) =>
                                             :icon="CheckCircle2"
                                             title="تعليم كموقّع"
                                             @click="markSigned(c)"
+                                        />
+                                        <TableActionButton
+                                            v-if="may.edit && c.awaits_handover"
+                                            variant="success"
+                                            :icon="PackageCheck"
+                                            title="تم التنفيذ — إثبات إيراد العقد"
+                                            @click="markCompleted(c)"
+                                        />
+                                        <TableActionButton
+                                            v-if="may.edit && c.completed_at"
+                                            variant="muted"
+                                            :icon="Undo2"
+                                            :title="`نُفّذ في ${c.completed_at} — تراجع`"
+                                            @click="undoCompleted(c)"
                                         />
                                         <TableActionButton
                                             v-if="may.edit && c.status !== 'cancelled'"

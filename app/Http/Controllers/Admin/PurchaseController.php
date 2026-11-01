@@ -14,14 +14,13 @@ use App\Models\PurchaseItem;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Services\InventoryService;
+use App\Services\PurchaseService;
 use App\Support\Letterhead;
 use App\Support\Vat;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class PurchaseController extends Controller
@@ -29,7 +28,7 @@ class PurchaseController extends Controller
     public function index(Request $request): Response
     {
         $departments = Department::orderBy('sort_order')->get(['id', 'name']);
-        
+
         $filters = [
             'department_id' => $request->string('department_id')->toString() ?: null,
             'supplier_id' => $request->integer('supplier_id') ?: null,
@@ -107,11 +106,12 @@ class PurchaseController extends Controller
         ];
     }
 
-    public function store(Request $request, InventoryService $inventory)
+    public function store(Request $request, InventoryService $inventory, PurchaseService $books)
     {
         $data = $request->validate([
             'supplier_id' => ['required', 'exists:suppliers,id'],
             'department_id' => ['required', 'exists:departments,id'],
+            'purchase_date' => ['nullable', 'date'],
             'payment_method_id' => ['nullable', 'exists:payment_methods,id'],
             'is_taxable' => ['required', 'boolean'],
             'paid_amount' => ['required', 'numeric', 'min:0'],
@@ -125,7 +125,7 @@ class PurchaseController extends Controller
         ]);
 
         try {
-            $purchase = DB::transaction(function () use ($data, $inventory, $request) {
+            $purchase = DB::transaction(function () use ($data, $inventory, $request, $books) {
                 // Generate a purchase number
                 $number = $this->nextNumber();
 
@@ -149,6 +149,9 @@ class PurchaseController extends Controller
 
                 $purchase = Purchase::create([
                     'number' => $number,
+                    // The supplier's own date, so an invoice entered late
+                    // still books in the month it was issued.
+                    'purchase_date' => $data['purchase_date'] ?? now()->toDateString(),
                     'supplier_id' => $data['supplier_id'],
                     'user_id' => $request->user()->id,
                     'department_id' => $data['department_id'],
@@ -172,7 +175,7 @@ class PurchaseController extends Controller
                     ]);
 
                     // Add to stock using InventoryService
-                    $itemModel = \App\Models\Item::find($itemData['item_id']);
+                    $itemModel = Item::find($itemData['item_id']);
                     $inventory->move(
                         $itemModel,
                         (float) $itemData['quantity'],
@@ -183,6 +186,11 @@ class PurchaseController extends Controller
                         "شراء بالفاتورة {$purchase->number}"
                     );
                 }
+
+                // The stock moved and the books follow it in the same
+                // transaction: a purchase in one and not the other is what
+                // drove inventory below zero in the first place.
+                $books->post($purchase, $request->user()->id);
 
                 return $purchase;
             });
@@ -207,7 +215,7 @@ class PurchaseController extends Controller
         return Inertia::render('admin/purchases/Form', $this->formOptions() + ['purchase' => $purchase]);
     }
 
-    public function update(Request $request, Purchase $purchase, InventoryService $inventory)
+    public function update(Request $request, Purchase $purchase, InventoryService $inventory, PurchaseService $books)
     {
         $data = $request->validate([
             'supplier_id' => ['required', 'exists:suppliers,id'],
@@ -225,10 +233,10 @@ class PurchaseController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($data, $inventory, $request, $purchase) {
+            DB::transaction(function () use ($data, $inventory, $request, $purchase, $books) {
                 // Reverse old inventory
                 foreach ($purchase->items as $oldItem) {
-                    $itemModel = \App\Models\Item::find($oldItem->item_id);
+                    $itemModel = Item::find($oldItem->item_id);
                     if ($itemModel) {
                         $inventory->move(
                             $itemModel,
@@ -286,7 +294,7 @@ class PurchaseController extends Controller
                     ]);
 
                     // Add to stock using InventoryService
-                    $itemModel = \App\Models\Item::find($itemData['item_id']);
+                    $itemModel = Item::find($itemData['item_id']);
                     $inventory->move(
                         $itemModel,
                         (float) $itemData['quantity'],
@@ -297,6 +305,10 @@ class PurchaseController extends Controller
                         "شراء بالفاتورة {$purchase->number}"
                     );
                 }
+
+                // The old entry is reversed on its own date and the new one
+                // written, so a correction does not move the month.
+                $books->repost($purchase->fresh(), $request->user()->id);
             });
         } catch (RuntimeException $e) {
             return back()->with('warning', $e->getMessage());
@@ -305,13 +317,13 @@ class PurchaseController extends Controller
         return redirect()->route('purchases.index')->with('success', 'تم تعديل فاتورة المشتريات وتحديث المخزون بنجاح');
     }
 
-    public function destroy(Purchase $purchase, InventoryService $inventory, Request $request)
+    public function destroy(Purchase $purchase, InventoryService $inventory, Request $request, PurchaseService $books)
     {
         try {
-            DB::transaction(function () use ($purchase, $inventory, $request) {
+            DB::transaction(function () use ($purchase, $inventory, $request, $books) {
                 // Reverse old inventory
                 foreach ($purchase->items as $oldItem) {
-                    $itemModel = \App\Models\Item::find($oldItem->item_id);
+                    $itemModel = Item::find($oldItem->item_id);
                     if ($itemModel) {
                         $inventory->move(
                             $itemModel,
@@ -324,7 +336,10 @@ class PurchaseController extends Controller
                         );
                     }
                 }
-                
+
+                // Reversed, not erased: the entry stands with its counter-entry.
+                $books->reverse($purchase, "حذف فاتورة المشتريات {$purchase->number}", $request->user()->id);
+
                 $purchase->delete();
             });
         } catch (RuntimeException $e) {
@@ -342,9 +357,9 @@ class PurchaseController extends Controller
             // الرمز يقرّر الترويسة: مشتريات المسابح باسم مؤسستها.
             'department:id,name,code',
             'user:id,name',
-            'paymentMethod:id,name'
+            'paymentMethod:id,name',
         ]);
-        
+
         // السطور لا تحفظ ضريبتها، الفاتورة تحفظ ضريبتها مجموعةً — فتُوزَّع
         // عليها بنسبة مبالغها. وكان السطر يُعيد حسابها من نسبة الصنف اليوم،
         // فتخالف السطورُ رأسَ الفاتورة كلما تغيّرت نسبةٌ أو أُطفئ المفتاح،
@@ -421,9 +436,9 @@ class PurchaseController extends Controller
             'total' => (float) $purchase->total_amount,
             'paid' => (float) $purchase->paid_amount,
             'remaining' => round(max(0, (float) $purchase->total_amount - (float) $purchase->paid_amount), 2),
-            'status' => $purchase->paid_amount >= $purchase->total_amount ? 'paid' 
+            'status' => $purchase->paid_amount >= $purchase->total_amount ? 'paid'
                         : ($purchase->paid_amount > 0 ? 'partial' : 'unpaid'),
-            'status_label' => $purchase->paid_amount >= $purchase->total_amount ? 'مسدّدة بالكامل' 
+            'status_label' => $purchase->paid_amount >= $purchase->total_amount ? 'مسدّدة بالكامل'
                         : ($purchase->paid_amount > 0 ? 'مسدّدة جزئياً' : 'غير مسدّدة'),
         ];
     }

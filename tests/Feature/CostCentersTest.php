@@ -172,6 +172,87 @@ class CostCentersTest extends TestCase
     }
 
     /**
+     * A hall let by room: revenue on its rooms, expense on itself.
+     *
+     * Reading the hall's centre alone showed it as all loss — expense with no
+     * income — and the room as all profit, out of the same money.
+     */
+    public function test_a_unit_row_carries_what_its_rooms_earned(): void
+    {
+        [$unitCentre, $roomCentre] = $this->hallWithARoom();
+
+        $this->postEntry($unitCentre, revenue: 0, expense: 400);
+        $this->postEntry($roomCentre, revenue: 1000, expense: 0);
+
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/cost-centers?search='.$unitCentre->code)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('centers.data.0.revenue', 1000)
+                ->where('centers.data.0.expense', 400)
+                ->where('centers.data.0.profit', 600)
+                // Totals read parent rows alone, or a room's revenue counts twice.
+                ->where('totals.revenue', 1000)
+                ->where('totals.profit', 600)
+                ->etc(),
+            );
+    }
+
+    public function test_a_room_is_nested_under_its_unit_and_never_a_row_of_its_own(): void
+    {
+        [$unitCentre, $roomCentre] = $this->hallWithARoom();
+
+        $this->postEntry($roomCentre, revenue: 1000, expense: 0);
+
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/cost-centers?search='.$unitCentre->code)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('centers.data.0.is_section', false)
+                ->where('centers.data.0.children', fn ($children) => collect($children)
+                    ->contains(fn ($child) => (int) $child['id'] === $roomCentre->id
+                        && (float) $child['revenue'] === 1000.0
+                        && $child['is_section'] === true))
+                ->etc(),
+            );
+
+        // And a room is never a row of its own, summed on top of its unit.
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/cost-centers?search='.$roomCentre->code)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('centers.data', [])->etc());
+    }
+
+    public function test_searching_a_room_finds_the_unit_that_holds_it(): void
+    {
+        [$unitCentre, $roomCentre] = $this->hallWithARoom();
+
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/cost-centers?search='.urlencode($roomCentre->section->name))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                // Every unit has a room by this name, so ours must be among
+                // them and every row must be a unit, not a room.
+                ->where('centers.data', fn ($rows) => collect($rows)->contains(fn ($row) => (int) $row['id'] === $unitCentre->id)
+                    && collect($rows)->every(fn ($row) => $row['is_section'] === false))
+                ->etc(),
+            );
+    }
+
+    /**
+     * A seeded hall, its own centre, and the centre of one of its rooms.
+     *
+     * @return array{0: CostCenter, 1: CostCenter}
+     */
+    private function hallWithARoom(): array
+    {
+        $unit = Unit::whereHas('sections')->firstOrFail();
+        $section = $unit->sections()->firstOrFail();
+
+        return [CostCenter::forUnit($unit), CostCenter::forSection($section)->load('section')];
+    }
+
+    /**
      * One entry on the centre: revenue against cash, expense against cash.
      */
     private function postEntry(CostCenter $centre, float $revenue, float $expense, string $status = 'posted'): void

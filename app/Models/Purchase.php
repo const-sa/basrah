@@ -12,14 +12,15 @@ class Purchase extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'number', 'supplier_id', 'user_id', 'department_id',
+        'number', 'purchase_date', 'supplier_id', 'user_id', 'department_id',
         'subtotal', 'discount_amount', 'tax_amount', 'total_amount', 'is_taxable',
-        'payment_method_id', 'paid_amount', 'notes',
+        'payment_method_id', 'paid_amount', 'journal_entry_id', 'notes',
     ];
 
     protected function casts(): array
     {
         return [
+            'purchase_date' => 'date',
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
@@ -27,6 +28,12 @@ class Purchase extends Model
             'paid_amount' => 'decimal:2',
             'is_taxable' => 'boolean',
         ];
+    }
+
+    /** The entry this invoice posted — null until it reaches the books. */
+    public function journalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class);
     }
 
     public function items(): HasMany

@@ -61,6 +61,7 @@ class DepreciationService
         return DB::transaction(function () use ($assets, $period, $userId) {
             $lines = [];
             $amounts = [];
+            $byCentre = [];
             $total = 0.0;
 
             foreach ($assets as $asset) {
@@ -78,6 +79,7 @@ class DepreciationService
                     'description' => "إهلاك {$asset->name} ({$asset->code})",
                 ];
                 $amounts[$asset->id] = $amount;
+                $byCentre[(int) $asset->cost_center_id] = round(($byCentre[(int) $asset->cost_center_id] ?? 0) + $amount, 2);
                 $total = round($total + $amount, 2);
             }
 
@@ -85,7 +87,15 @@ class DepreciationService
                 throw new RuntimeException("لا أصول يُرحَّل لها إهلاك عن شهر {$period}.");
             }
 
-            $lines[] = ['account' => Ledger::ACCUMULATED_DEPRECIATION, 'credit' => $total];
+            // One credit per centre, not one untagged total: a centre whose
+            // statement showed the charge but not its contra never balanced.
+            foreach ($byCentre as $centre => $amount) {
+                $lines[] = [
+                    'account' => Ledger::ACCUMULATED_DEPRECIATION,
+                    'credit' => $amount,
+                    'cost_center_id' => $centre ?: null,
+                ];
+            }
 
             $entry = $this->ledger->post(
                 $period,

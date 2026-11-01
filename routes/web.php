@@ -279,6 +279,8 @@ Route::prefix('admin')->middleware(['auth', 'verified'])->group(function () {
         Route::get('contracts/{contract}/receipts/{voucher}/pdf', [ContractsController::class, 'receiptPdf'])->name('contracts.receipts.pdf');
         Route::post('contracts/{contract}/receipts/{voucher}/send', [ContractsController::class, 'sendReceipt'])->name('contracts.receipts.send');
         Route::patch('contracts/{contract}/status', [ContractsController::class, 'changeStatus'])->name('contracts.status');
+        Route::post('contracts/{contract}/complete', [ContractsController::class, 'complete'])->name('contracts.complete');
+        Route::delete('contracts/{contract}/complete', [ContractsController::class, 'uncomplete'])->name('contracts.uncomplete');
         Route::delete('contracts/{contract}', [ContractsController::class, 'destroy'])->name('contracts.destroy');
 
         Route::get('contract-templates', [ContractTemplatesController::class, 'index'])->middleware('perm:contract_templates.view')->name('contract_templates.index');

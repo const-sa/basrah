@@ -10,7 +10,9 @@ use App\Models\CostCenter;
 use App\Models\Deduction;
 use App\Models\Employee;
 use App\Models\Payroll;
+use App\Models\Unit;
 use App\Services\Accounting\Ledger;
+use App\Support\Accounting\SectionShares;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -273,6 +275,7 @@ class PayrollService
         }
 
         $lines = [];
+        $byCentre = [];
 
         // توزيع مصروف الراتب على مركز تكلفة وحدة كل موظف — هو ما يجعل
         // ربحية الوحدة صحيحة بدل تحميل كل الرواتب على المحل.
@@ -290,8 +293,10 @@ class PayrollService
                 continue;
             }
 
-            $costCenter = $unitId
-                ? CostCenter::firstWhere('unit_id', $unitId)?->id
+            // The factory, not firstWhere: a unit whose centre was never
+            // created would otherwise post the salary with no centre at all.
+            $costCenter = $unitId && ($unit = Unit::find($unitId))
+                ? CostCenter::forUnit($unit)->id
                 : CostCenter::general()->id;
 
             $lines[] = [
@@ -300,16 +305,30 @@ class PayrollService
                 'cost_center_id' => $costCenter,
                 'description' => 'رواتب '.$payroll->periodLabel(),
             ];
+
+            $byCentre[$costCenter] = round(($byCentre[$costCenter] ?? 0) + $amount, 2);
         }
 
         $totalExpense = round(array_sum(array_column($lines, 'debit')), 2);
         $advances = round((float) $payroll->lines->sum('advance_deduction'), 2);
 
         // الصافي مستحق للموظفين، والسلف المستقطعة تُقفل ذمة الموظف.
-        $lines[] = ['account' => Ledger::SALARIES_PAYABLE, 'credit' => round($totalExpense - $advances, 2)];
+        // Both carry the centres that bore the cost, in the same proportion,
+        // so a centre's own statement balances instead of showing the charge
+        // with no liability against it.
+        foreach (SectionShares::split(round($totalExpense - $advances, 2), $byCentre) as $centre => $share) {
+            $lines[] = ['account' => Ledger::SALARIES_PAYABLE, 'credit' => $share, 'cost_center_id' => $centre];
+        }
 
         if ($advances > 0) {
-            $lines[] = ['account' => Ledger::RECEIVABLES, 'credit' => $advances, 'description' => 'استقطاع سلف'];
+            foreach (SectionShares::split($advances, $byCentre) as $centre => $share) {
+                $lines[] = [
+                    'account' => Ledger::RECEIVABLES,
+                    'credit' => $share,
+                    'cost_center_id' => $centre,
+                    'description' => 'استقطاع سلف',
+                ];
+            }
         }
 
         return $this->ledger->post(

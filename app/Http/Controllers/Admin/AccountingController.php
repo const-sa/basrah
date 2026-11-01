@@ -258,7 +258,9 @@ class AccountingController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01'],
             'treasury_id' => ['required', 'exists:treasuries,id'],
             'account_id' => ['required', 'exists:accounts,id'],
-            'cost_center_id' => ['nullable', 'exists:cost_centers,id'],
+            // Required: a voucher with no centre is money in the books that
+            // appears on no screen — «عام» is the answer when none fits.
+            'cost_center_id' => ['required', 'exists:cost_centers,id'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
             'payment_method_id' => ['required', Rule::exists('payment_methods', 'id')

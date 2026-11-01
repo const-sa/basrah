@@ -4,8 +4,8 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Pencil, Plus, ScrollText, Trash2, X } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { ChevronDown, ChevronLeft, Pencil, Plus, ScrollText, Trash2, X } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface Center {
     id: number;
@@ -15,17 +15,23 @@ interface Center {
     belongs_to: string | null;
     is_active: boolean;
     is_system: boolean;
+    is_section: boolean;
     revenue: number;
     expense: number;
     profit: number;
     deposits: number;
+    children?: Center[];
 }
 
 const props = defineProps<{
     centers: { data: Center[]; links: { url: string | null; label: string; active: boolean }[] };
     filters: { from: string; to: string; search: string | null; status: string | null };
     totals: { revenue: number; expense: number; profit: number; deposits: number };
+    /** Revenue and expense posted on no centre — null for a scoped reader. */
+    unattributed: { revenue: number; expense: number; profit: number } | null;
 }>();
+
+const hasUnattributed = computed(() => !!props.unattributed && (props.unattributed.revenue !== 0 || props.unattributed.expense !== 0));
 
 const { can } = usePermissions();
 
@@ -40,6 +46,13 @@ const filters = ref({ ...props.filters });
 const apply = () => router.get('/admin/accounting/cost-centers', filters.value, { preserveState: true, replace: true });
 
 const statementUrl = (c: Center) => `/admin/accounting/cost-centers/${c.id}?from=${filters.value.from}&to=${filters.value.to}`;
+
+// Rooms collapse under their unit: their figures are already in its row.
+const expanded = ref<number[]>([]);
+const isOpen = (c: Center) => expanded.value.includes(c.id);
+const toggle = (c: Center) => {
+    expanded.value = isOpen(c) ? expanded.value.filter((id) => id !== c.id) : [...expanded.value, c.id];
+};
 
 const showModal = ref(false);
 const editing = ref<Center | null>(null);
@@ -119,18 +132,27 @@ const destroy = (c: Center) => {
                             <tr>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">المركز</th>
                                 <th class="px-4 py-3 text-right text-xs font-extrabold text-[#1e3a8a]">النوع</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الإيراد</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]" title="إيراد الوحدة يشمل أقسامها الداخلية">الإيراد</th>
                                 <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">المصروف</th>
                                 <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]">الربح</th>
-                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]" title="عرابين حجوزات لم تكتمل بعد — تصير إيرادًا عند سداد الحجز كاملًا">عرابين مقدمًا</th>
+                                <th class="px-4 py-3 text-left text-xs font-extrabold text-[#1e3a8a]" title="مبالغ مقبوضة على حجوزات وعقود لم تُقدَّم خدمتها بعد — تصير إيرادًا عند تقديمها">عرابين مقدمًا</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">الحالة</th>
                                 <th class="px-4 py-3 text-center text-xs font-extrabold text-[#1e3a8a]">إجراءات</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="c in centers.data" :key="c.id" class="border-t border-slate-100 hover:bg-slate-50">
+                            <template v-for="c in centers.data" :key="c.id">
+                            <tr class="border-t border-slate-100 hover:bg-slate-50">
                                 <td class="px-4 py-3 text-right">
-                                    <Link :href="statementUrl(c)" class="font-extrabold text-slate-800 hover:text-blue-700">{{ c.name }}</Link>
+                                    <div class="flex items-center gap-1.5">
+                                        <button v-if="c.children?.length" type="button" @click="toggle(c)"
+                                            :title="isOpen(c) ? 'إخفاء الأقسام' : 'عرض الأقسام'"
+                                            class="rounded-md p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+                                            <ChevronDown v-if="isOpen(c)" class="h-4 w-4" />
+                                            <ChevronLeft v-else class="h-4 w-4" />
+                                        </button>
+                                        <Link :href="statementUrl(c)" class="font-extrabold text-slate-800 hover:text-blue-700">{{ c.name }}</Link>
+                                    </div>
                                     <!-- dir on the span, not the block, so the code stays under the name -->
                                     <div class="text-[11px] text-slate-500"><span dir="ltr">{{ c.code }}</span></div>
                                 </td>
@@ -158,6 +180,43 @@ const destroy = (c: Center) => {
                                         </button>
                                     </div>
                                 </td>
+                            </tr>
+
+                            <!-- The unit's rooms: a breakdown of its revenue, never summed on top of it -->
+                            <tr v-for="child in (isOpen(c) ? c.children ?? [] : [])" :key="`${c.id}-${child.id}`" class="border-t border-slate-50 bg-slate-50/70">
+                                <td class="px-4 py-2.5 text-right">
+                                    <div class="flex items-center gap-1.5 pr-6">
+                                        <span class="rounded-md bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">قسم</span>
+                                        <Link :href="statementUrl(child)" class="font-bold text-slate-700 hover:text-blue-700">{{ child.belongs_to ?? child.name }}</Link>
+                                    </div>
+                                    <div class="pr-6 text-[11px] text-slate-400"><span dir="ltr">{{ child.code }}</span></div>
+                                </td>
+                                <td class="px-4 py-2.5 text-right text-[11px] text-slate-500">{{ child.type_label }}</td>
+                                <td class="px-4 py-2.5 text-left font-bold text-emerald-600" dir="ltr">{{ money(child.revenue) }}</td>
+                                <td class="px-4 py-2.5 text-left font-bold text-red-600" dir="ltr">{{ money(child.expense) }}</td>
+                                <td class="px-4 py-2.5 text-left font-bold" :class="child.profit >= 0 ? 'text-slate-700' : 'text-red-700'" dir="ltr">{{ money(child.profit) }}</td>
+                                <td class="px-4 py-2.5 text-left font-bold text-amber-600" dir="ltr">{{ money(child.deposits) }}</td>
+                                <td class="px-4 py-2.5"></td>
+                                <td class="px-4 py-2.5">
+                                    <div class="flex items-center justify-center">
+                                        <Link :href="statementUrl(child)" title="كشف الحركة" class="rounded-lg bg-emerald-600 p-1.5 text-white hover:bg-emerald-700">
+                                            <ScrollText class="h-3.5 w-3.5" />
+                                        </Link>
+                                    </div>
+                                </td>
+                            </tr>
+                            </template>
+                            <!-- Money in the books and on no centre: counted in the trial balance and nowhere else -->
+                            <tr v-if="hasUnattributed && unattributed" class="border-t border-amber-200 bg-amber-50">
+                                <td class="px-4 py-3 text-right">
+                                    <span class="font-extrabold text-amber-800">بلا مركز تكلفة</span>
+                                    <div class="text-[11px] text-amber-700">قيود لم تُنسب إلى مركز — راجعها</div>
+                                </td>
+                                <td class="px-4 py-3"></td>
+                                <td class="px-4 py-3 text-left font-bold text-emerald-700" dir="ltr">{{ money(unattributed.revenue) }}</td>
+                                <td class="px-4 py-3 text-left font-bold text-red-700" dir="ltr">{{ money(unattributed.expense) }}</td>
+                                <td class="px-4 py-3 text-left font-extrabold text-amber-800" dir="ltr">{{ money(unattributed.profit) }}</td>
+                                <td class="px-4 py-3" colspan="3"></td>
                             </tr>
                             <tr v-if="!centers.data.length"><td colspan="8" class="px-4 py-10 text-center text-sm text-slate-500">لا مراكز تكلفة</td></tr>
                         </tbody>

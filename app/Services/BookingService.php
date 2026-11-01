@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingPayment;
+use App\Models\JournalEntry;
 use App\Models\PaymentMethod;
 use App\Models\Unit;
 use App\Services\Accounting\BookingAccounting;
@@ -92,31 +93,34 @@ class BookingService
             $booking->recalculatePaidAmount();
             $this->accounting->recordPayment($payment, $userId);
 
-            // Money taken on a booking already closed settles its receivable
-            // rather than sitting in unearned revenue it no longer has.
+            // Money taken on a booking already recognized settles its
+            // receivable rather than sitting in unearned revenue it no
+            // longer has. Taken after the event, it is recognized at once —
+            // the nightly sweep would otherwise leave it a day out.
             $fresh = $booking->fresh();
-            $fresh->status === 'paid_in_full' && ! $payment->isSecurity()
-                ? $this->accounting->reviseRevenue($fresh, $userId)
-                : $this->settleIfCovered($fresh, $userId);
+
+            if (! $payment->isSecurity()) {
+                $this->accounting->recognizedEntry($fresh)
+                    ? $this->accounting->reviseRevenue($fresh, $userId)
+                    : $this->recognizeIfDelivered($fresh, $userId);
+            }
+
+            $this->closeIfCovered($booking->fresh());
 
             return $payment;
         });
     }
 
     /**
-     * Close a booking whose money has arrived in full.
+     * Mark a booking whose money has arrived in full.
      *
-     * Revenue was recognized only when an employee picked «مسدد كامل» off the
-     * status menu, while taking the money merely rewrote paid_amount. So a
-     * booking could be paid to the last riyal — or past it — and stay on
-     * «مدفوع العربون», its revenue never posted and its unit reading a loss
-     * for a month it had earned in. The money is what decides, not the menu.
-     *
-     * A booking already closed is left alone, and so is a refund that drops it
-     * back below its total: reopening a recognized sale is a reversal, which
-     * is its own decision and not one to take silently inside a payment.
+     * A status, nothing more. It used to be the moment revenue was posted,
+     * which made a wedding that was held but not fully paid earn nothing at
+     * all: the cash sat in unearned revenue for good, and the hall read a
+     * loss for a month it had worked. Payment says who owes what; delivery
+     * says what was earned, and only delivery posts.
      */
-    private function settleIfCovered(Booking $booking, ?int $userId): void
+    private function closeIfCovered(Booking $booking): void
     {
         $total = (float) $booking->total_amount;
 
@@ -128,21 +132,39 @@ class BookingService
             return;
         }
 
-        $this->settleInFull($booking, $userId);
+        $booking->update(['status' => 'paid_in_full']);
     }
 
     /**
-     * إقفال الحجز مسدَّدًا بالكامل — والاعتراف بإيراده.
+     * Recognize a booking that has been served, and nothing before it.
      *
-     * هذه هي النقطة التي يُثبَت عندها الإيراد في الدفاتر: العربون يبقى قبله
-     * التزامًا على المنشأة، فإذا اكتمل المبلغ صار إيرادًا مكتسبًا. ولذلك لا
-     * تُكتب الحالة تحديثًا مباشرًا من أي شاشة — القيد يُنشأ هنا وحده.
+     * A deposit taken before the date is a liability, not income — the service
+     * is not given yet. Once the date passes it is earned, and whatever is
+     * still owed becomes a receivable.
      */
+    public function recognizeIfDelivered(Booking $booking, ?int $userId = null): ?JournalEntry
+    {
+        if (! in_array($booking->status, Booking::BLOCKING_STATUSES, true)) {
+            return null;
+        }
+
+        if (! $this->accounting->isDelivered($booking)) {
+            return null;
+        }
+
+        return $this->accounting->recognizeRevenue($booking, $userId);
+    }
+
+    /** Close a booking as fully paid, and recognize it if it has been served. */
     public function settleInFull(Booking $booking, ?int $userId = null): Booking
     {
         return DB::transaction(function () use ($booking, $userId) {
             $booking->update(['status' => 'paid_in_full']);
-            $this->accounting->recognizeRevenue($booking->fresh(), $userId);
+
+            $fresh = $booking->fresh();
+            $this->accounting->recognizedEntry($fresh)
+                ? $this->accounting->reviseRevenue($fresh, $userId)
+                : $this->recognizeIfDelivered($fresh, $userId);
 
             return $booking->fresh();
         });
@@ -154,12 +176,18 @@ class BookingService
      */
     public function postpone(Booking $booking, ?string $reason = null): Booking
     {
-        $booking->update([
-            'status' => 'postponed',
-            'cancellation_reason' => $reason,
-        ]);
+        return DB::transaction(function () use ($booking, $reason) {
+            $booking->update([
+                'status' => 'postponed',
+                'cancellation_reason' => $reason,
+            ]);
 
-        return $booking->fresh();
+            // A postponed booking is rebooked on its new date, so its revenue
+            // belongs there, not here.
+            $this->accounting->reverseRevenue($booking, "تأجيل الحجز {$booking->reference}");
+
+            return $booking->fresh();
+        });
     }
 
     /**
@@ -227,9 +255,8 @@ class BookingService
                 'end_time' => $window['end'] ?? null,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
-                // الحجز يُسجَّل «مدفوع العربون»: هي حالة كل حجز جديد — قُبض
-                // عربونه أو لم يُقبض بعد — حتى يكتمل مبلغه فيُقفَل مسدَّدًا
-                // بالكامل من السجل، حيث يُثبَت إيراده.
+                // Every new booking starts «مدفوع العربون», paid or not, until
+                // its money is complete. Revenue follows the date served.
                 'status' => $data['status'] ?? 'deposit_paid',
                 'base_amount' => $quote['base_amount'],
                 // Kept beside the base so an edit reopens on the agreement
@@ -359,12 +386,15 @@ class BookingService
             $this->syncSections($booking, $scope, $quote['lines']);
             $this->syncAddons($booking, $quote['lines']);
 
-            // Repriced after it was closed: its revenue follows the new total.
-            // Repriced down to what is already paid: it closes now.
+            // Repriced after its revenue was posted: the entry follows the new
+            // total, at its own date. Repriced on a booking already served but
+            // never posted, its revenue is due now.
             $fresh = $booking->fresh();
-            $fresh->status === 'paid_in_full'
+            $this->accounting->recognizedEntry($fresh)
                 ? $this->accounting->reviseRevenue($fresh)
-                : $this->settleIfCovered($fresh, null);
+                : $this->recognizeIfDelivered($fresh);
+
+            $this->closeIfCovered($booking->fresh());
 
             return $booking->fresh(['unit', 'client', 'sections', 'addons']);
         });
@@ -376,13 +406,18 @@ class BookingService
      */
     public function cancel(Booking $booking, ?string $reason = null): Booking
     {
-        $booking->update([
-            'status' => 'cancelled',
-            'cancelled_at' => now(),
-            'cancellation_reason' => $reason,
-        ]);
+        return DB::transaction(function () use ($booking, $reason) {
+            $booking->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancellation_reason' => $reason,
+            ]);
 
-        return $booking;
+            // An event that was never held earns nothing: reverse its entry.
+            $this->accounting->reverseRevenue($booking, "إلغاء الحجز {$booking->reference}");
+
+            return $booking;
+        });
     }
 
     /**

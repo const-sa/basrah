@@ -209,7 +209,12 @@ class ContractDepositReceiptTest extends TestCase
 
         $this->assertTrue($contract->isMaintenanceForm());
         $this->assertSame(300.0, $contract->paidAmount());
-        $this->assertSame(600.0, $contract->remainingAmount());
+
+        // No balance on a monthly sheet: its value is one month's fee, not the
+        // term's, so subtracting what was paid closed it after the first month
+        // and refused the second month's receipt.
+        $this->assertNull($contract->remainingAmount());
+        $this->assertTrue($contract->acceptsSettlement());
     }
 
     public function test_the_chalet_sheet_written_without_a_booking_takes_a_deposit_too(): void
