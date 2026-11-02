@@ -459,7 +459,7 @@ class SalesService
 
         // The pools invoice their own work, and the operator may keep that
         // income on its own account — the centre the sale earns on says which.
-        $revenueAccount = $this->revenueAccounts->forInvoiceCenter($costCenter);
+        $revenueAccount = $this->revenueAccounts->forSale($sale, $costCenter);
 
         $lines[] = ['account' => $revenueAccount, 'credit' => $total, 'cost_center_id' => $costCenter];
 
@@ -574,7 +574,7 @@ class SalesService
             }
         }
 
-        return $this->revenueAccounts->forInvoiceCenter($costCenter);
+        return $this->revenueAccounts->forSale($return, $costCenter);
     }
 
     /**

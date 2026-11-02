@@ -57,6 +57,12 @@ class Ledger
 
     public const SALES_REVENUE = '4120';
 
+    /**
+     * The pools' contract work — installations and monthly maintenance — kept
+     * apart from what the pools shop sells over the counter on 4120.
+     */
+    public const POOL_CONTRACTS_REVENUE = '4140';
+
     /** A discount earned off a supplier — income, but not operating income. */
     public const PURCHASE_DISCOUNT = '4210';
 

@@ -67,7 +67,7 @@ class RevenueAccountsSettingsTest extends TestCase
     private function chaletAccount(): Account
     {
         return Account::create([
-            'code' => '4140',
+            'code' => '4150',
             'name' => 'إيرادات الشاليهات',
             'parent_id' => Account::where('code', '4100')->value('id'),
             'type' => 'revenue',
@@ -174,8 +174,8 @@ class RevenueAccountsSettingsTest extends TestCase
 
         $byAccount = $this->revenueByAccount();
 
-        $this->assertArrayHasKey('4140', $byAccount);
-        $this->assertGreaterThan(0, $byAccount['4140']);
+        $this->assertArrayHasKey('4150', $byAccount);
+        $this->assertGreaterThan(0, $byAccount['4150']);
         $this->assertArrayNotHasKey(Ledger::BOOKING_REVENUE, $byAccount, 'إيراد الشاليه لم يعد على الحساب الموحَّد');
     }
 

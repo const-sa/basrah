@@ -9,6 +9,7 @@ use App\Models\JournalLine;
 use App\Models\PaymentMethod;
 use App\Models\Sale;
 use App\Support\ActivitySegment;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 class AccountingSettingsRemap
@@ -19,6 +20,7 @@ class AccountingSettingsRemap
         private readonly RevenueAccounts $revenueAccounts,
         private readonly PaymentMethodAccounts $paymentMethodAccounts,
         private readonly ActivitySegment $segments,
+        private readonly PoolContractEntries $poolContracts,
     ) {}
 
     public function remapAll(): int
@@ -45,12 +47,34 @@ class AccountingSettingsRemap
 
         $target = $this->revenueAccounts->idFor(RevenueAccounts::SECTION_STREAMS[$section]);
 
+        if ($section !== ActivitySegment::POOLS) {
+            return $this->revenueLinesOn($centerIds, $target)->update(['account_id' => $target]);
+        }
+
+        // The pools' contract work has an account of its own; sweeping it onto
+        // the shop's account would undo the split the client asked for.
+        $contracts = $this->revenueAccounts->idFor('pool_contracts');
+
+        return $this->revenueLinesOn($centerIds, $target)
+            ->whereNotIn('journal_entry_id', $this->poolContracts->entries()->select('id'))
+            ->update(['account_id' => $target])
+            + $this->revenueLinesOn($centerIds, $contracts)
+                ->whereIn('journal_entry_id', $this->poolContracts->entries()->select('id'))
+                ->update(['account_id' => $contracts]);
+    }
+
+    /**
+     * Posted revenue lines on these centres not yet on the target account.
+     *
+     * @param  list<int>  $centerIds
+     */
+    private function revenueLinesOn(array $centerIds, int $target): Builder
+    {
         return JournalLine::query()
             ->whereIn('cost_center_id', $centerIds)
             ->whereHas('account', fn ($q) => $q->where('type', 'revenue'))
             ->whereHas('entry', fn ($q) => $q->where('status', 'posted'))
-            ->where('account_id', '!=', $target)
-            ->update(['account_id' => $target]);
+            ->where('account_id', '!=', $target);
     }
 
     private function remapTreasury(string $section): int

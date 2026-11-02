@@ -58,7 +58,7 @@ class AccountingSettingsTest extends TestCase
     private function chaletRevenueAccount(): Account
     {
         return Account::create([
-            'code' => '4140',
+            'code' => '4150',
             'name' => 'إيرادات الشاليهات',
             'parent_id' => Account::where('code', '4100')->value('id'),
             'type' => 'revenue',

@@ -429,7 +429,12 @@ class ContractAccounting
     /** The revenue account this contract's activity earns on. */
     public function revenueAccountFor(Contract $contract): int
     {
-        $stream = RevenueAccounts::SECTION_STREAMS[$this->segments->of($this->costCenterFor($contract))] ?? 'sales';
+        $segment = $this->segments->of($this->costCenterFor($contract));
+
+        // The pools keep their contract work apart from the shop's sales.
+        $stream = $segment === ActivitySegment::POOLS
+            ? 'pool_contracts'
+            : (RevenueAccounts::SECTION_STREAMS[$segment] ?? 'sales');
 
         return $this->revenueAccounts->idFor($stream);
     }

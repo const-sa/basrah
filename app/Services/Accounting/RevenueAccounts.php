@@ -5,6 +5,7 @@ namespace App\Services\Accounting;
 use App\Models\Account;
 use App\Models\Booking;
 use App\Models\RevenueAccount;
+use App\Models\Sale;
 use App\Support\ActivitySegment;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -62,9 +63,17 @@ class RevenueAccounts
             'default' => Ledger::BOOKING_REVENUE,
         ],
         'pool_revenue' => [
-            'label' => 'المسابح',
-            'hint' => 'فواتير التركيب والصيانة المحرَّرة على قسم المسابح.',
+            'label' => 'مبيعات المسابح',
+            'hint' => 'فواتير الكاشير ومبيعات المحل المحرَّرة على قسم المسابح.',
             'default' => Ledger::SALES_REVENUE,
+        ],
+        'pool_contracts' => [
+            'label' => 'عقود المسابح',
+            'hint' => 'سندات عقود التركيب والصيانة الشهرية، وفواتير عروض أسعار المسابح.',
+            'default' => Ledger::POOL_CONTRACTS_REVENUE,
+            // A chart that never had 4140 keeps posting the contracts where
+            // the pools always did, rather than refusing the receipt.
+            'fallback' => 'pool_revenue',
         ],
         'sales' => [
             'label' => 'المبيعات ونقاط البيع',
@@ -150,6 +159,22 @@ class RevenueAccounts
     }
 
     /**
+     * An invoice's revenue account. A pools invoice raised off a quotation is
+     * contract work, not a shop sale, and earns with the contracts; a return
+     * follows the invoice it returns.
+     */
+    public function forSale(Sale $sale, ?int $costCenterId): int
+    {
+        $stream = $this->streamOfInvoiceCenter($costCenterId);
+
+        if ($stream === 'pool_revenue' && ($sale->quotation_id || $sale->originalSale?->quotation_id)) {
+            $stream = 'pool_contracts';
+        }
+
+        return $this->idFor($stream);
+    }
+
+    /**
      * The asset account this stream's takings are deposited into, or null when
      * the operator has named none — then the payment method decides, as it
      * always did.
@@ -223,6 +248,7 @@ class RevenueAccounts
         foreach (array_keys(self::STREAMS) as $stream) {
             $chosen = $stored[$stream];
             $id = ($chosen !== null && in_array($chosen, $postable, true)) ? $chosen : $this->defaultId($stream);
+            $id ??= $map[self::STREAMS[$stream]['fallback'] ?? ''] ?? null;
 
             if ($id !== null) {
                 $map[$stream] = $id;

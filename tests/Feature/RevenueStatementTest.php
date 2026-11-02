@@ -134,7 +134,7 @@ class RevenueStatementTest extends TestCase
     public function test_choosing_a_stream_opens_the_account_mapped_to_it(): void
     {
         $account = Account::create([
-            'code' => '4140',
+            'code' => '4150',
             'name' => 'إيرادات الشاليهات',
             'type' => 'revenue',
             'is_group' => false,
@@ -147,7 +147,7 @@ class RevenueStatementTest extends TestCase
             ->get('/admin/accounting/revenue-statement?stream=chalet_bookings')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('account.code', '4140')
+                ->where('account.code', '4150')
                 // والقائمة تسمّي المصادر التي تهبط على الحساب لا كوده وحده
                 ->where('account.streams', ['حجوزات الشاليهات']));
     }

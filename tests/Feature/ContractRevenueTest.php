@@ -16,7 +16,10 @@ use App\Models\QuotationItem;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Voucher;
+use App\Models\Sale;
+use App\Services\Accounting\AccountingSettingsRemap;
 use App\Services\Accounting\ContractAccounting;
+use App\Services\Accounting\RevenueAccounts;
 use App\Services\Accounting\Ledger;
 use App\Services\Accounting\VoucherService;
 use App\Support\PoolInstallationContractTemplate;
@@ -73,7 +76,7 @@ class ContractRevenueTest extends TestCase
     {
         $contract = $this->installation(12000, 4000);
 
-        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'nothing is owed before handover');
         $this->assertSame('لم يُسجَّل تنفيذ العقد بعد.', app(ContractAccounting::class)->refusal($contract));
@@ -88,7 +91,7 @@ class ContractRevenueTest extends TestCase
             ->assertSessionHas('success');
 
         // 4,000 earned at signing and 8,000 at handover — owed by the client.
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(8000.0, $this->balanceOf(Ledger::RECEIVABLES));
     }
@@ -102,7 +105,7 @@ class ContractRevenueTest extends TestCase
             ->post("/admin/contracts/{$contract->id}/complete")
             ->assertSessionHas('warning');
 
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
         $this->artisan('accounting:audit --errors')->assertSuccessful();
     }
@@ -124,7 +127,7 @@ class ContractRevenueTest extends TestCase
             ->patch("/admin/contracts/{$contract->id}/status", ['status' => 'cancelled'])
             ->assertSessionHas('success');
 
-        $this->assertSame(6000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(6000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
         $this->assertSame(0, Voucher::where('contract_id', $contract->id)->where('type', 'payment')->count(), 'no refund');
@@ -148,9 +151,9 @@ class ContractRevenueTest extends TestCase
         $migration->up();
         $migration->up();
 
-        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE), 'earned once, however often it runs');
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE), 'earned once, however often it runs');
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
-        $this->assertSame(4000.0, Account::where('code', Ledger::SALES_REVENUE)->first()->balance($taken));
+        $this->assertSame(4000.0, Account::where('code', Ledger::POOL_CONTRACTS_REVENUE)->first()->balance($taken));
     }
 
     /**
@@ -174,7 +177,7 @@ class ContractRevenueTest extends TestCase
             ])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE), 'earned once, not twice');
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE), 'earned once, not twice');
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE), 'nothing back in deposits');
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'the client owes nothing');
 
@@ -183,7 +186,7 @@ class ContractRevenueTest extends TestCase
         $between = now()->subMonths(3)->toDateString();
         $this->assertSame(6000.0, Account::where('code', Ledger::RECEIVABLES)->first()->balance($between));
         $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance($between));
-        $this->assertSame(12000.0, Account::where('code', Ledger::SALES_REVENUE)->first()->balance($handover));
+        $this->assertSame(12000.0, Account::where('code', Ledger::POOL_CONTRACTS_REVENUE)->first()->balance($handover));
 
         $this->artisan('accounting:audit --errors')->assertSuccessful();
 
@@ -191,7 +194,7 @@ class ContractRevenueTest extends TestCase
         $voucher = Voucher::where('contract_id', $contract->id)->latest('id')->firstOrFail();
         app(VoucherService::class)->cancel($voucher, 'خطأ في الإدخال');
 
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(6000.0, $this->balanceOf(Ledger::RECEIVABLES));
 
@@ -203,7 +206,7 @@ class ContractRevenueTest extends TestCase
         ]);
         $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
 
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
         $this->artisan('accounting:audit --errors')->assertSuccessful();
@@ -231,7 +234,7 @@ class ContractRevenueTest extends TestCase
             ->assertSessionHas('warning');
 
         $this->assertSame(1, JournalEntry::where('source', 'contract')->where('reference_type', Contract::class)->count());
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
     }
 
     public function test_undoing_a_handover_reverses_what_it_earned_and_keeps_the_receipts(): void
@@ -242,7 +245,7 @@ class ContractRevenueTest extends TestCase
         $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
 
         $this->assertNull($contract->fresh()->completed_at);
-        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
     }
 
@@ -270,7 +273,7 @@ class ContractRevenueTest extends TestCase
     {
         $contract = $this->maintenance(800, 800);
 
-        $this->assertSame(800.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(800.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
     }
 
@@ -288,7 +291,7 @@ class ContractRevenueTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame(1600.0, $contract->fresh()->paidAmount());
-        $this->assertSame(1600.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(1600.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
     }
 
     /** A fee taken before 1 November and parked in deposits is earned after all. */
@@ -307,7 +310,7 @@ class ContractRevenueTest extends TestCase
         $migration = require database_path('migrations/2026_11_02_100002_earn_the_maintenance_receipts_left_in_deposits.php');
         $migration->up();
 
-        $this->assertSame(800.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(800.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame($revenue, $voucher->fresh()->account_id);
     }
@@ -316,23 +319,23 @@ class ContractRevenueTest extends TestCase
     public function test_a_cancelled_contracts_mistaken_receipts_are_voided(): void
     {
         $contract = $this->installation(12000, 500);
-        $this->assertSame(500.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(500.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
 
         // Still open: refused, untouched.
         $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number]])->assertFailed();
-        $this->assertSame(500.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(500.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
 
         $contract->update(['status' => 'cancelled']);
 
         $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number], '--pretend' => true])
             ->expectsOutputToContain('Total: 500.00')
             ->assertSuccessful();
-        $this->assertSame(500.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(500.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
 
         // Money never received is not kept: it leaves revenue and the till.
         $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number]])->assertSuccessful();
 
-        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $contract->fresh()->paidAmount());
         $this->assertSame(0, Voucher::where('contract_id', $contract->id)->where('status', 'posted')->count());
@@ -363,7 +366,7 @@ class ContractRevenueTest extends TestCase
             ->patch("/admin/contracts/{$contract->id}/status", ['status' => 'cancelled'])
             ->assertSessionHas('success');
 
-        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
     }
@@ -406,6 +409,59 @@ class ContractRevenueTest extends TestCase
             $entry->lines->every(fn ($line) => (int) $line->cost_center_id === (int) $pools),
             'the invoice follows the contract, not the offer that was moved',
         );
+    }
+
+    /**
+     * The client asked to read the pools' contracts apart from the shop: a
+     * counter sale stays on «إيرادات المبيعات», contract work goes to its own.
+     */
+    public function test_pools_contracts_and_shop_sales_earn_on_separate_accounts(): void
+    {
+        $pools = CostCenter::forDepartment(Department::where('code', 'POOLS')->firstOrFail())->id;
+        $revenue = app(RevenueAccounts::class);
+
+        $this->assertSame($this->accountId(Ledger::SALES_REVENUE), $revenue->forSale(new Sale, $pools));
+        $this->assertSame(
+            $this->accountId(Ledger::POOL_CONTRACTS_REVENUE),
+            $revenue->forSale(new Sale(['quotation_id' => 1]), $pools),
+            'an invoice raised off a quotation is contract work',
+        );
+
+        $this->installation(12000, 4000);
+
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+    }
+
+    /** Revenue posted on the shared account before the split moves onto the contracts'. */
+    public function test_the_split_moves_contract_revenue_posted_before_it(): void
+    {
+        $this->installation(12000, 4000);
+        $this->maintenance(800, 800);
+
+        $contracts = $this->accountId(Ledger::POOL_CONTRACTS_REVENUE);
+        JournalLine::where('account_id', $contracts)->update(['account_id' => $this->accountId(Ledger::SALES_REVENUE)]);
+
+        (require database_path('migrations/2026_11_02_100005_split_the_pools_contract_revenue_from_its_shop_sales.php'))->up();
+
+        $this->assertSame(4800.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+    }
+
+    /** The settings' «remap» button must not sweep the contracts back onto the shop's account. */
+    public function test_remapping_the_pools_keeps_contracts_on_their_own_account(): void
+    {
+        $this->installation(12000, 4000);
+
+        app(AccountingSettingsRemap::class)->remapAll();
+
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+    }
+
+    private function accountId(string $code): int
+    {
+        return (int) Account::where('code', $code)->value('id');
     }
 
     private function quotationWithAnItem(): Quotation

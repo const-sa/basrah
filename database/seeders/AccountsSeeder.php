@@ -60,6 +60,7 @@ class AccountsSeeder extends Seeder
         [Ledger::BOOKING_REVENUE, 'إيرادات الحجوزات', 'revenue', false, '4100'],
         [Ledger::SALES_REVENUE, 'إيرادات المبيعات', 'revenue', false, '4100'],
         ['4130', 'إيرادات الخدمات الإضافية', 'revenue', false, '4100'],
+        [Ledger::POOL_CONTRACTS_REVENUE, 'إيرادات عقود المسابح', 'revenue', false, '4100'],
         ['4200', 'إيرادات أخرى', 'revenue', true, '4000'],
         [Ledger::PURCHASE_DISCOUNT, 'خصم مكتسب على المشتريات', 'revenue', false, '4200'],
 
