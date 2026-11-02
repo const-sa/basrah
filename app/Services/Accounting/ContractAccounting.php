@@ -6,6 +6,7 @@ use App\Models\Contract;
 use App\Models\CostCenter;
 use App\Models\Department;
 use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use App\Models\Sale;
 use App\Models\Voucher;
 use App\Support\ActivitySegment;
@@ -185,16 +186,67 @@ class ContractAccounting
     }
 
     /**
-     * Rewrite the standing revenue entry after the money on the contract moved.
+     * A payment taken on a contract already handed over pays what the client
+     * owes — on the day it is taken.
      *
-     * The entry clears what was collected by handover and leaves the rest as a
-     * receivable. A payment taken at handover, or after it, credits unearned
-     * revenue like every receipt on a contract — so without this it sat in
-     * «عرابين مقدمًا» for a job already delivered, while the receivable it
-     * paid stayed open for ever. Reversed and posted again on its own date, so
-     * the revenue stays in the month the job was handed over.
+     * Handover clears what was collected and leaves the rest a receivable. A
+     * later receipt credits unearned revenue like every receipt on a contract,
+     * so without this it sat in «عرابين مقدمًا» for a job already delivered
+     * while the receivable stayed open. A pool is often half paid at signing
+     * and finished off six months later, so the payment moves the money on its
+     * own date: every month in between still reads the client as owing it.
+     *
+     * Capped at what is still owed, so a receipt entered twice in the vouchers
+     * screen cannot drive the receivable below zero.
      */
-    public function reviseRevenue(Contract $contract, ?int $userId = null): ?JournalEntry
+    public function settleReceivable(Voucher $voucher, ?int $userId = null): ?JournalEntry
+    {
+        $contract = $voucher->contract()->first();
+        $entry = $contract ? $this->standingEntry($contract)?->load('lines') : null;
+
+        if (! $entry || (int) $voucher->account_id !== $this->ledger->accountId(Ledger::UNEARNED_REVENUE)) {
+            return null;
+        }
+
+        $receivables = $this->ledger->accountId(Ledger::RECEIVABLES);
+        $owed = round((float) $entry->lines->where('account_id', $receivables)->sum('debit')
+            - $this->settledSoFar($contract), 2);
+        $amount = round(min((float) $voucher->amount, $owed), 2);
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $centre = $this->costCenterFor($contract);
+
+        return $this->ledger->post(
+            $voucher->voucher_date->toDateString(),
+            "سداد مستحق العقد {$contract->number} بالسند {$voucher->number}",
+            [
+                ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $amount, 'cost_center_id' => $centre],
+                ['account' => Ledger::RECEIVABLES, 'credit' => $amount, 'cost_center_id' => $centre],
+            ],
+            'contract',
+            $voucher,
+            $userId,
+        );
+    }
+
+    /** A receipt cancelled after handover puts back the debt it paid. */
+    public function unsettleReceivable(Voucher $voucher, ?string $reason = null, ?int $userId = null): void
+    {
+        $this->settlements()
+            ->where('reference_id', $voucher->id)
+            ->get()
+            ->each(fn (JournalEntry $entry) => $this->ledger->reverse($entry, $reason, $userId));
+    }
+
+    /**
+     * Undo a contract's revenue with a counter-entry, not by deleting it — and
+     * the payments that settled its receivable since, which owed nothing once
+     * the revenue is gone and go back to deposits.
+     */
+    public function reverseRevenue(Contract $contract, string $reason, ?int $userId = null): ?JournalEntry
     {
         $entry = $this->standingEntry($contract);
 
@@ -202,18 +254,33 @@ class ContractAccounting
             return null;
         }
 
-        $date = $entry->entry_date->toDateString();
-        $this->ledger->reverse($entry, "تحديث تحصيل العقد {$contract->number}", $userId);
+        $this->settlements()
+            ->whereIn('reference_id', Voucher::where('contract_id', $contract->id)->select('id'))
+            ->get()
+            ->each(fn (JournalEntry $settlement) => $this->ledger->reverse($settlement, $reason, $userId));
 
-        return $this->post($contract, $date, $userId);
+        return $this->ledger->reverse($entry, $reason, $userId);
     }
 
-    /** Undo a contract's revenue with a counter-entry, not by deleting it. */
-    public function reverseRevenue(Contract $contract, string $reason, ?int $userId = null): ?JournalEntry
+    /** What payments after handover have already paid of the receivable. */
+    private function settledSoFar(Contract $contract): float
     {
-        $entry = $this->standingEntry($contract);
+        $receivables = $this->ledger->accountId(Ledger::RECEIVABLES);
 
-        return $entry ? $this->ledger->reverse($entry, $reason, $userId) : null;
+        return (float) JournalLine::query()
+            ->whereIn('journal_entry_id', $this->settlements()
+                ->whereIn('reference_id', Voucher::where('contract_id', $contract->id)->select('id'))
+                ->select('id'))
+            ->where('account_id', $receivables)
+            ->sum('credit');
+    }
+
+    /** Standing entries that moved a receipt after handover onto the receivable. */
+    private function settlements(): Builder
+    {
+        return JournalEntry::where('source', 'contract')
+            ->where('reference_type', Voucher::class)
+            ->where('status', 'posted');
     }
 
     /** The invoice raised off this contract's quotation, if there is one. */

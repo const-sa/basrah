@@ -106,7 +106,7 @@ class VoucherService
             // العقد هو ما رحّلته الخزينة، لا ما كُتب بخط اليد.
             if ($voucher->settlesContract()) {
                 $voucher->contract?->addSettlement($amount);
-                $this->reviseContractRevenue($voucher, $userId);
+                $this->contracts()->settleReceivable($voucher->fresh(), $userId);
             }
 
             return $voucher->fresh();
@@ -132,29 +132,22 @@ class VoucherService
 
             if ($wasPosted && $voucher->settlesContract()) {
                 $voucher->contract?->reverseSettlement((float) $voucher->amount);
+                $this->contracts()->unsettleReceivable($voucher, $reason, $userId);
             }
 
             $voucher->update(['status' => 'cancelled']);
-
-            if ($wasPosted && $voucher->settlesContract()) {
-                $this->reviseContractRevenue($voucher, $userId);
-            }
 
             return $voucher->fresh();
         });
     }
 
     /**
-     * Money taken or given back on a contract already handed over moves its
-     * revenue entry with it: what was collected clears unearned revenue, the
-     * rest stays a receivable. Resolved here, not injected: ContractAccounting
-     * reaches back to this class through the booking receipts.
+     * Resolved when needed, not injected: ContractAccounting reaches back to
+     * this class through the booking receipts.
      */
-    private function reviseContractRevenue(Voucher $voucher, ?int $userId): void
+    private function contracts(): ContractAccounting
     {
-        if ($contract = $voucher->contract()->first()) {
-            app(ContractAccounting::class)->reviseRevenue($contract, $userId);
-        }
+        return app(ContractAccounting::class);
     }
 
     private function nextNumber(string $type): string

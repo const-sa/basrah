@@ -94,13 +94,17 @@ class ContractRevenueTest extends TestCase
      */
     public function test_the_payment_taken_after_handover_settles_what_the_client_owes(): void
     {
-        $contract = $this->installation(12000, 4000);
+        // Half at signing, handed over, and the rest paid six months on.
+        $contract = $this->installation(12000, 6000);
 
         $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/complete");
+        $handover = now()->toDateString();
+
+        $this->travelTo(now()->addMonths(6));
 
         $this->actingAs($this->owner)
             ->post("/admin/contracts/{$contract->id}/receipt", [
-                'amount' => 8000,
+                'amount' => 6000,
                 'payment_method_id' => $this->paymentMethodId(),
             ])
             ->assertSessionHasNoErrors();
@@ -109,20 +113,35 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE), 'nothing back in deposits');
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'the client owes nothing');
 
+        // Every month in between still reads the client as owing the rest,
+        // and the revenue stays in the month of handover.
+        $between = now()->subMonths(3)->toDateString();
+        $this->assertSame(6000.0, Account::where('code', Ledger::RECEIVABLES)->first()->balance($between));
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance($between));
+        $this->assertSame(12000.0, Account::where('code', Ledger::SALES_REVENUE)->first()->balance($handover));
+
+        $this->artisan('accounting:audit --errors')->assertSuccessful();
+
         // A receipt cancelled after handover puts the debt back.
-        $voucher = Voucher::where('contract_id', $contract->id)->where('amount', 8000)->firstOrFail();
+        $voucher = Voucher::where('contract_id', $contract->id)->latest('id')->firstOrFail();
         app(VoucherService::class)->cancel($voucher, 'خطأ في الإدخال');
 
         $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
-        $this->assertSame(8000.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertSame(6000.0, $this->balanceOf(Ledger::RECEIVABLES));
 
-        // Undoing the handover returns everything collected to deposits.
+        // Taken again, then the handover undone: everything collected goes
+        // back to deposits, and nothing is owed on a job not yet delivered.
+        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/receipt", [
+            'amount' => 6000,
+            'payment_method_id' => $this->paymentMethodId(),
+        ]);
         $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
 
         $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
-        $this->assertSame(4000.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->artisan('accounting:audit --errors')->assertSuccessful();
     }
 
     public function test_the_revenue_lands_on_the_pools_cost_centre(): void

@@ -236,11 +236,16 @@ class AuditBooks extends Command
             $this->flagError($doc, 'paid amount', "contract says {$this->n($contract->paidAmount())}, its receipts add up to {$this->n($received)}");
         }
 
+        // The receipts' own entries, the payments after handover that settled
+        // the receivable (both written against the voucher), and whatever was
+        // written against the contract itself.
         $entryIds = $vouchers->pluck('journal_entry_id')->filter()->all();
         $entryIds = [...$entryIds, ...JournalEntry::where('status', 'posted')
-            ->where('reference_type', Contract::class)
-            ->where('reference_id', $contract->id)
+            ->where(fn ($q) => $q
+                ->where(fn ($c) => $c->where('reference_type', Contract::class)->where('reference_id', $contract->id))
+                ->orWhere(fn ($v) => $v->where('reference_type', Voucher::class)->whereIn('reference_id', $vouchers->pluck('id'))))
             ->pluck('id')->all()];
+        $entryIds = array_values(array_unique($entryIds));
 
         foreach ($entryIds as $id) {
             $this->accounted[(int) $id] = true;
