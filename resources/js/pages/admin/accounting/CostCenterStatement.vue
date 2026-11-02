@@ -4,7 +4,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
-import { Download } from 'lucide-vue-next';
+import { ChevronDown, Download } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface StatementRow {
@@ -15,6 +15,7 @@ interface StatementRow {
     detail: string | null;
     centre: string | null;
     account: string;
+    account_code: string | null;
     account_type: string | null;
     debit: number;
     credit: number;
@@ -62,6 +63,14 @@ const revenueLines = computed(() =>
 const expenseLines = computed(() =>
     props.statement.rows.filter((r) => r.account_type === 'expense').map((r) => ({ ...r, amount: r.debit - r.credit })),
 );
+
+// An account row opens onto the lines that make up its amount.
+const openAccount = ref<string | null>(null);
+const toggleAccount = (code: string) => (openAccount.value = openAccount.value === code ? null : code);
+const linesOf = (row: BreakdownRow) =>
+    props.statement.rows
+        .filter((r) => r.account_code === row.code)
+        .map((r) => ({ ...r, amount: row.type === 'revenue' ? r.credit - r.debit : r.debit - r.credit }));
 
 const details = computed(() => [
     { key: 'revenue', title: 'تفصيل الإيراد — كل قيد دخل في رقم الإيراد', lines: revenueLines.value, total: props.statement.revenue, tone: 'text-emerald-600' },
@@ -116,6 +125,7 @@ const exportCsv = () => {
             <div v-if="breakdown.length" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div class="border-b border-slate-100 px-4 py-3">
                     <h2 class="text-sm font-extrabold text-slate-800">من أين جاء الرقم — تفصيل على الحسابات</h2>
+                    <p class="mt-0.5 text-xs text-slate-500">اضغط على أي حساب لعرض القيود التي يتكوّن منها مبلغه.</p>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -127,13 +137,55 @@ const exportCsv = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="row in breakdown" :key="row.code" class="border-t border-slate-100">
-                                <td class="px-4 py-2.5 font-bold text-slate-700"><span dir="ltr">{{ row.code }}</span> — {{ row.name }}</td>
-                                <td class="px-4 py-2.5 text-center">
-                                    <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="row.type === 'revenue' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'">{{ row.type === 'revenue' ? 'إيراد' : 'مصروف' }}</span>
-                                </td>
-                                <td class="px-4 py-2.5 text-left font-extrabold" :class="row.type === 'revenue' ? 'text-emerald-600' : 'text-red-600'" dir="ltr">{{ money(row.amount) }}</td>
-                            </tr>
+                            <template v-for="row in breakdown" :key="row.code">
+                                <tr class="cursor-pointer border-t border-slate-100 hover:bg-slate-50" :class="{ 'bg-blue-50/60': openAccount === row.code }" @click="toggleAccount(row.code)">
+                                    <td class="px-4 py-2.5 font-bold text-slate-700">
+                                        <ChevronDown class="ml-1 inline h-3.5 w-3.5 text-slate-400 transition-transform" :class="{ 'rotate-180': openAccount === row.code }" />
+                                        <span dir="ltr">{{ row.code }}</span> — {{ row.name }}
+                                    </td>
+                                    <td class="px-4 py-2.5 text-center">
+                                        <span class="rounded-md px-2 py-0.5 text-[11px] font-bold" :class="row.type === 'revenue' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'">{{ row.type === 'revenue' ? 'إيراد' : 'مصروف' }}</span>
+                                    </td>
+                                    <td class="px-4 py-2.5 text-left font-extrabold" :class="row.type === 'revenue' ? 'text-emerald-600' : 'text-red-600'" dir="ltr">{{ money(row.amount) }}</td>
+                                </tr>
+                                <!-- The entries behind this one account's amount -->
+                                <tr v-if="openAccount === row.code" class="bg-slate-50">
+                                    <td colspan="3" class="px-4 pb-4 pt-1">
+                                        <table class="w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-xs">
+                                            <thead class="bg-slate-100">
+                                                <tr>
+                                                    <th class="px-3 py-2 text-right font-extrabold text-slate-600">التاريخ</th>
+                                                    <th class="px-3 py-2 text-right font-extrabold text-slate-600">القيد</th>
+                                                    <th class="px-3 py-2 text-right font-extrabold text-slate-600">البيان</th>
+                                                    <th v-if="statement.has_rooms" class="px-3 py-2 text-right font-extrabold text-slate-600">القسم</th>
+                                                    <th class="px-3 py-2 text-left font-extrabold text-slate-600">المبلغ</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="(line, i) in linesOf(row)" :key="i" class="border-t border-slate-100">
+                                                    <td class="px-3 py-2 text-slate-600"><span dir="ltr">{{ line.date ?? '—' }}</span></td>
+                                                    <td class="px-3 py-2 font-bold text-slate-700">
+                                                        <span dir="ltr">{{ line.entry_number ?? '—' }}</span>
+                                                        <div class="text-[10px] font-medium text-slate-500">{{ line.source_label }}</div>
+                                                    </td>
+                                                    <td class="px-3 py-2 text-slate-700">
+                                                        {{ line.label || '—' }}
+                                                        <div v-if="line.detail" class="text-[10px] text-slate-500">{{ line.detail }}</div>
+                                                    </td>
+                                                    <td v-if="statement.has_rooms" class="px-3 py-2 font-bold text-slate-600">{{ line.centre ?? 'الوحدة' }}</td>
+                                                    <td class="px-3 py-2 text-left font-bold" :class="line.amount < 0 ? 'text-slate-500' : row.type === 'revenue' ? 'text-emerald-600' : 'text-red-600'" dir="ltr">{{ money(line.amount) }}</td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="border-t-2 border-slate-200 bg-slate-50">
+                                                    <td :colspan="statement.has_rooms ? 4 : 3" class="px-3 py-2 font-extrabold text-slate-700">{{ linesOf(row).length }} قيد — الإجمالي</td>
+                                                    <td class="px-3 py-2 text-left font-extrabold" :class="row.type === 'revenue' ? 'text-emerald-600' : 'text-red-600'" dir="ltr">{{ money(row.amount) }}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>

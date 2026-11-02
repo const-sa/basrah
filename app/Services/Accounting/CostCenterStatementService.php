@@ -63,6 +63,7 @@ class CostCenterStatementService
                     : null,
                 'centre' => $roomName,
                 'account' => $line->account ? $line->account->code.' — '.$line->account->name : '—',
+                'account_code' => $line->account?->code,
                 'account_type' => $line->account?->type,
                 'debit' => (float) $line->debit,
                 'credit' => (float) $line->credit,
