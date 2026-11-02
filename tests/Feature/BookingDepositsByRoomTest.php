@@ -236,6 +236,32 @@ class BookingDepositsByRoomTest extends TestCase
             ->assertFailed();
     }
 
+    /** A booking entered by mistake and deleted, whose money never came in, leaves the books clean. */
+    public function test_voiding_a_deleted_bookings_payments_takes_them_out_of_the_books(): void
+    {
+        $men = $this->hall->sections()->orderBy('sort_order')->firstOrFail();
+        $booking = $this->bookSides([$men->id]);
+        $this->pay($booking, 3000);
+        $this->pay($booking, 2000, 'refund');
+        $booking->delete();
+
+        $this->artisan('accounting:void-deleted-booking-payments', ['references' => [$booking->reference]])
+            ->assertSuccessful();
+
+        $this->assertSame(0.0, Account::where('code', Ledger::CASH)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(0, $booking->payments()->count());
+        $this->artisan('accounting:audit --errors')->assertSuccessful();
+
+        // A live booking is corrected on the booking, never from here.
+        $live = $this->bookSides([$men->id]);
+        $this->pay($live, 500);
+
+        $this->artisan('accounting:void-deleted-booking-payments', ['references' => [$live->reference]])
+            ->assertFailed();
+        $this->assertSame(1, $live->payments()->count());
+    }
+
     public function test_the_audit_passes_on_clean_books_and_names_a_broken_booking(): void
     {
         $men = $this->hall->sections()->orderBy('sort_order')->firstOrFail();
