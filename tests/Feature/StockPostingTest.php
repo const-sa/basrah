@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\Department;
 use App\Models\Item;
+use App\Models\JournalEntry;
 use App\Models\StockMovement;
 use App\Services\Accounting\Ledger;
 use App\Services\InventoryService;
@@ -71,6 +72,46 @@ class StockPostingTest extends TestCase
 
         $this->assertSame(240.0, $this->balanceOf(Ledger::INVENTORY));
         $this->assertSame(-40.0, $this->balanceOf(Ledger::STOCK_VARIANCE));
+    }
+
+    /**
+     * «سلم 3 درج مورو»: opened with 58 instead of 2, set back to 2 by a
+     * stocktake a minute later. The correction comes off capital, not off
+     * the stocktake difference — it was never a shortage.
+     */
+    public function test_a_stocktake_that_corrected_a_mistyped_opening_moves_to_capital(): void
+    {
+        app(InventoryService::class)->opening($this->item, 58);
+        app(InventoryService::class)->adjust($this->item->fresh(), 2);
+        $this->assertSame(1120.0, $this->balanceOf(Ledger::STOCK_VARIANCE));
+
+        $this->artisan('stock:correct-opening', ['items' => [$this->item->id], '--pretend' => true])
+            ->expectsOutputToContain('shortage 1,120.00')
+            ->assertSuccessful();
+        $this->assertSame(1120.0, $this->balanceOf(Ledger::STOCK_VARIANCE));
+
+        $this->artisan('stock:correct-opening', ['items' => [$this->item->id]])->assertSuccessful();
+
+        // As if it had been opened with 2 all along.
+        $this->assertSame(0.0, $this->balanceOf(Ledger::STOCK_VARIANCE));
+        $this->assertSame(40.0, $this->balanceOf(Ledger::INVENTORY));
+        $this->assertSame(40.0, $this->balanceOf(Ledger::CAPITAL));
+        $this->assertSame(2.0, (float) $this->item->fresh()->stock_qty);
+
+        // Once done, a second run refuses rather than moving it twice.
+        $this->artisan('stock:correct-opening', ['items' => [$this->item->id]])->assertFailed();
+        $this->assertSame(40.0, $this->balanceOf(Ledger::CAPITAL));
+    }
+
+    /** A count after the item has moved is a real count: its shortage stands. */
+    public function test_a_real_stocktake_is_not_moved_to_capital(): void
+    {
+        app(InventoryService::class)->opening($this->item, 10);
+        app(InventoryService::class)->move($this->item->fresh(), -2, 'issue');
+        app(InventoryService::class)->adjust($this->item->fresh(), 5);
+
+        $this->artisan('stock:correct-opening', ['items' => [$this->item->id]])->assertFailed();
+        $this->assertSame(60.0, $this->balanceOf(Ledger::STOCK_VARIANCE));
     }
 
     public function test_a_count_that_matches_the_book_posts_nothing(): void
