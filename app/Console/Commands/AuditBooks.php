@@ -74,7 +74,9 @@ class AuditBooks extends Command
 
     private function auditBookings(BookingAccounting $accounting): void
     {
-        Booking::query()
+        // Deleted ones too: their payments stay in the books, and leaving them
+        // out turned a deleted booking's deposit into money with no document.
+        Booking::withTrashed()
             ->with(['unit', 'sections', 'payments'])
             ->orderBy('id')
             ->chunkById(200, function ($chunk) use ($accounting) {
@@ -118,6 +120,16 @@ class AuditBooks extends Command
         $standing = $accounting->standingEntry($booking)?->load('lines.account');
         $held = $this->bookingHeld($booking, $standing);
         $this->explained += $held;
+
+        // A deleted booking is out of every screen but not out of the books.
+        // Whatever it still holds is owed to someone and seen by no one.
+        if ($booking->trashed()) {
+            if (abs($held) > 0.005) {
+                $this->flagError($doc, 'deleted with money held', "deleted on {$booking->deleted_at?->toDateString()} still holding {$this->n($held)} — restore it from الأرشيف, then refund or settle it");
+            }
+
+            return;
+        }
 
         $blocking = in_array($booking->status, Booking::BLOCKING_STATUSES, true);
         $delivered = $accounting->isDelivered($booking);

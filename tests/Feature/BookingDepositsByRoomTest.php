@@ -7,7 +7,9 @@ use App\Models\Booking;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Models\Role;
 use App\Models\Unit;
+use App\Models\User;
 use App\Services\Accounting\BookingAccounting;
 use App\Services\Accounting\CostCenterStatementService;
 use App\Services\Accounting\Ledger;
@@ -192,6 +194,45 @@ class BookingDepositsByRoomTest extends TestCase
         $this->artisan('accounting:audit --errors')
             ->expectsOutputToContain('1,000.00 belongs to no document')
             ->expectsOutputToContain("entry {$entry->number}")
+            ->assertFailed();
+    }
+
+    /** Refunded to zero still leaves entries behind — such a booking is cancelled, not deleted. */
+    public function test_a_booking_with_any_payment_cannot_be_deleted(): void
+    {
+        $men = $this->hall->sections()->orderBy('sort_order')->firstOrFail();
+        $booking = $this->bookSides([$men->id]);
+        $this->pay($booking, 2000);
+        $this->pay($booking, 2000, 'refund');
+        $this->assertSame(0.0, (float) $booking->fresh()->paid_amount);
+
+        $owner = User::factory()->create([
+            'role_id' => Role::where('slug', 'super-admin')->firstOrFail()->id,
+            'is_active' => true,
+            'has_all_units' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->delete("/admin/bookings/{$booking->id}")
+            ->assertSessionHas('warning');
+
+        $this->assertFalse($booking->fresh()->trashed());
+    }
+
+    /** A deleted booking still holding a deposit is named, not lost in a total. */
+    public function test_the_audit_names_a_deleted_booking_still_holding_money(): void
+    {
+        $men = $this->hall->sections()->orderBy('sort_order')->firstOrFail();
+        $booking = $this->bookSides([$men->id]);
+        $this->pay($booking, 3000);
+        $this->pay($booking, 2000, 'refund');
+
+        // How the live books came to hold one: deleted past the old guard.
+        $booking->delete();
+
+        $this->artisan('accounting:audit --errors')
+            ->expectsOutputToContain("booking {$booking->reference} | deleted with money held")
+            ->doesntExpectOutputToContain('belongs to no document')
             ->assertFailed();
     }
 

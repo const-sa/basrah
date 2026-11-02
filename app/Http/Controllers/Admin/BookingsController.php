@@ -641,8 +641,11 @@ class BookingsController extends Controller
 
         $this->authorizeUnit($request, $booking->unit_id);
 
-        // الحجز المسدَّد جزئيًا لا يُحذف — يُلغى ليبقى أثره المالي في السجل.
-        if ((float) $booking->paid_amount > 0) {
+        // Any money ever taken keeps the booking: its entries stay in the books,
+        // and deleting it leaves them belonging to nothing on screen. The
+        // payments decide rather than the stored paid_amount: bookings were
+        // deleted past the old paid_amount check with a deposit still held.
+        if ($booking->payments()->exists()) {
             return back()->with('warning', 'لا يمكن حذف حجز عليه دفعات — ألغِه بدل حذفه.');
         }
 
