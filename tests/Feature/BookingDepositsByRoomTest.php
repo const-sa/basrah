@@ -181,6 +181,20 @@ class BookingDepositsByRoomTest extends TestCase
         $this->assertSame(0, JournalEntry::where('status', 'reversed')->count());
     }
 
+    /** Money on unearned revenue that no booking or contract holds is named by its entry. */
+    public function test_the_audit_names_the_entry_behind_unexplained_deposits(): void
+    {
+        $entry = app(Ledger::class)->post('2026-08-16', 'عربون مُدخل يدويًا', [
+            ['account' => Ledger::CASH, 'debit' => 1000],
+            ['account' => Ledger::UNEARNED_REVENUE, 'credit' => 1000],
+        ], 'manual');
+
+        $this->artisan('accounting:audit --errors')
+            ->expectsOutputToContain('1,000.00 belongs to no document')
+            ->expectsOutputToContain("entry {$entry->number}")
+            ->assertFailed();
+    }
+
     public function test_the_audit_passes_on_clean_books_and_names_a_broken_booking(): void
     {
         $men = $this->hall->sections()->orderBy('sort_order')->firstOrFail();

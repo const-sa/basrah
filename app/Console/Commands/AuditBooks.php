@@ -44,6 +44,9 @@ class AuditBooks extends Command
     /** Unearned revenue held by the documents we can name. */
     private float $explained = 0.0;
 
+    /** @var array<int, true> entry ids already read against a booking or contract */
+    private array $accounted = [];
+
     public function handle(BookingAccounting $bookings, ContractAccounting $contracts): int
     {
         $this->unearned = (int) Account::where('code', Ledger::UNEARNED_REVENUE)->value('id');
@@ -144,7 +147,7 @@ class AuditBooks extends Command
         }
 
         if (! $blocking && $held > 0.005) {
-            $this->flagWarning($doc, 'money held on '.$booking->status, "{$this->n($held)} is still owed back to the client — refund it, or record it kept");
+            $this->flagWarning($doc, 'money held on '.$booking->status, "{$this->n($held)} is still owed back to the client — record its refund on the booking if it was paid back");
         }
 
         if ($booking->scope === 'sections' && $booking->sections->isNotEmpty() && $booking->unit) {
@@ -185,6 +188,14 @@ class AuditBooks extends Command
                 ->whereIn('reference_id', $booking->payments->pluck('id')))
             ->get();
 
+        foreach ($payments as $line) {
+            $this->accounted[(int) $line->journal_entry_id] = true;
+        }
+
+        if ($standing) {
+            $this->accounted[$standing->id] = true;
+        }
+
         return $standing
             ? $payments->concat($standing->lines->where('account_id', $this->unearned))
             : $payments;
@@ -218,6 +229,10 @@ class AuditBooks extends Command
             ->where('reference_type', Contract::class)
             ->where('reference_id', $contract->id)
             ->pluck('id')->all()];
+
+        foreach ($entryIds as $id) {
+            $this->accounted[(int) $id] = true;
+        }
 
         $held = round((float) JournalLine::whereIn('journal_entry_id', $entryIds)
             ->whereHas('entry', fn ($q) => $q->where('status', 'posted'))
@@ -295,6 +310,46 @@ class AuditBooks extends Command
 
         if (abs($gap) > 0.005) {
             $this->flagError('account '.Ledger::UNEARNED_REVENUE, 'deposits unexplained', "ledger holds {$this->n($ledger)}, the bookings and contracts account for {$this->n($this->explained)} — {$this->n($gap)} belongs to no document");
+            $this->nameUnexplained();
+        }
+    }
+
+    /**
+     * The entries behind a gap in unearned revenue, one row each.
+     *
+     * A total says that money is unexplained; only the entry says why — a
+     * receipt typed by hand onto 2210, a receipt on a contract since deleted,
+     * a journal entry made directly. Reversed entries and their reversals are
+     * left out: the pair nets to zero.
+     */
+    private function nameUnexplained(): void
+    {
+        $reversals = JournalEntry::whereNotNull('reversed_by_entry_id')->pluck('reversed_by_entry_id')->all();
+
+        $rows = JournalLine::query()
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
+            ->where('journal_lines.account_id', $this->unearned)
+            ->where('journal_entries.status', 'posted')
+            ->whereNotIn('journal_entries.id', [...array_keys($this->accounted), ...$reversals])
+            ->groupBy('journal_entries.id', 'journal_entries.number', 'journal_entries.entry_date', 'journal_entries.source', 'journal_entries.description', 'journal_entries.reference_type', 'journal_entries.reference_id')
+            ->selectRaw('journal_entries.id AS id, journal_entries.number AS number, journal_entries.entry_date AS date, journal_entries.source AS source, journal_entries.description AS description, journal_entries.reference_type AS ref_type, journal_entries.reference_id AS ref_id, SUM(journal_lines.credit) - SUM(journal_lines.debit) AS held')
+            ->orderBy('journal_entries.entry_date')
+            ->get();
+
+        foreach ($rows as $row) {
+            if (abs((float) $row->held) < 0.005) {
+                continue;
+            }
+
+            $ref = $row->ref_type ? class_basename($row->ref_type).' #'.$row->ref_id : 'no reference';
+            $voucher = Voucher::withTrashed()->where('journal_entry_id', $row->id)->first();
+            $via = $voucher ? " — voucher {$voucher->number}".($voucher->contract_id ? " on contract #{$voucher->contract_id}" : '') : '';
+
+            $this->flagError(
+                "entry {$row->number}",
+                'deposit with no document',
+                "{$this->n($row->held)} on ".substr((string) $row->date, 0, 10)." ({$row->source}, {$ref}{$via}): {$row->description}",
+            );
         }
     }
 
