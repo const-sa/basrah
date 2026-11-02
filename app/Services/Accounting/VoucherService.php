@@ -106,7 +106,7 @@ class VoucherService
             // العقد هو ما رحّلته الخزينة، لا ما كُتب بخط اليد.
             if ($voucher->settlesContract()) {
                 $voucher->contract?->addSettlement($amount);
-                $this->contracts()->settleReceivable($voucher->fresh(), $userId);
+                $this->contracts()->takeReceipt($voucher->fresh(), $userId);
             }
 
             return $voucher->fresh();
@@ -132,7 +132,7 @@ class VoucherService
 
             if ($wasPosted && $voucher->settlesContract()) {
                 $voucher->contract?->reverseSettlement((float) $voucher->amount);
-                $this->contracts()->unsettleReceivable($voucher, $reason, $userId);
+                $this->contracts()->releaseReceipt($voucher, $reason, $userId);
             }
 
             $voucher->update(['status' => 'cancelled']);

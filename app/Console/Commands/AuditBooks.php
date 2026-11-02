@@ -270,6 +270,14 @@ class AuditBooks extends Command
         $recognized = $accounting->recognizedEntry($contract) !== null;
         $invoiced = $accounting->invoiceFor($contract) !== null;
 
+        // An installation earns each receipt as it is taken, and keeps it if
+        // the job is cancelled midway — nothing of it should wait in deposits.
+        if ($contract->isInstallationForm() && ! $invoiced && ! $recognized && $held > 0.005) {
+            $this->flagError($doc, 'receipts not earned', "{$this->n($held)} sits in deposits instead of pools revenue");
+
+            return;
+        }
+
         if ($contract->status === 'cancelled') {
             if ($held > 0.005) {
                 $this->flagWarning($doc, 'money held on cancelled', "{$this->n($held)} is still owed back to the client — or run accounting:void-mistaken-payments {$contract->number} if it was never received");
@@ -278,12 +286,10 @@ class AuditBooks extends Command
             return;
         }
 
-        if ($accounting->isDelivered($contract) && ! $recognized && ! $invoiced && $contract->totalAmount() !== null) {
-            $this->flagError($doc, 'not earned', "delivered on {$accounting->deliveryDate($contract)} and never recognized");
-        }
+        $earnedInFull = $accounting->earnedOnReceipt($contract) >= (float) $contract->totalAmount() - 0.005;
 
-        if (! $accounting->isDelivered($contract) && $held > 0.005 && $contract->isInstallationForm()) {
-            $this->flagWarning($doc, 'awaiting handover', "{$this->n($held)} held until «تم التنفيذ» is recorded on the contract");
+        if ($accounting->isDelivered($contract) && ! $recognized && ! $invoiced && ! $earnedInFull && $contract->totalAmount() !== null) {
+            $this->flagError($doc, 'not earned', "delivered on {$accounting->deliveryDate($contract)} and never recognized");
         }
     }
 

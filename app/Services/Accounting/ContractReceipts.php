@@ -24,9 +24,10 @@ use RuntimeException;
  * numbering series, one till — and the paid and remaining boxes on the sheet
  * are what the vouchers add up to.
  *
- * The credit is unearned revenue, not a sale: a deposit is taken before the
- * pool is dug, and calling it revenue the day it is received would put the
- * income in the wrong month. ContractAccounting moves it to revenue on handover.
+ * The credit is unearned revenue, as for every receipt on a contract; what
+ * happens to it next is ContractAccounting::takeReceipt()'s to decide — an
+ * installation earns it the same day, a handed-over job applies it to what
+ * the client owes, anything else holds it until delivered.
  *
  * A monthly maintenance sheet is the exception — «يدفع المبلغ بداية كل شهر
  * ميلادي», so each receipt is that month's fee and is earned the month it is

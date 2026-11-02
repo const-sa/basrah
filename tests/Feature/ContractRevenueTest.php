@@ -64,16 +64,22 @@ class ContractRevenueTest extends TestCase
         $this->client = Client::create(['name' => 'عبدالله الشمري', 'mobile' => '0551508655', 'type' => 'pool']);
     }
 
-    public function test_an_installation_signed_but_not_handed_over_earns_nothing(): void
+    /**
+     * The client's choice: each payment on an installation pays for the stage
+     * of work done, so it is pools revenue the day it is received — not held
+     * in deposits until handover while the costs of the work already count.
+     */
+    public function test_an_installation_earns_each_receipt_the_day_it_is_taken(): void
     {
         $contract = $this->installation(12000, 4000);
 
-        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
-        $this->assertSame(4000.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'nothing is owed before handover');
         $this->assertSame('لم يُسجَّل تنفيذ العقد بعد.', app(ContractAccounting::class)->refusal($contract));
     }
 
-    public function test_handing_over_an_installation_recognizes_its_revenue(): void
+    public function test_handing_over_an_installation_earns_what_the_receipts_did_not(): void
     {
         $contract = $this->installation(12000, 4000);
 
@@ -81,11 +87,70 @@ class ContractRevenueTest extends TestCase
             ->post("/admin/contracts/{$contract->id}/complete")
             ->assertSessionHas('success');
 
-        // The whole value is earned; what was collected clears the liability
-        // and the rest stands as a receivable on the client.
+        // 4,000 earned at signing and 8,000 at handover — owed by the client.
         $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(8000.0, $this->balanceOf(Ledger::RECEIVABLES));
+    }
+
+    /** Paid in full before handover: everything is already earned, and handover adds nothing. */
+    public function test_an_installation_paid_in_full_before_handover_adds_nothing_at_handover(): void
+    {
+        $contract = $this->installation(12000, 12000);
+
+        $this->actingAs($this->owner)
+            ->post("/admin/contracts/{$contract->id}/complete")
+            ->assertSessionHas('warning');
+
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->artisan('accounting:audit --errors')->assertSuccessful();
+    }
+
+    /**
+     * Cancelled midway, the money already received is kept against the work
+     * done: it stays revenue — no refund, nothing back in deposits.
+     */
+    public function test_cancelling_an_installation_midway_keeps_what_was_paid_as_revenue(): void
+    {
+        $contract = $this->installation(12000, 4000);
+
+        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/receipt", [
+            'amount' => 2000,
+            'payment_method_id' => $this->paymentMethodId(),
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($this->owner)
+            ->patch("/admin/contracts/{$contract->id}/status", ['status' => 'cancelled'])
+            ->assertSessionHas('success');
+
+        $this->assertSame(6000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertSame(0, Voucher::where('contract_id', $contract->id)->where('type', 'payment')->count(), 'no refund');
+        $this->assertSame(6000.0, $contract->fresh()->paidAmount());
+        $this->artisan('accounting:audit --errors')->assertSuccessful();
+    }
+
+    /** Receipts taken before the change are earned on their own dates. */
+    public function test_receipts_held_before_the_change_are_earned_on_their_dates(): void
+    {
+        $contract = $this->installation(12000, 4000);
+        $taken = now()->toDateString();
+
+        // Undo the earning, the way the books held it before.
+        JournalEntry::where('source', 'contract')->where('reference_type', Voucher::class)->get()
+            ->each(fn ($e) => app(Ledger::class)->reverse($e));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+
+        $this->travelTo(now()->addMonth());
+        $migration = require database_path('migrations/2026_11_02_100003_earn_installation_receipts_on_the_day_they_were_taken.php');
+        $migration->up();
+        $migration->up();
+
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE), 'earned once, however often it runs');
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(4000.0, Account::where('code', Ledger::SALES_REVENUE)->first()->balance($taken));
     }
 
     /**
@@ -130,16 +195,16 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(6000.0, $this->balanceOf(Ledger::RECEIVABLES));
 
-        // Taken again, then the handover undone: everything collected goes
-        // back to deposits, and nothing is owed on a job not yet delivered.
+        // Taken again, then the handover undone: what was paid stays earned,
+        // and nothing is owed on a job not yet delivered.
         $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/receipt", [
             'amount' => 6000,
             'payment_method_id' => $this->paymentMethodId(),
         ]);
         $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
 
-        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
         $this->artisan('accounting:audit --errors')->assertSuccessful();
     }
@@ -165,11 +230,11 @@ class ContractRevenueTest extends TestCase
             ->post("/admin/contracts/{$contract->id}/complete")
             ->assertSessionHas('warning');
 
-        $this->assertSame(1, JournalEntry::where('source', 'contract')->count());
+        $this->assertSame(1, JournalEntry::where('source', 'contract')->where('reference_type', Contract::class)->count());
         $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
     }
 
-    public function test_undoing_a_handover_reverses_the_revenue(): void
+    public function test_undoing_a_handover_reverses_what_it_earned_and_keeps_the_receipts(): void
     {
         $contract = $this->installation(12000, 4000);
 
@@ -177,7 +242,8 @@ class ContractRevenueTest extends TestCase
         $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
 
         $this->assertNull($contract->fresh()->completed_at);
-        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
     }
 
     public function test_a_contract_with_no_written_value_is_refused(): void
@@ -250,21 +316,23 @@ class ContractRevenueTest extends TestCase
     public function test_a_cancelled_contracts_mistaken_receipts_are_voided(): void
     {
         $contract = $this->installation(12000, 500);
-        $this->assertSame(500.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(500.0, $this->balanceOf(Ledger::SALES_REVENUE));
 
         // Still open: refused, untouched.
         $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number]])->assertFailed();
-        $this->assertSame(500.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(500.0, $this->balanceOf(Ledger::SALES_REVENUE));
 
         $contract->update(['status' => 'cancelled']);
 
         $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number], '--pretend' => true])
             ->expectsOutputToContain('Total: 500.00')
             ->assertSuccessful();
-        $this->assertSame(500.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(500.0, $this->balanceOf(Ledger::SALES_REVENUE));
 
+        // Money never received is not kept: it leaves revenue and the till.
         $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number]])->assertSuccessful();
 
+        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $contract->fresh()->paidAmount());
         $this->assertSame(0, Voucher::where('contract_id', $contract->id)->where('status', 'posted')->count());
@@ -281,7 +349,11 @@ class ContractRevenueTest extends TestCase
         );
     }
 
-    public function test_cancelling_a_recognized_contract_reverses_it(): void
+    /**
+     * Cancelled after handover: the balance the client will never pay is
+     * dropped, and what they paid stays revenue.
+     */
+    public function test_cancelling_a_handed_over_contract_drops_only_what_is_still_owed(): void
     {
         $contract = $this->installation(12000, 4000);
 
@@ -291,7 +363,9 @@ class ContractRevenueTest extends TestCase
             ->patch("/admin/contracts/{$contract->id}/status", ['status' => 'cancelled'])
             ->assertSessionHas('success');
 
-        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
     }
 
     /**

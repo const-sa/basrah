@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\Voucher;
 use App\Support\ActivitySegment;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /**
  * Contract revenue — when what was collected on a contract becomes earned.
@@ -21,8 +22,9 @@ use Illuminate\Database\Eloquent\Builder;
  * beside them read in full. That is the whole of «العقود وسنداتها مش بتظهر».
  *
  * What earns, and when, follows the paper it is written on:
- *  - تركيب: on handover. The terms are half at signing and half when the
- *    equipment is ordered, so signing is demonstrably not delivery.
+ *  - تركيب: each receipt as it is taken, since every payment funds the stage
+ *    of work done — the client's choice — and the rest on handover. A job
+ *    cancelled midway keeps what was paid against the work already done.
  *  - صيانة شهرية: each receipt is that month's fee, so it credits revenue
  *    as it is taken — ContractReceipts does that, not this class.
  *  - خدمات القاعات: delivered the day its booking runs.
@@ -133,6 +135,7 @@ class ContractAccounting
             $this->recognizedEntry($contract) !== null => 'أُثبت إيراد هذا العقد من قبل.',
             $this->invoiceFor($contract) !== null => 'صدرت للعقد فاتورة، وإيرادها هو إيراده.',
             ! $this->isDelivered($contract) => 'لم يُسجَّل تنفيذ العقد بعد.',
+            $this->earnedOnReceipt($contract) >= (float) $contract->totalAmount() - 0.005 => 'استُحق إيراد العقد كله مع سندات القبض.',
             default => null,
         };
     }
@@ -162,7 +165,11 @@ class ContractAccounting
      */
     public function applyDepositsToInvoice(Contract $contract, Sale $sale, ?int $userId = null): ?JournalEntry
     {
-        $held = round($contract->paidAmount(), 2);
+        // The invoice carries the revenue now: what the receipts earned goes
+        // back to deposits first, or the job would be earned twice.
+        $this->reverseEach($this->earnings($contract), "صدرت للعقد {$contract->number} الفاتورة {$sale->number}", $userId);
+
+        $held = $this->heldInDeposits($contract);
         $outstanding = round(max(0, (float) $sale->total_amount - (float) $sale->paid_amount), 2);
         $amount = round(min($held, $outstanding), 2);
 
@@ -186,31 +193,152 @@ class ContractAccounting
     }
 
     /**
-     * A payment taken on a contract already handed over pays what the client
-     * owes — on the day it is taken.
+     * Move a receipt just posted on a contract out of «عرابين مقدمًا», on the
+     * day it was taken — or leave it there.
      *
-     * Handover clears what was collected and leaves the rest a receivable. A
-     * later receipt credits unearned revenue like every receipt on a contract,
-     * so without this it sat in «عرابين مقدمًا» for a job already delivered
-     * while the receivable stayed open. A pool is often half paid at signing
-     * and finished off six months later, so the payment moves the money on its
-     * own date: every month in between still reads the client as owing it.
+     * Before handover, an installation's receipt is earned as it is taken: the
+     * client chose this, because each payment funds work done at that stage —
+     * the digging, the equipment — and those costs reach the pools the day
+     * they are spent. Held back until handover, the pools read the costs of a
+     * job without the money paid for it, and then the whole of it in one month.
      *
-     * Capped at what is still owed, so a receipt entered twice in the vouchers
-     * screen cannot drive the receivable below zero.
+     * After handover the job is already earned in full, so the payment pays
+     * what the client owes instead. A pool is often finished off six months
+     * later, and every month in between still reads the client as owing it.
+     *
+     * Anything else stays a deposit: a services list earns on its booking's
+     * day, and a contract whose quotation was invoiced earns on the invoice.
      */
-    public function settleReceivable(Voucher $voucher, ?int $userId = null): ?JournalEntry
+    public function takeReceipt(Voucher $voucher, ?int $userId = null): ?JournalEntry
     {
         $contract = $voucher->contract()->first();
-        $entry = $contract ? $this->standingEntry($contract)?->load('lines') : null;
 
-        if (! $entry || (int) $voucher->account_id !== $this->ledger->accountId(Ledger::UNEARNED_REVENUE)) {
+        if (! $contract || (int) $voucher->account_id !== $this->ledger->accountId(Ledger::UNEARNED_REVENUE)) {
             return null;
         }
 
+        if ($this->standingEntry($contract)) {
+            return $this->settleReceivable($contract, $voucher, $userId);
+        }
+
+        return $this->earnsOnReceipt($contract) ? $this->earn($contract, $voucher, (float) $voucher->amount, $userId) : null;
+    }
+
+    /**
+     * A receipt cancelled puts back what it moved: the revenue it earned, or
+     * the debt it paid.
+     */
+    public function releaseReceipt(Voucher $voucher, ?string $reason = null, ?int $userId = null): void
+    {
+        $this->reverseEach($this->movedBy()->where('reference_id', $voucher->id)->get(), $reason, $userId);
+    }
+
+    /**
+     * Undo the handover's revenue with a counter-entry, not by deleting it —
+     * on a cancellation, or a handover recorded by mistake.
+     *
+     * The payments that settled its receivable since owed nothing once it is
+     * gone. What the client paid is not given back on either: on a handover
+     * undone the job goes on, and on a cancelled installation the money is
+     * kept against the work already done. So every receipt is earned again on
+     * its own date, and only the balance the client will never owe is dropped.
+     */
+    public function reverseRevenue(Contract $contract, string $reason, ?int $userId = null): ?JournalEntry
+    {
+        $entry = $this->standingEntry($contract);
+
+        if (! $entry) {
+            return null;
+        }
+
+        $this->reverseEach($this->settlements($contract), $reason, $userId);
+        $reversal = $this->ledger->reverse($entry, $reason, $userId);
+
+        if ($contract->isInstallationForm() && $this->invoiceFor($contract) === null) {
+            $this->earnHeldReceipts($contract, $userId);
+        }
+
+        return $reversal;
+    }
+
+    /**
+     * Earn every receipt still sitting in deposits, each on its own date —
+     * for receipts taken before installations earned on receipt, and after a
+     * handover is undone.
+     */
+    public function earnHeldReceipts(Contract $contract, ?int $userId = null): int
+    {
+        $earned = 0;
+
+        $vouchers = Voucher::where('contract_id', $contract->id)
+            ->where('status', 'posted')
+            ->where('type', 'receipt')
+            ->where('account_id', $this->ledger->accountId(Ledger::UNEARNED_REVENUE))
+            ->orderBy('voucher_date')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($vouchers as $voucher) {
+            $held = round((float) $voucher->amount - $this->movedOff($voucher), 2);
+
+            if ($held > 0 && $this->earn($contract, $voucher, $held, $userId)) {
+                $earned++;
+            }
+        }
+
+        return $earned;
+    }
+
+    /** What the receipts have already earned of this contract. */
+    public function earnedOnReceipt(Contract $contract): float
+    {
+        return round((float) JournalLine::query()
+            ->whereIn('journal_entry_id', $this->earnings($contract)->pluck('id'))
+            ->whereHas('account', fn ($q) => $q->where('type', 'revenue'))
+            ->selectRaw('COALESCE(SUM(credit) - SUM(debit), 0) AS earned')
+            ->value('earned'), 2);
+    }
+
+    /** Is this a contract whose receipts are revenue the day they are taken? */
+    private function earnsOnReceipt(Contract $contract): bool
+    {
+        return $contract->isInstallationForm() && $this->invoiceFor($contract) === null;
+    }
+
+    private function earn(Contract $contract, Voucher $voucher, float $amount, ?int $userId): ?JournalEntry
+    {
+        $amount = round($amount, 2);
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $centre = $this->costCenterFor($contract);
+
+        return $this->ledger->post(
+            $voucher->voucher_date->toDateString(),
+            "إيراد العقد {$contract->number} بالسند {$voucher->number}",
+            [
+                ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $amount, 'cost_center_id' => $centre],
+                ['account' => $this->revenueAccountFor($contract), 'credit' => $amount, 'cost_center_id' => $centre],
+            ],
+            'contract',
+            $voucher,
+            $userId,
+        );
+    }
+
+    /**
+     * A payment after handover pays what the client owes, capped at what is
+     * still owed so a receipt entered twice cannot drive it below zero.
+     */
+    private function settleReceivable(Contract $contract, Voucher $voucher, ?int $userId): ?JournalEntry
+    {
         $receivables = $this->ledger->accountId(Ledger::RECEIVABLES);
-        $owed = round((float) $entry->lines->where('account_id', $receivables)->sum('debit')
-            - $this->settledSoFar($contract), 2);
+        $owed = round((float) $this->standingEntry($contract)->lines()->where('account_id', $receivables)->sum('debit')
+            - (float) JournalLine::whereIn('journal_entry_id', $this->settlements($contract)->pluck('id'))
+                ->where('account_id', $receivables)
+                ->sum('credit'), 2);
         $amount = round(min((float) $voucher->amount, $owed), 2);
 
         if ($amount <= 0) {
@@ -232,55 +360,51 @@ class ContractAccounting
         );
     }
 
-    /** A receipt cancelled after handover puts back the debt it paid. */
-    public function unsettleReceivable(Voucher $voucher, ?string $reason = null, ?int $userId = null): void
+    /** How much of one receipt has already been moved off deposits. */
+    private function movedOff(Voucher $voucher): float
     {
-        $this->settlements()
-            ->where('reference_id', $voucher->id)
-            ->get()
-            ->each(fn (JournalEntry $entry) => $this->ledger->reverse($entry, $reason, $userId));
-    }
-
-    /**
-     * Undo a contract's revenue with a counter-entry, not by deleting it — and
-     * the payments that settled its receivable since, which owed nothing once
-     * the revenue is gone and go back to deposits.
-     */
-    public function reverseRevenue(Contract $contract, string $reason, ?int $userId = null): ?JournalEntry
-    {
-        $entry = $this->standingEntry($contract);
-
-        if (! $entry) {
-            return null;
-        }
-
-        $this->settlements()
-            ->whereIn('reference_id', Voucher::where('contract_id', $contract->id)->select('id'))
-            ->get()
-            ->each(fn (JournalEntry $settlement) => $this->ledger->reverse($settlement, $reason, $userId));
-
-        return $this->ledger->reverse($entry, $reason, $userId);
-    }
-
-    /** What payments after handover have already paid of the receivable. */
-    private function settledSoFar(Contract $contract): float
-    {
-        $receivables = $this->ledger->accountId(Ledger::RECEIVABLES);
-
         return (float) JournalLine::query()
-            ->whereIn('journal_entry_id', $this->settlements()
-                ->whereIn('reference_id', Voucher::where('contract_id', $contract->id)->select('id'))
-                ->select('id'))
-            ->where('account_id', $receivables)
-            ->sum('credit');
+            ->whereIn('journal_entry_id', $this->movedBy()->where('reference_id', $voucher->id)->select('id'))
+            ->where('account_id', $this->ledger->accountId(Ledger::UNEARNED_REVENUE))
+            ->selectRaw('COALESCE(SUM(debit) - SUM(credit), 0) AS moved')
+            ->value('moved');
     }
 
-    /** Standing entries that moved a receipt after handover onto the receivable. */
-    private function settlements(): Builder
+    /** Standing entries that moved a receipt off deposits — earned, or paying a debt. */
+    private function movedBy(): Builder
     {
         return JournalEntry::where('source', 'contract')
             ->where('reference_type', Voucher::class)
             ->where('status', 'posted');
+    }
+
+    /** @return Collection<int, JournalEntry> */
+    private function earnings(Contract $contract)
+    {
+        return $this->movedOnContract($contract)
+            ->whereHas('lines', fn ($q) => $q->where('credit', '>', 0)->whereHas('account', fn ($a) => $a->where('type', 'revenue')))
+            ->get();
+    }
+
+    /** @return Collection<int, JournalEntry> */
+    private function settlements(Contract $contract)
+    {
+        return $this->movedOnContract($contract)
+            ->whereHas('lines', fn ($q) => $q->where('credit', '>', 0)->where('account_id', $this->ledger->accountId(Ledger::RECEIVABLES)))
+            ->get();
+    }
+
+    private function movedOnContract(Contract $contract): Builder
+    {
+        return $this->movedBy()->whereIn('reference_id', Voucher::where('contract_id', $contract->id)->select('id'));
+    }
+
+    /** @param  iterable<JournalEntry>  $entries */
+    private function reverseEach(iterable $entries, ?string $reason, ?int $userId): void
+    {
+        foreach ($entries as $entry) {
+            $this->ledger->reverse($entry, $reason, $userId);
+        }
     }
 
     /** The invoice raised off this contract's quotation, if there is one. */
@@ -301,11 +425,20 @@ class ContractAccounting
         return $this->revenueAccounts->idFor($stream);
     }
 
-    private function post(Contract $contract, string $date, ?int $userId): JournalEntry
+    /**
+     * Earn at handover what the receipts have not already earned: whatever is
+     * still held clears deposits, and the rest is what the client owes.
+     */
+    private function post(Contract $contract, string $date, ?int $userId): ?JournalEntry
     {
-        $total = round((float) $contract->totalAmount(), 2);
-        $collected = round(min($this->heldInDeposits($contract), $total), 2);
-        $outstanding = round($total - $collected, 2);
+        $remaining = round((float) $contract->totalAmount() - $this->earnedOnReceipt($contract), 2);
+
+        if ($remaining <= 0) {
+            return null;
+        }
+
+        $collected = round(min($this->heldInDeposits($contract), $remaining), 2);
+        $outstanding = round($remaining - $collected, 2);
         $centre = $this->costCenterFor($contract);
 
         return $this->ledger->post(
@@ -314,7 +447,7 @@ class ContractAccounting
             [
                 ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $collected, 'cost_center_id' => $centre],
                 ['account' => Ledger::RECEIVABLES, 'debit' => $outstanding, 'cost_center_id' => $centre],
-                ['account' => $this->revenueAccountFor($contract), 'credit' => $total, 'cost_center_id' => $centre],
+                ['account' => $this->revenueAccountFor($contract), 'credit' => $remaining, 'cost_center_id' => $centre],
             ],
             'contract',
             $contract,
@@ -323,21 +456,21 @@ class ContractAccounting
     }
 
     /**
-     * What the contract's posted receipts put in unearned revenue — what the
-     * revenue entry has to clear.
+     * What the contract's receipts still leave in unearned revenue — what the
+     * handover entry has to clear.
      *
-     * Read from the receipts rather than the paid amount: a receipt written in
-     * the vouchers screen may credit another account, and clearing money that
-     * was never put there would drive the deposits below zero.
+     * Read from the ledger rather than the paid amount: a receipt written in
+     * the vouchers screen may credit another account, and one already earned
+     * has left; clearing money that is not there drives deposits below zero.
      */
     private function heldInDeposits(Contract $contract): float
     {
-        $unearned = $this->ledger->accountId(Ledger::UNEARNED_REVENUE);
-
-        return round((float) Voucher::where('contract_id', $contract->id)
-            ->where('status', 'posted')
-            ->where('account_id', $unearned)
-            ->selectRaw("COALESCE(SUM(CASE WHEN type = 'receipt' THEN amount ELSE -amount END), 0) AS held")
+        return round((float) JournalLine::query()
+            ->where('account_id', $this->ledger->accountId(Ledger::UNEARNED_REVENUE))
+            ->whereHas('entry', fn ($q) => $q->where('status', 'posted')
+                ->where('reference_type', Voucher::class)
+                ->whereIn('reference_id', Voucher::where('contract_id', $contract->id)->select('id')))
+            ->selectRaw('COALESCE(SUM(credit) - SUM(debit), 0) AS held')
             ->value('held'), 2);
     }
 
