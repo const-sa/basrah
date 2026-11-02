@@ -10,10 +10,12 @@ use App\Models\CostCenter;
 use App\Models\Department;
 use App\Models\Item;
 use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Voucher;
 use App\Services\Accounting\ContractAccounting;
 use App\Services\Accounting\Ledger;
 use App\Support\PoolInstallationContractTemplate;
@@ -164,6 +166,27 @@ class ContractRevenueTest extends TestCase
 
         $this->assertSame(1600.0, $contract->fresh()->paidAmount());
         $this->assertSame(1600.0, $this->balanceOf(Ledger::SALES_REVENUE));
+    }
+
+    /** A fee taken before 1 November and parked in deposits is earned after all. */
+    public function test_a_maintenance_receipt_left_in_deposits_is_moved_to_revenue(): void
+    {
+        $contract = $this->maintenance(800, 800);
+        $voucher = Voucher::where('contract_id', $contract->id)->firstOrFail();
+
+        // Put it back the way the old receipt was written: onto unearned revenue.
+        $unearned = Account::where('code', Ledger::UNEARNED_REVENUE)->value('id');
+        $revenue = $voucher->account_id;
+        $voucher->update(['account_id' => $unearned]);
+        JournalLine::where('journal_entry_id', $voucher->journal_entry_id)->where('account_id', $revenue)->update(['account_id' => $unearned]);
+        $this->assertSame(800.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+
+        $migration = require database_path('migrations/2026_11_02_100002_earn_the_maintenance_receipts_left_in_deposits.php');
+        $migration->up();
+
+        $this->assertSame(800.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame($revenue, $voucher->fresh()->account_id);
     }
 
     public function test_a_maintenance_sheet_is_never_recognized_on_handover(): void

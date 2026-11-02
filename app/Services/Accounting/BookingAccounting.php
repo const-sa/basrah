@@ -6,8 +6,11 @@ use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use App\Support\Accounting\SectionShares;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * القيود التلقائية من نظام الحجوزات (§الطبقة أ - بند 4).
@@ -45,14 +48,16 @@ class BookingAccounting
         $amount = (float) $payment->amount;
         $isRefund = $payment->type === 'refund';
 
+        // The cash is the hall's; the deposit is held for the rooms let, so a
+        // men's-side booking still ahead of its date reads on «قسم الرجال».
         $lines = $isRefund
             ? [
-                ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $amount, 'cost_center_id' => $costCenter],
+                ...$this->heldLines($booking, $amount, 'debit'),
                 ['account' => $treasuryAccount, 'credit' => $amount, 'cost_center_id' => $costCenter],
             ]
             : [
                 ['account' => $treasuryAccount, 'debit' => $amount, 'cost_center_id' => $costCenter],
-                ['account' => Ledger::UNEARNED_REVENUE, 'credit' => $amount, 'cost_center_id' => $costCenter],
+                ...$this->heldLines($booking, $amount, 'credit'),
             ];
 
         $label = $isRefund ? 'استرداد' : ($payment->type === 'deposit' ? 'عربون' : 'دفعة');
@@ -149,18 +154,18 @@ class BookingAccounting
     }
 
     /**
-     * Has this booking's revenue ever been recognized? A reversed entry counts.
+     * The revenue this booking is recognized by right now — the standing entry.
      *
-     * A reversal is a decision taken — the event was cancelled, or the entry
-     * was revised — so reading only the standing entry would invite the
-     * nightly sweep to post the revenue a second time.
+     * A reversed entry does not count. Every path that reverses one either
+     * takes the booking out of play (a cancellation, a postponement — neither
+     * is swept again) or reposts at once (a revision). The one that does not
+     * is revenue posted before the event: it is reversed so the booking can
+     * earn on its date, and counting the reversal would have kept it from ever
+     * earning at all.
      */
     public function recognizedEntry(Booking $booking): ?JournalEntry
     {
-        return $this->revenueEntries($booking)
-            ->whereIn('status', JournalEntry::EFFECTIVE_STATUSES)
-            ->latest('id')
-            ->first();
+        return $this->standingEntry($booking);
     }
 
     /** The entry that still stands, the one a revision or a cancellation reverses. */
@@ -222,6 +227,15 @@ class BookingAccounting
             return null;
         }
 
+        // Revenue posted before the event — the old rule earned a booking the
+        // day it was paid in full, and a date can be moved later. It is held
+        // again until its day comes, when the sweep recognizes it.
+        if (! $this->isDelivered($booking)) {
+            $this->ledger->reverse($entry, "الحجز {$booking->reference} لم يُقدَّم بعد", $userId);
+
+            return null;
+        }
+
         $expected = (float) $booking->total_amount > 0 ? $this->revenueEntryLines($booking) : [];
 
         if ($this->signature($entry->lines->map(fn ($l) => [
@@ -258,14 +272,230 @@ class BookingAccounting
         $costCenter = $this->costCenter($booking);
 
         $total = (float) $booking->total_amount;
-        $collected = min((float) $booking->paid_amount, $total);
+        $collected = round(min((float) $booking->paid_amount, $total), 2);
         $outstanding = round($total - $collected, 2);
 
         return [
-            ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $collected, 'cost_center_id' => $costCenter],
+            ...$this->releaseLines($booking, $collected),
             ['account' => Ledger::RECEIVABLES, 'debit' => $outstanding, 'cost_center_id' => $costCenter],
             ...$this->revenueLines($booking, $total, $costCenter),
         ];
+    }
+
+    /**
+     * The unearned-revenue debit that clears what was collected, taken from
+     * the centres actually holding it.
+     *
+     * Splitting the total afresh would leave a halala on one room and owe it
+     * on the other wherever each payment was split on its own. Reading back
+     * what the payments left on each centre clears every one to zero. Only
+     * where they do not add up to what is being cleared — more was paid than
+     * the booking is worth — is the amount split by the rooms again.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function releaseLines(Booking $booking, float $collected): array
+    {
+        $held = $this->heldByCentre($booking);
+
+        if ($held === [] || min($held) < 0 || abs(array_sum($held) - $collected) > 0.005) {
+            return $this->heldLines($booking, $collected, 'debit');
+        }
+
+        $lines = [];
+
+        foreach ($held as $centre => $amount) {
+            $lines[] = ['account' => Ledger::UNEARNED_REVENUE, 'debit' => $amount, 'cost_center_id' => $centre ?: null];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * What this booking's payments hold in unearned revenue, centre by centre.
+     *
+     * @return array<int, float> centre id (0 for none) => balance held
+     */
+    private function heldByCentre(Booking $booking): array
+    {
+        $paymentIds = $booking->payments()->whereNotIn('type', BookingPayment::SECURITY_TYPES)->pluck('id');
+
+        if ($paymentIds->isEmpty()) {
+            return [];
+        }
+
+        return JournalLine::query()
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
+            ->where('journal_entries.status', 'posted')
+            ->where('journal_entries.reference_type', BookingPayment::class)
+            ->whereIn('journal_entries.reference_id', $paymentIds)
+            ->where('journal_lines.account_id', $this->ledger->accountId(Ledger::UNEARNED_REVENUE))
+            ->groupBy('journal_lines.cost_center_id')
+            ->selectRaw('journal_lines.cost_center_id AS centre, SUM(journal_lines.credit) - SUM(journal_lines.debit) AS held')
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->centre => round((float) $row->held, 2)])
+            ->filter(fn (float $held) => abs($held) >= 0.005)
+            ->all();
+    }
+
+    /**
+     * An amount on unearned revenue, spread over the centres the booking is
+     * held on: one line on the unit when it is taken whole, one per room
+     * when it is taken by the room, split as its revenue will be.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function heldLines(Booking $booking, float $amount, string $side): array
+    {
+        $lines = [];
+
+        foreach (SectionShares::split($amount, $this->centres($booking)) as $centre => $share) {
+            $lines[] = ['account' => Ledger::UNEARNED_REVENUE, $side => $share, 'cost_center_id' => $centre ?: null];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * The centres a booking's money is held and earned on, each weighted by
+     * the price its room was let at.
+     *
+     * @return array<int, float> centre id (0 for none) => weight
+     */
+    private function centres(Booking $booking): array
+    {
+        $booking->loadMissing(['unit', 'sections']);
+
+        if ($booking->scope !== 'sections' || $booking->sections->isEmpty()) {
+            return [($this->costCenter($booking) ?? 0) => 1.0];
+        }
+
+        $weights = [];
+
+        foreach ($booking->sections->values() as $section) {
+            $weights[CostCenter::forSection($section)->id] = (float) ($section->pivot->price ?? 0);
+        }
+
+        return $weights;
+    }
+
+    /**
+     * Move the deposits this booking holds onto the rooms it is let by now.
+     *
+     * A payment is held on the rooms booked the day it was taken. Change the
+     * booking from the men's side to the women's and that money would stay on
+     * «قسم الرجال» while the revenue it pays for lands on «قسم النساء» — one
+     * room holding a deposit for an event it will never host, the other
+     * clearing a deposit it never held.
+     *
+     * Only the centre moves: no amount, no account, no date. Returns the number
+     * of entries rewritten.
+     */
+    public function realignHeld(Booking $booking): int
+    {
+        $booking->unsetRelation('sections')->loadMissing(['unit', 'sections']);
+
+        $unearned = $this->ledger->accountId(Ledger::UNEARNED_REVENUE);
+        $moved = 0;
+
+        $entries = JournalEntry::query()
+            ->where('status', 'posted')
+            ->where('reference_type', BookingPayment::class)
+            ->whereIn('reference_id', $booking->payments()->whereNotIn('type', BookingPayment::SECURITY_TYPES)->select('id'))
+            ->with('lines')
+            ->get();
+
+        foreach ($entries as $entry) {
+            $lines = $entry->lines->where('account_id', $unearned);
+            $credit = round($lines->sum(fn ($l) => (float) $l->credit - (float) $l->debit), 2);
+
+            if (abs($credit) < 0.005) {
+                continue;
+            }
+
+            $expected = $this->heldLines($booking, abs($credit), $credit > 0 ? 'credit' : 'debit');
+
+            if ($this->rewrite($entry, $lines, $expected, $unearned)) {
+                $moved++;
+            }
+        }
+
+        return $moved;
+    }
+
+    /**
+     * Put the standing revenue entry's unearned debit on the centres that hold
+     * the money, in place — for entries written before deposits were held by
+     * the room. Left alone when the amounts no longer agree: that entry is
+     * stale, and reviseRevenue() is what replaces it.
+     */
+    public function realignRecognized(Booking $booking): bool
+    {
+        $entry = $this->standingEntry($booking)?->load('lines');
+
+        if (! $entry) {
+            return false;
+        }
+
+        $unearned = $this->ledger->accountId(Ledger::UNEARNED_REVENUE);
+        $lines = $entry->lines->where('account_id', $unearned);
+        $debit = round($lines->sum(fn ($l) => (float) $l->debit - (float) $l->credit), 2);
+
+        if ($debit <= 0) {
+            return false;
+        }
+
+        return $this->rewrite($entry, $lines, $this->releaseLines($booking, $debit), $unearned);
+    }
+
+    /**
+     * Replace one account's lines on an entry with the expected ones, unless
+     * they already are. Same account, same total — only the centres differ.
+     *
+     * @param  Collection<int, JournalLine>  $lines
+     * @param  list<array<string, mixed>>  $expected
+     */
+    private function rewrite(JournalEntry $entry, $lines, array $expected, int $accountId): bool
+    {
+        $current = $lines->map(fn ($l) => [
+            'account' => $accountId,
+            'debit' => (float) $l->debit,
+            'credit' => (float) $l->credit,
+            'cost_center_id' => $l->cost_center_id,
+        ])->values()->all();
+
+        if ($this->signature($current) === $this->signature($expected)) {
+            return false;
+        }
+
+        $rows = [];
+
+        foreach ($expected as $line) {
+            $debit = round((float) ($line['debit'] ?? 0), 2);
+            $credit = round((float) ($line['credit'] ?? 0), 2);
+
+            if ($debit <= 0 && $credit <= 0) {
+                continue;
+            }
+
+            $rows[] = [
+                'journal_entry_id' => $entry->id,
+                'account_id' => $accountId,
+                'cost_center_id' => $line['cost_center_id'] ?? null,
+                'debit' => $debit,
+                'credit' => $credit,
+                'description' => $lines->first()?->description,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        DB::transaction(function () use ($lines, $rows) {
+            JournalLine::whereIn('id', $lines->pluck('id'))->delete();
+            JournalLine::insert($rows);
+        });
+
+        return true;
     }
 
     /**

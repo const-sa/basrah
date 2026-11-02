@@ -386,10 +386,15 @@ class BookingService
             $this->syncSections($booking, $scope, $quote['lines']);
             $this->syncAddons($booking, $quote['lines']);
 
+            // Moved to other rooms: the deposits move with it, before the
+            // revenue entry below reads them back.
+            $fresh = $booking->fresh();
+            $this->accounting->realignHeld($fresh);
+
             // Repriced after its revenue was posted: the entry follows the new
             // total, at its own date. Repriced on a booking already served but
-            // never posted, its revenue is due now.
-            $fresh = $booking->fresh();
+            // never posted, its revenue is due now. Moved to a later date, its
+            // revenue waits for that date again.
             $this->accounting->recognizedEntry($fresh)
                 ? $this->accounting->reviseRevenue($fresh)
                 : $this->recognizeIfDelivered($fresh);
