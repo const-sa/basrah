@@ -268,17 +268,17 @@ class CostCentersController extends Controller
             // BOM so Excel opens the Arabic in the right encoding.
             fwrite($out, "\xEF\xBB\xBF");
 
-            fputcsv($out, ['التاريخ', 'القيد', 'المصدر', 'الحساب', 'البيان', 'مدين', 'دائن']);
+            fputcsv($out, ['التاريخ', 'القيد', 'المصدر', 'القسم', 'الحساب', 'البيان', 'مدين', 'دائن']);
 
             foreach ($statement['rows'] as $row) {
                 fputcsv($out, [
-                    $row['date'], $row['entry_number'], $row['source_label'],
-                    $row['account'], $row['label'],
+                    $row['date'], $row['entry_number'], $row['source_label'], $row['centre'] ?? '',
+                    $row['account'], $row['label'].($row['detail'] ? " — {$row['detail']}" : ''),
                     $row['debit'] ?: '', $row['credit'] ?: '',
                 ]);
             }
 
-            fputcsv($out, ['الإجمالي', '', '', '', '', $statement['total_debit'], $statement['total_credit']]);
+            fputcsv($out, ['الإجمالي', '', '', '', '', '', $statement['total_debit'], $statement['total_credit']]);
             fputcsv($out, ['الإيراد', $statement['revenue'], 'المصروف', $statement['expense'], 'الربح', $statement['profit']]);
 
             fclose($out);

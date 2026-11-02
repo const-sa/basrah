@@ -16,20 +16,29 @@ use Illuminate\Database\Eloquent\Builder;
 class CostCenterStatementService
 {
     /**
-     * The centre's movements over a period, effective entries only, in date order.
+     * The centre's movements over a period, effective entries only, in date
+     * order — a unit's with its rooms', each line naming the room it is on.
      *
      * @return array{
      *     rows: list<array<string, mixed>>,
+     *     has_rooms: bool,
      *     total_debit: float,
      *     total_credit: float,
      *     revenue: float,
      *     expense: float,
      *     profit: float,
+     *     deposits: float,
      * }
      */
     public function statementFor(CostCenter $center, ?string $from = null, ?string $to = null): array
     {
-        $lines = $this->linesQuery($center->id, $from, $to)
+        // A unit answers for its rooms, as it does on the list: reading the
+        // hall alone showed its expenses against none of its rooms' revenue,
+        // and the page contradicted the row that was clicked to reach it.
+        $ids = $this->reportingMap([$center->id])[$center->id];
+        $rooms = CostCenter::with('section:id,name')->whereIn('id', $ids)->whereKeyNot($center->id)->get()->keyBy('id');
+
+        $lines = $this->linesQuery($ids, $from, $to)
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->with(['account:id,code,name,type', 'entry:id,number,entry_date,description,source'])
             ->orderBy('journal_entries.entry_date')
@@ -37,22 +46,36 @@ class CostCenterStatementService
             ->select('journal_lines.*')
             ->get();
 
-        $rows = $lines->map(fn (JournalLine $line) => [
-            'date' => $line->entry?->entry_date?->toDateString(),
-            'entry_number' => $line->entry?->number,
-            'source_label' => $line->entry?->sourceLabel(),
-            'label' => $line->description ?: (string) $line->entry?->description,
-            'account' => $line->account ? $line->account->code.' — '.$line->account->name : '—',
-            'account_type' => $line->account?->type,
-            'debit' => (float) $line->debit,
-            'credit' => (float) $line->credit,
-        ])->values()->all();
+        $rows = $lines->map(function (JournalLine $line) use ($rooms) {
+            $room = $rooms->get((int) $line->cost_center_id);
+            $roomName = $room?->section?->name ?? $room?->name;
+            $entryDescription = (string) $line->entry?->description;
+
+            return [
+                'date' => $line->entry?->entry_date?->toDateString(),
+                'entry_number' => $line->entry?->number,
+                'source_label' => $line->entry?->sourceLabel(),
+                // The entry names the document — «إثبات إيراد الحجز a-12» —
+                // where a room's line alone said only «قسم الرجال».
+                'label' => $entryDescription,
+                'detail' => $line->description && $line->description !== $entryDescription && $line->description !== $roomName
+                    ? $line->description
+                    : null,
+                'centre' => $roomName,
+                'account' => $line->account ? $line->account->code.' — '.$line->account->name : '—',
+                'account_type' => $line->account?->type,
+                'debit' => (float) $line->debit,
+                'credit' => (float) $line->credit,
+            ];
+        })->values()->all();
 
         return [
             'rows' => $rows,
+            'has_rooms' => $rooms->isNotEmpty(),
             'total_debit' => round($lines->sum(fn (JournalLine $l) => (float) $l->debit), 2),
             'total_credit' => round($lines->sum(fn (JournalLine $l) => (float) $l->credit), 2),
-            ...$center->profitability($from, $to),
+            ...$this->profitabilityRolledUp([$center->id], $from, $to)[$center->id],
+            'deposits' => $this->depositsHeldRolledUp([$center->id], $to)[$center->id],
         ];
     }
 
@@ -63,7 +86,7 @@ class CostCenterStatementService
      */
     public function breakdownFor(CostCenter $center, ?string $from = null, ?string $to = null): array
     {
-        return $this->linesQuery($center->id, $from, $to)
+        return $this->linesQuery($this->reportingMap([$center->id])[$center->id], $from, $to)
             ->join('accounts', 'accounts.id', '=', 'journal_lines.account_id')
             ->whereIn('accounts.type', ['revenue', 'expense'])
             ->groupBy('accounts.id', 'accounts.code', 'accounts.name', 'accounts.type')

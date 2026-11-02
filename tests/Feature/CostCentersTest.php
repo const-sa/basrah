@@ -255,6 +255,36 @@ class CostCentersTest extends TestCase
     /**
      * One entry on the centre: revenue against cash, expense against cash.
      */
+    /**
+     * «مش موضحلي ايه الأرقام بالتفصيل»: a hall's page lists the lines behind
+     * its figures — its rooms' revenue among them, each naming its room — and
+     * reads the same totals as the row that was clicked to reach it.
+     */
+    public function test_a_units_statement_details_its_rooms_lines_and_matches_its_row(): void
+    {
+        [$unitCentre, $roomCentre] = $this->hallWithARoom();
+
+        $this->postEntry($unitCentre, revenue: 0, expense: 400);
+        $this->postEntry($roomCentre, revenue: 1000, expense: 0);
+
+        $room = $roomCentre->section?->name;
+
+        $this->actingAs($this->owner)
+            ->get("/admin/accounting/cost-centers/{$unitCentre->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('statement.revenue', 1000)
+                ->where('statement.expense', 400)
+                ->where('statement.profit', 600)
+                ->where('statement.has_rooms', true)
+                ->where('statement.rows', fn ($rows) => collect($rows)->contains(fn ($r) => $r['account_type'] === 'revenue'
+                    && (float) $r['credit'] === 1000.0
+                    && $r['centre'] === $room
+                    && $r['label'] === 'قيد اختبار مركز التكلفة'))
+                ->etc(),
+            );
+    }
+
     private function postEntry(CostCenter $centre, float $revenue, float $expense, string $status = 'posted'): void
     {
         $cash = Account::where('code', Ledger::CASH)->value('id');

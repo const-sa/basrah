@@ -160,8 +160,13 @@ const destroy = (c: Center) => {
                                     <span class="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{{ c.type_label }}</span>
                                     <div v-if="c.belongs_to" class="mt-0.5 text-[11px] text-slate-500">{{ c.belongs_to }}</div>
                                 </td>
-                                <td class="px-4 py-3 text-left font-bold text-emerald-600" dir="ltr">{{ money(c.revenue) }}</td>
-                                <td class="px-4 py-3 text-left font-bold text-red-600" dir="ltr">{{ money(c.expense) }}</td>
+                                <!-- Each figure opens the lines it is made of -->
+                                <td class="px-4 py-3 text-left font-bold text-emerald-600" dir="ltr">
+                                    <Link :href="`${statementUrl(c)}#revenue`" title="تفصيل الإيراد" class="hover:underline">{{ money(c.revenue) }}</Link>
+                                </td>
+                                <td class="px-4 py-3 text-left font-bold text-red-600" dir="ltr">
+                                    <Link :href="`${statementUrl(c)}#expense`" title="تفصيل المصروف" class="hover:underline">{{ money(c.expense) }}</Link>
+                                </td>
                                 <td class="px-4 py-3 text-left font-extrabold" :class="c.profit >= 0 ? 'text-slate-900' : 'text-red-700'" dir="ltr">{{ money(c.profit) }}</td>
                                 <td class="px-4 py-3 text-left font-bold text-amber-600" dir="ltr">{{ money(c.deposits) }}</td>
                                 <td class="px-4 py-3 text-center">
@@ -192,8 +197,12 @@ const destroy = (c: Center) => {
                                     <div class="pr-6 text-[11px] text-slate-400"><span dir="ltr">{{ child.code }}</span></div>
                                 </td>
                                 <td class="px-4 py-2.5 text-right text-[11px] text-slate-500">{{ child.type_label }}</td>
-                                <td class="px-4 py-2.5 text-left font-bold text-emerald-600" dir="ltr">{{ money(child.revenue) }}</td>
-                                <td class="px-4 py-2.5 text-left font-bold text-red-600" dir="ltr">{{ money(child.expense) }}</td>
+                                <td class="px-4 py-2.5 text-left font-bold text-emerald-600" dir="ltr">
+                                    <Link :href="`${statementUrl(child)}#revenue`" title="تفصيل الإيراد" class="hover:underline">{{ money(child.revenue) }}</Link>
+                                </td>
+                                <td class="px-4 py-2.5 text-left font-bold text-red-600" dir="ltr">
+                                    <Link :href="`${statementUrl(child)}#expense`" title="تفصيل المصروف" class="hover:underline">{{ money(child.expense) }}</Link>
+                                </td>
                                 <td class="px-4 py-2.5 text-left font-bold" :class="child.profit >= 0 ? 'text-slate-700' : 'text-red-700'" dir="ltr">{{ money(child.profit) }}</td>
                                 <td class="px-4 py-2.5 text-left font-bold text-amber-600" dir="ltr">{{ money(child.deposits) }}</td>
                                 <td class="px-4 py-2.5"></td>
