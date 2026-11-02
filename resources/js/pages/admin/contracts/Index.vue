@@ -275,10 +275,24 @@ const destroy = (c: Contract) => {
 };
 
 // Handover is what earns an installation: signing is only half the money.
+// It asks for the day the job was handed over, so a job finished last month
+// earns in that month and not the day the button was pressed.
+const today = () => new Date().toLocaleDateString('en-CA');
+const handover = ref<Contract | null>(null);
+const handoverForm = useForm({ completed_at: today() });
+
 const markCompleted = (c: Contract) => {
-    if (confirm(`تأكيد تنفيذ العقد ${c.number}؟ سيُثبت إيراده في الدفاتر.`)) {
-        router.post(`/admin/contracts/${c.id}/complete`, {}, { preserveScroll: true });
-    }
+    handoverForm.clearErrors();
+    handoverForm.completed_at = today();
+    handover.value = c;
+};
+
+const submitHandover = () => {
+    if (!handover.value) return;
+    handoverForm.post(`/admin/contracts/${handover.value.id}/complete`, {
+        preserveScroll: true,
+        onSuccess: () => (handover.value = null),
+    });
 };
 
 const undoCompleted = (c: Contract) => {
@@ -526,6 +540,38 @@ const statusClass = (s: string) =>
                         :class="['rounded-lg px-3 py-1.5 text-xs font-bold', l.active ? 'bg-blue-600 text-white' : l.url ? 'bg-white text-slate-600 ring-1 ring-slate-200' : 'text-slate-300']"
                         v-html="l.label" />
                 </div>
+            </div>
+        </div>
+
+        <div v-if="handover" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="handover = null">
+            <div class="w-full max-w-sm rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                    <h2 class="text-lg font-extrabold text-slate-900">تنفيذ العقد {{ handover.number }}</h2>
+                    <button type="button" @click="handover = null" class="text-slate-400 hover:text-slate-600"><X class="h-5 w-5" /></button>
+                </div>
+                <form @submit.prevent="submitHandover" class="space-y-3 px-6 py-4">
+                    <label class="block text-sm font-bold text-slate-700">تاريخ التنفيذ والتسليم</label>
+                    <input
+                        v-model="handoverForm.completed_at"
+                        type="date"
+                        dir="ltr"
+                        :max="today()"
+                        required
+                        class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
+                    <p v-if="handoverForm.errors.completed_at" class="text-xs font-bold text-red-600">{{ handoverForm.errors.completed_at }}</p>
+                    <p class="text-xs text-slate-500">يُثبت إيراد العقد في الدفاتر بهذا التاريخ، فاختر اليوم الذي سُلِّم فيه المسبح فعلًا.</p>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" @click="handover = null" class="rounded-xl px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">إلغاء</button>
+                        <button
+                            type="submit"
+                            :disabled="handoverForm.processing"
+                            class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                            تأكيد التنفيذ
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
 

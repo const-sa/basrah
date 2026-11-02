@@ -1156,9 +1156,18 @@ class ContractsController extends Controller
     {
         $this->authorizeContract($request, $contract, 'edit');
 
+        // A job finished last month is often marked done this month: the
+        // revenue belongs to the day it was handed over, not the day the
+        // button was pressed.
+        $data = $request->validate([
+            'completed_at' => ['nullable', 'date', 'before_or_equal:today'],
+        ], [
+            'completed_at.before_or_equal' => 'تاريخ التنفيذ لا يكون بعد اليوم.',
+        ]);
+
         $accounting = app(ContractAccounting::class);
 
-        $contract->update(['completed_at' => $contract->completed_at ?? now()]);
+        $contract->update(['completed_at' => $contract->completed_at ?? ($data['completed_at'] ?? null) ?? now()]);
 
         if ($reason = $accounting->refusal($contract->fresh())) {
             return back()->with('warning', $reason);

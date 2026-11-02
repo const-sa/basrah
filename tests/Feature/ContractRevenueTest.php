@@ -459,6 +459,32 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
     }
 
+    /** A job finished last month, marked done today, earns in last month. */
+    public function test_a_handover_earns_on_the_day_chosen_for_it(): void
+    {
+        $contract = $this->installation(12000, 4000);
+        $finished = now()->subMonth()->toDateString();
+
+        $this->actingAs($this->owner)
+            ->post("/admin/contracts/{$contract->id}/complete", ['completed_at' => $finished])
+            ->assertSessionHas('success');
+
+        $this->assertSame($finished, $contract->fresh()->completed_at->toDateString());
+        $this->assertSame($finished, app(ContractAccounting::class)->standingEntry($contract)->entry_date->toDateString());
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+    }
+
+    public function test_a_handover_cannot_be_dated_in_the_future(): void
+    {
+        $contract = $this->installation(12000, 4000);
+
+        $this->actingAs($this->owner)
+            ->post("/admin/contracts/{$contract->id}/complete", ['completed_at' => now()->addDay()->toDateString()])
+            ->assertSessionHasErrors('completed_at');
+
+        $this->assertNull($contract->fresh()->completed_at);
+    }
+
     private function accountId(string $code): int
     {
         return (int) Account::where('code', $code)->value('id');
