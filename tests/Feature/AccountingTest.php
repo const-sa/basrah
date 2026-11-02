@@ -223,6 +223,26 @@ class AccountingTest extends TestCase
         $this->assertSame(0, JournalEntry::where('reference_type', Booking::class)->where('reference_id', $booking->id)->count());
     }
 
+    /**
+     * A booking postponed by moving its date keeps its money where it was:
+     * each payment stays earned on the day it was received.
+     */
+    public function test_moving_a_bookings_date_leaves_its_payments_on_their_own_dates(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650, 'paid_on' => '2026-08-01']);
+        $entries = JournalEntry::count();
+
+        $service->update($booking->fresh(), ['booking_date' => '2026-12-20']);
+
+        $this->assertSame('2026-12-20', $booking->fresh()->booking_date->toDateString());
+        $this->assertSame($entries, JournalEntry::count(), 'nothing is reposted');
+        $this->assertSame(650.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame('2026-08-01', JournalEntry::where('source', 'booking')->where('reference_type', BookingPayment::class)->sole()->entry_date->toDateString());
+    }
+
     /** Served with part unpaid: the day earns the rest, owed by the client. */
     public function test_the_day_served_earns_only_what_was_not_paid(): void
     {
