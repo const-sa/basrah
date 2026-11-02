@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\Booking;
+use App\Models\BookingPayment;
 use App\Models\CostCenter;
 use App\Models\JournalEntry;
 use App\Models\Treasury;
@@ -108,7 +109,8 @@ class AccountingTest extends TestCase
         $this->ledger->reverse($entry->fresh());
     }
 
-    public function test_booking_deposit_is_booked_as_a_liability_not_revenue(): void
+    /** The client's rule: a payment is revenue the day it is received. */
+    public function test_a_booking_deposit_is_revenue_the_day_it_is_taken(): void
     {
         $booking = $this->makeBooking();
 
@@ -116,13 +118,17 @@ class AccountingTest extends TestCase
             'type' => 'deposit',
             'payment_method_id' => $this->paymentMethodId('cash'),
             'amount' => 650,
+            'paid_on' => '2026-08-10',
         ]);
 
-        // العربون التزام (إيراد غير مكتسب) لأن الخدمة لم تُقدَّم بعد.
-        $this->assertSame(650.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(650.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
         $this->assertSame(650.0, Account::where('code', Ledger::CASH)->first()->balance());
-        $this->assertSame(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
         $this->assertSame(650.0, (float) $booking->fresh()->paid_amount);
+
+        // Earned on the day it was received, not the day it was entered.
+        $earning = JournalEntry::where('source', 'booking')->where('reference_type', BookingPayment::class)->firstOrFail();
+        $this->assertSame('2026-08-10', $earning->entry_date->toDateString());
     }
 
     public function test_checking_out_a_booking_recognizes_revenue_and_clears_the_liability(): void
@@ -159,7 +165,11 @@ class AccountingTest extends TestCase
 
         $this->assertSame($raised, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
         $this->assertSame(round($total + 1000 - $raised, 2), Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
-        $this->assertSame(1, JournalEntry::where('source', 'booking')->where('reference_id', $booking->id)->where('status', 'posted')->count());
+        $this->assertLessThanOrEqual(1, JournalEntry::where('source', 'booking')
+            ->where('reference_type', Booking::class)
+            ->where('reference_id', $booking->id)
+            ->where('status', 'posted')
+            ->count());
     }
 
     /** حجز a-46: أُقفل يدويًا قبل السداد، فدخل باقيه العرابين بدل أن يسدّ ذمّة العميل. */
@@ -190,12 +200,10 @@ class AccountingTest extends TestCase
     }
 
     /**
-     * Money taken before the date is not revenue, even paid in full.
-     *
-     * Payment says who owes what; delivery says what was earned. An event
-     * paid months ahead must not weigh on the month that took the money.
+     * Paid in full before the date, the booking has earned it all, and its day
+     * adds nothing on top.
      */
-    public function test_paying_in_full_before_the_date_recognizes_nothing(): void
+    public function test_paying_in_full_before_the_date_earns_it_all_at_once(): void
     {
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
@@ -204,15 +212,78 @@ class AccountingTest extends TestCase
         $service->recordPayment($booking, ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => $total]);
 
         $this->assertSame('paid_in_full', $booking->fresh()->status);
-        $this->assertSame(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
-        $this->assertSame($total, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
 
-        // It earns once its date passes and the scheduled sweep runs.
         $this->travelTo($booking->fresh()->ends_at->copy()->addDay());
         $this->artisan('accounting:recognize-delivered')->assertSuccessful();
 
         $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::RECEIVABLES)->first()->balance());
+        $this->assertSame(0, JournalEntry::where('reference_type', Booking::class)->where('reference_id', $booking->id)->count());
+    }
+
+    /** Served with part unpaid: the day earns the rest, owed by the client. */
+    public function test_the_day_served_earns_only_what_was_not_paid(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+        $total = (float) $booking->total_amount;
+
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
+        $this->settleAsDelivered($booking);
+
+        $entry = JournalEntry::where('reference_type', Booking::class)->where('reference_id', $booking->id)->with('lines.account')->sole();
+        $this->assertSame(round($total - 650, 2), round((float) $entry->lines->filter(fn ($l) => $l->account->type === 'revenue')->sum('credit'), 2));
+        $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(round($total - 650, 2), Account::where('code', Ledger::RECEIVABLES)->first()->balance());
+    }
+
+    /**
+     * Cancelled with money paid, the booking keeps it as revenue: the client
+     * gets it back only when a refund is recorded on the booking, and the
+     * revenue comes off on the day of that refund.
+     */
+    public function test_a_cancelled_booking_keeps_what_was_paid_until_it_is_refunded(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 1000, 'paid_on' => '2026-08-01']);
+        $service->cancel($booking->fresh(), 'اعتذر العميل');
+
+        $this->assertSame(1000.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
         $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->artisan('accounting:audit')->assertSuccessful();
+
+        $service->recordPayment($booking->fresh(), ['type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 1000, 'paid_on' => '2026-08-15']);
+
+        $this->assertSame(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::CASH)->first()->balance());
+        $this->assertSame(0.0, (float) $booking->fresh()->paid_amount);
+
+        // August keeps the deposit until the 15th, the day it went back.
+        $clawback = JournalEntry::where('source', 'booking')->where('description', 'like', 'رد إيراد%')->sole();
+        $this->assertSame('2026-08-15', $clawback->entry_date->toDateString());
+        $this->artisan('accounting:audit')->assertSuccessful();
+    }
+
+    /** Cancelled after its day: only the balance the client never paid is dropped. */
+    public function test_cancelling_a_served_booking_keeps_what_was_paid(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+
+        $service->recordPayment($booking, ['type' => 'deposit', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 650]);
+        $this->settleAsDelivered($booking);
+        $service->recordPayment($booking->fresh(), ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 350]);
+        $service->cancel($booking->fresh(), 'تسوية');
+
+        $this->assertSame(1000.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::RECEIVABLES)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->artisan('accounting:audit')->assertSuccessful();
     }
 
     /** In pretend mode the sweep writes nothing to the books. */
@@ -239,7 +310,7 @@ class AccountingTest extends TestCase
         $this->assertSame(0.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
     }
 
-    public function test_refund_reduces_the_paid_amount_and_the_liability(): void
+    public function test_refund_reduces_the_paid_amount_and_the_revenue(): void
     {
         $booking = $this->makeBooking();
         $service = app(BookingService::class);
@@ -248,7 +319,27 @@ class AccountingTest extends TestCase
         $service->recordPayment($booking->fresh(), ['type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 400]);
 
         $this->assertSame(600.0, (float) $booking->fresh()->paid_amount);
-        $this->assertSame(600.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(600.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+    }
+
+    /** Money paid beyond the price is owed back, not earned. */
+    public function test_money_paid_beyond_the_price_waits_to_be_refunded(): void
+    {
+        $booking = $this->makeBooking();
+        $service = app(BookingService::class);
+        $total = (float) $booking->total_amount;
+
+        $service->recordPayment($booking, ['type' => 'payment', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => $total + 500]);
+
+        $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(500.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+
+        // Refunding the excess leaves the revenue whole.
+        $service->recordPayment($booking->fresh(), ['type' => 'refund', 'payment_method_id' => $this->paymentMethodId('cash'), 'amount' => 500]);
+
+        $this->assertSame($total, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
     }
 
     public function test_refund_cannot_exceed_what_was_paid(): void

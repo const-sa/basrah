@@ -13,9 +13,9 @@ use App\Models\Role;
 use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\Accounting\Ledger;
 use App\Services\BookingService;
 use App\Services\ContractPdf;
-use App\Services\Accounting\Ledger;
 use App\Services\ContractService;
 use App\Support\HallRentalContractTemplate;
 use Database\Seeders\AccountsSeeder;
@@ -273,17 +273,14 @@ class HallRentalContractTest extends TestCase
         $this->assertEqualsWithDelta(500, (float) $payment->amount, 0.01);
         $this->assertEqualsWithDelta(500, (float) $booking->fresh()->paid_amount, 0.01);
 
-        // العربون التزام لا إيراد: يُرحَّل إلى الإيراد غير المكتسب حتى الإقفال.
+        // The cash entry names it a deposit; a second entry earns it the same day.
         $entry = JournalEntry::where('reference_type', BookingPayment::class)
             ->where('reference_id', $payment->id)
+            ->where('source', 'payment')
             ->firstOrFail();
 
         $this->assertStringContainsString('عربون', $entry->description);
-        $this->assertEqualsWithDelta(
-            500,
-            (float) Account::where('code', Ledger::UNEARNED_REVENUE)->firstOrFail()->balance(),
-            0.01,
-            'the deposit is credited to unearned revenue, not to booking revenue',
-        );
+        $this->assertEqualsWithDelta(500, (float) Account::where('code', Ledger::BOOKING_REVENUE)->firstOrFail()->balance(), 0.01);
+        $this->assertEqualsWithDelta(0, (float) Account::where('code', Ledger::UNEARNED_REVENUE)->firstOrFail()->balance(), 0.01);
     }
 }

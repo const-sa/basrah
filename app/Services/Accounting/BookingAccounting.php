@@ -2,6 +2,7 @@
 
 namespace App\Services\Accounting;
 
+use App\Models\Account;
 use App\Models\Booking;
 use App\Models\BookingPayment;
 use App\Models\CostCenter;
@@ -15,11 +16,17 @@ use Illuminate\Support\Facades\DB;
 /**
  * القيود التلقائية من نظام الحجوزات (§الطبقة أ - بند 4).
  *
- * المعالجة المحاسبية المتبعة:
- *  - العربون عند استلامه = التزام (إيراد غير مكتسب) لا إيراد،
- *    لأن الخدمة لم تُقدَّم بعد. إثباته إيرادًا فورًا يضخّم دخل الشهر
- *    ويُنقص دخل شهر التنفيذ.
- *  - عند اكتمال الحجز يُعترف بالإيراد ويُقفل الالتزام.
+ * What earns, and when — the client's rule for halls and chalets:
+ *  - Every payment is revenue the day it is taken. Its cash entry still
+ *    passes through «عرابين مقدمًا», and a second entry moves it to revenue
+ *    on the same date, so the receipt and the earning stay two records.
+ *  - A refund takes it back out of revenue, on the day it is paid back.
+ *  - A cancelled booking keeps what was paid: it goes back to the client
+ *    only when a refund is recorded on it.
+ *  - On the day served, whatever was not paid is earned as a receivable,
+ *    and a payment after that settles it on its own date.
+ *  - Money paid beyond the booking's price is not earned: it waits in
+ *    deposits as owed back, until a refund or a higher price takes it.
  */
 class BookingAccounting
 {
@@ -73,7 +80,246 @@ class BookingAccounting
 
         $this->receipts->mirror($payment, $booking, $entry, $costCenter, $userId);
 
+        $this->takePayment($payment, $booking->fresh(), $userId);
+
         return $entry;
+    }
+
+    /**
+     * Move a payment just taken out of «عرابين مقدمًا».
+     *
+     * Before the booking is served it is earned on its date. After, the booking
+     * is earned in full already, so a payment pays what the client owes and a
+     * refund comes out of revenue once the money held is used up.
+     */
+    private function takePayment(BookingPayment $payment, Booking $booking, ?int $userId): void
+    {
+        $standing = $this->standingEntry($booking);
+
+        if (! $standing) {
+            $this->syncEarned($booking, $userId);
+
+            return;
+        }
+
+        if ($payment->type !== 'refund') {
+            $this->settleReceivable($booking, $payment, $standing, $userId);
+
+            return;
+        }
+
+        $short = round(-$this->heldNow($booking, $standing), 2);
+
+        if ($short > 0) {
+            $this->earn($booking, $payment, -$short, $userId);
+        }
+    }
+
+    /**
+     * Bring what the payments have earned in line with what they should have,
+     * payment by payment, each on its own date. Idempotent.
+     *
+     * Replayed in date order: after each payment the booking has earned what
+     * was paid so far — capped at its price while it is live, since money paid
+     * beyond it is owed back; uncapped once cancelled, since all of it is
+     * kept. Whatever a payment's entries do not already earn is posted on it.
+     * Only for a booking without a standing revenue entry: after that the
+     * payments settle what is owed instead of earning.
+     */
+    public function syncEarned(Booking $booking, ?int $userId = null): int
+    {
+        $payments = $booking->payments()
+            ->whereNotIn('type', BookingPayment::SECURITY_TYPES)
+            ->orderBy('paid_on')
+            ->orderBy('id')
+            ->get();
+
+        if ($payments->isEmpty()) {
+            return 0;
+        }
+
+        $cap = in_array($booking->status, Booking::BLOCKING_STATUSES, true)
+            ? max(0, (float) $booking->total_amount)
+            : INF;
+        $have = $this->earnedByPayment($payments->pluck('id')->all());
+
+        $paid = 0.0;
+        $target = 0.0;
+        $posted = 0;
+
+        foreach ($payments as $payment) {
+            $paid += $payment->type === 'refund' ? -(float) $payment->amount : (float) $payment->amount;
+            $next = max(0, min($paid, $cap));
+            $owed = round($next - $target - ($have[$payment->id] ?? 0), 2);
+            $target = $next;
+
+            if (abs($owed) >= 0.005 && $this->earn($booking, $payment, $owed, $userId)) {
+                $posted++;
+            }
+        }
+
+        return $posted;
+    }
+
+    /**
+     * Earn part of a payment — or, given a negative amount, put it back in
+     * deposits — on the day the payment was taken, on the rooms it pays for.
+     */
+    private function earn(Booking $booking, BookingPayment $payment, float $amount, ?int $userId): ?JournalEntry
+    {
+        $amount = round($amount, 2);
+
+        if (abs($amount) < 0.005) {
+            return null;
+        }
+
+        $booking->loadMissing('unit');
+        $in = $amount > 0;
+        $abs = abs($amount);
+        $revenue = $this->revenueLines($booking, $abs, $this->costCenter($booking));
+
+        return $this->ledger->post(
+            $payment->paid_on->toDateString(),
+            $in ? "إيراد الحجز {$booking->reference}" : "رد إيراد الحجز {$booking->reference} بالاسترداد",
+            $in
+                ? [...$this->heldLines($booking, $abs, 'debit'), ...$revenue]
+                : [...$this->flip($revenue), ...$this->heldLines($booking, $abs, 'credit')],
+            'booking',
+            $payment,
+            $userId,
+        );
+    }
+
+    /**
+     * A payment after the booking was served pays what the client owes,
+     * capped at what is still owed so a payment entered twice cannot drive it
+     * below zero. Beyond that it is more than the price, and stays held.
+     */
+    private function settleReceivable(Booking $booking, BookingPayment $payment, JournalEntry $standing, ?int $userId): ?JournalEntry
+    {
+        $receivables = $this->ledger->accountId(Ledger::RECEIVABLES);
+        $owed = round((float) $standing->lines()->where('account_id', $receivables)->sum('debit') - $this->settled($booking), 2);
+        $amount = round(min((float) $payment->amount, $owed), 2);
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        return $this->ledger->post(
+            $payment->paid_on->toDateString(),
+            "سداد مستحق الحجز {$booking->reference}",
+            [
+                ...$this->heldLines($booking, $amount, 'debit'),
+                ['account' => Ledger::RECEIVABLES, 'credit' => $amount, 'cost_center_id' => $this->costCenter($booking)],
+            ],
+            'booking',
+            $payment,
+            $userId,
+        );
+    }
+
+    /** A payment's receipt cancelled takes back what the payment moved. */
+    public function releasePayment(BookingPayment $payment, ?string $reason = null, ?int $userId = null): void
+    {
+        $this->movedBy()->where('reference_id', $payment->id)->get()
+            ->each(fn (JournalEntry $entry) => $this->ledger->reverse($entry, $reason, $userId));
+    }
+
+    /**
+     * What the payments have earned on their own, payment by payment.
+     *
+     * @param  list<int>  $paymentIds
+     * @return array<int, float>
+     */
+    private function earnedByPayment(array $paymentIds): array
+    {
+        if ($paymentIds === []) {
+            return [];
+        }
+
+        return JournalLine::query()
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
+            ->join('accounts', 'accounts.id', '=', 'journal_lines.account_id')
+            ->where('journal_entries.status', 'posted')
+            ->where('journal_entries.source', 'booking')
+            ->where('journal_entries.reference_type', BookingPayment::class)
+            ->whereIn('journal_entries.reference_id', $paymentIds)
+            ->where('accounts.type', 'revenue')
+            ->groupBy('journal_entries.reference_id')
+            ->selectRaw('journal_entries.reference_id AS payment, SUM(journal_lines.credit) - SUM(journal_lines.debit) AS earned')
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->payment => round((float) $row->earned, 2)])
+            ->all();
+    }
+
+    /** What this booking's payments have earned between them. */
+    public function earnedOnPayments(Booking $booking): float
+    {
+        return round(array_sum($this->earnedByPayment($this->moneyPaymentIds($booking))), 2);
+    }
+
+    /** What the day it is served still has to earn. */
+    public function leftToEarn(Booking $booking): float
+    {
+        return round(max(0, (float) $booking->total_amount - $this->earnedOnPayments($booking)), 2);
+    }
+
+    /** What payments after the day served have paid of its receivable. */
+    private function settled(Booking $booking): float
+    {
+        return round((float) JournalLine::query()
+            ->whereIn('journal_entry_id', $this->settlements($booking)->pluck('id'))
+            ->where('account_id', $this->ledger->accountId(Ledger::RECEIVABLES))
+            ->selectRaw('COALESCE(SUM(credit) - SUM(debit), 0) AS settled')
+            ->value('settled'), 2);
+    }
+
+    /** @return Collection<int, JournalEntry> */
+    private function settlements(Booking $booking)
+    {
+        return $this->movedBy()
+            ->whereIn('reference_id', $this->moneyPaymentIds($booking))
+            ->whereHas('lines', fn ($q) => $q->where('credit', '>', 0)->where('account_id', $this->ledger->accountId(Ledger::RECEIVABLES)))
+            ->get();
+    }
+
+    /** Standing entries that moved a payment off deposits — earned, or paying a debt. */
+    private function movedBy(): Builder
+    {
+        return JournalEntry::where('source', 'booking')
+            ->where('reference_type', BookingPayment::class)
+            ->where('status', 'posted');
+    }
+
+    /** @return list<int> */
+    private function moneyPaymentIds(Booking $booking): array
+    {
+        return $booking->payments()->whereNotIn('type', BookingPayment::SECURITY_TYPES)->pluck('id')->all();
+    }
+
+    /** What actually sits in deposits for this booking, after its revenue entry. */
+    private function heldNow(Booking $booking, JournalEntry $standing): float
+    {
+        $lines = $standing->lines()->where('account_id', $this->ledger->accountId(Ledger::UNEARNED_REVENUE))->get();
+        $released = $lines->sum(fn ($l) => (float) $l->debit - (float) $l->credit);
+
+        return round(array_sum($this->heldByCentre($booking)) - $released, 2);
+    }
+
+    /**
+     * Revenue lines as debits — the same rooms, the other side.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function flip(array $lines): array
+    {
+        return array_map(function (array $line) {
+            $line['debit'] = $line['credit'] ?? 0;
+            unset($line['credit']);
+
+            return $line;
+        }, $lines);
     }
 
     /**
@@ -130,9 +376,9 @@ class BookingAccounting
     }
 
     /**
-     * Revenue recognized when the service is delivered.
-     * Dr unearned revenue (what was collected) + receivables (the rest),
-     * Cr booking revenue (the total).
+     * Revenue recognized when the service is delivered — what the payments
+     * have not already earned. Dr unearned revenue (anything still held) +
+     * receivables (the rest), Cr booking revenue.
      *
      * Dated on the day it was served, not today: an event held last month
      * earns in that month however late the entry is written.
@@ -186,16 +432,38 @@ class BookingAccounting
     }
 
     /**
-     * Undo a cancelled booking's revenue with a counter-entry, not by deleting it.
+     * Undo a cancelled or postponed booking's revenue with a counter-entry,
+     * not by deleting it.
      *
-     * Without this the hall keeps earning an event it never held, and the
-     * client keeps owing a balance they no longer owe.
+     * Only what the client was still to pay goes: the balance they will never
+     * owe. What they paid is kept — the client's rule — and goes back to them
+     * only by a refund recorded on the booking. So the payments that settled
+     * the receivable earn again on their own dates, and anything still held
+     * is earned with them.
      */
     public function reverseRevenue(Booking $booking, string $reason, ?int $userId = null): ?JournalEntry
     {
+        $reversal = $this->unwind($booking, $reason, $userId);
+
+        $this->syncEarned($booking, $userId);
+
+        return $reversal;
+    }
+
+    /** Take the day-served entry off, with the payments that settled it. */
+    private function unwind(Booking $booking, string $reason, ?int $userId): ?JournalEntry
+    {
         $entry = $this->standingEntry($booking);
 
-        return $entry ? $this->ledger->reverse($entry, $reason, $userId) : null;
+        if (! $entry) {
+            return null;
+        }
+
+        foreach ($this->settlements($booking) as $settlement) {
+            $this->ledger->reverse($settlement, $reason, $userId);
+        }
+
+        return $this->ledger->reverse($entry, $reason, $userId);
     }
 
     /** Has the service been delivered? */
@@ -227,16 +495,28 @@ class BookingAccounting
             return null;
         }
 
-        // Revenue posted before the event — the old rule earned a booking the
-        // day it was paid in full, and a date can be moved later. It is held
-        // again until its day comes, when the sweep recognizes it.
+        // Moved to a later date: nothing is owed until its day comes, and the
+        // payments earn on their own dates meanwhile.
         if (! $this->isDelivered($booking)) {
-            $this->ledger->reverse($entry, "الحجز {$booking->reference} لم يُقدَّم بعد", $userId);
+            $this->unwind($booking, "الحجز {$booking->reference} لم يُقدَّم بعد", $userId);
+            $this->syncEarned($booking, $userId);
 
             return null;
         }
 
+        $date = $entry->entry_date->toDateString();
         $expected = (float) $booking->total_amount > 0 ? $this->revenueEntryLines($booking) : [];
+        $owes = round(collect($expected)->where('account', Ledger::RECEIVABLES)->sum('debit'), 2);
+
+        // Repriced below what has been paid off it since: the receivable those
+        // payments settled is gone, so they earn on their own dates and the
+        // day served earns the rest.
+        if ($this->settled($booking) > $owes + 0.005) {
+            $this->unwind($booking, "تعديل الحجز {$booking->reference}", $userId);
+            $this->syncEarned($booking, $userId);
+
+            return $this->postRevenue($booking, $date, $userId);
+        }
 
         if ($this->signature($entry->lines->map(fn ($l) => [
             'account' => $l->account_id,
@@ -247,18 +527,23 @@ class BookingAccounting
             return null;
         }
 
-        $date = $entry->entry_date->toDateString();
         $this->ledger->reverse($entry, "تعديل الحجز {$booking->reference}", $userId);
 
         return $expected ? $this->postRevenue($booking, $date, $userId) : null;
     }
 
-    private function postRevenue(Booking $booking, string $date, ?int $userId): JournalEntry
+    private function postRevenue(Booking $booking, string $date, ?int $userId): ?JournalEntry
     {
+        $lines = $this->revenueEntryLines($booking);
+
+        if ($lines === []) {
+            return null;
+        }
+
         return $this->ledger->post(
             $date,
             "إثبات إيراد الحجز {$booking->reference}",
-            $this->revenueEntryLines($booking),
+            $lines,
             'booking',
             $booking,
             $userId,
@@ -271,14 +556,22 @@ class BookingAccounting
         $booking->loadMissing('unit');
         $costCenter = $this->costCenter($booking);
 
-        $total = (float) $booking->total_amount;
-        $collected = round(min((float) $booking->paid_amount, $total), 2);
-        $outstanding = round($total - $collected, 2);
+        $remaining = $this->leftToEarn($booking);
+
+        if ($remaining <= 0) {
+            return [];
+        }
+
+        // Normally nothing is still held — the payments earned as they came —
+        // but a booking from before that rule, or one repriced upward over
+        // money paid beyond its old price, still has some to clear.
+        $collected = round(min(max(0, array_sum($this->heldByCentre($booking))), $remaining), 2);
+        $outstanding = round($remaining - $collected, 2);
 
         return [
             ...$this->releaseLines($booking, $collected),
             ['account' => Ledger::RECEIVABLES, 'debit' => $outstanding, 'cost_center_id' => $costCenter],
-            ...$this->revenueLines($booking, $total, $costCenter),
+            ...$this->revenueLines($booking, $remaining, $costCenter),
         ];
     }
 
@@ -414,9 +707,40 @@ class BookingAccounting
             }
 
             $expected = $this->heldLines($booking, abs($credit), $credit > 0 ? 'credit' : 'debit');
+            $rewritten = $this->rewrite($entry, $lines, $expected, $unearned);
 
-            if ($this->rewrite($entry, $lines, $expected, $unearned)) {
+            // What the payment earned moves with it, or the old room keeps
+            // revenue for a night it no longer lets.
+            if ($entry->source === 'booking') {
+                $rewritten = $this->realignEarned($booking, $entry) || $rewritten;
+            }
+
+            if ($rewritten) {
                 $moved++;
+            }
+        }
+
+        return $moved;
+    }
+
+    /** Put a payment's earned revenue on the rooms the booking lets now. */
+    private function realignEarned(Booking $booking, JournalEntry $entry): bool
+    {
+        $moved = false;
+        $accounts = Account::whereIn('id', $entry->lines->pluck('account_id'))->where('type', 'revenue')->pluck('id');
+
+        foreach ($accounts as $account) {
+            $lines = $entry->lines->where('account_id', $account);
+            $credit = round($lines->sum(fn ($l) => (float) $l->credit - (float) $l->debit), 2);
+
+            if (abs($credit) < 0.005) {
+                continue;
+            }
+
+            $expected = $this->revenueLines($booking, abs($credit), $this->costCenter($booking), (int) $account);
+
+            if ($this->rewrite($entry, $lines, $credit > 0 ? $expected : $this->flip($expected), (int) $account)) {
+                $moved = true;
             }
         }
 

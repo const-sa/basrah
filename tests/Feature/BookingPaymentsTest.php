@@ -70,7 +70,9 @@ class BookingPaymentsTest extends TestCase
 
         $this->assertSame(650.0, (float) $this->booking->fresh()->paid_amount);
         $this->assertSame(650.0, Account::where('code', Ledger::CASH)->first()->balance());
-        $this->assertSame(650.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        // Revenue the day it is received, not held until the booking's date.
+        $this->assertSame(650.0, Account::where('code', Ledger::BOOKING_REVENUE)->first()->balance());
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
     }
 
     public function test_each_payment_has_its_own_bond_with_its_own_amount(): void

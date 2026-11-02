@@ -135,6 +135,12 @@ class VoucherService
                 $this->contracts()->releaseReceipt($voucher, $reason, $userId);
             }
 
+            // A booking payment's receipt: the revenue it earned, or the debt
+            // it paid, goes with the cash, or deposits would read below zero.
+            if ($wasPosted && $voucher->mirrorsBookingPayment() && $voucher->bookingPayment) {
+                app(BookingAccounting::class)->releasePayment($voucher->bookingPayment, $reason, $userId);
+            }
+
             $voucher->update(['status' => 'cancelled']);
 
             return $voucher->fresh();

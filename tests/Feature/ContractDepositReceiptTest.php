@@ -235,6 +235,10 @@ class ContractDepositReceiptTest extends TestCase
         $this->assertSame(2000.0, $contract->remainingAmount());
         $this->assertSame("عربون عقد {$contract->number}", Voucher::where('contract_id', $contract->id)->value('description'));
 
+        // Revenue the day it is received, like a booking's deposit.
+        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+        $this->assertSame(1000.0, (float) Account::where('type', 'revenue')->get()->sum(fn (Account $a) => $a->balance()));
+
         // ...and the sheet prints the receipt book's figures, not the frozen «—».
         $this->actingAs($this->owner)->get("/admin/contracts/{$contract->id}")
             ->assertInertia(fn ($page) => $page

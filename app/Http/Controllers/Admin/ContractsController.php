@@ -1136,8 +1136,8 @@ class ContractsController extends Controller
             app(ContractAccounting::class)->bindCostCenter($contract->fresh());
         }
 
-        // A cancelled contract earns nothing — its entry is reversed, and
-        // what was collected on it stays as a liability to be refunded.
+        // A cancelled contract drops what the client still owed; what was
+        // collected on it stays earned.
         if ($data['status'] === 'cancelled') {
             app(ContractAccounting::class)->reverseRevenue($contract->fresh(), "إلغاء العقد {$contract->number}", $request->user()?->id);
         }

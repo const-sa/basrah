@@ -22,12 +22,11 @@ use Illuminate\Support\Collection;
  * beside them read in full. That is the whole of «العقود وسنداتها مش بتظهر».
  *
  * What earns, and when, follows the paper it is written on:
- *  - تركيب: each receipt as it is taken, since every payment funds the stage
- *    of work done — the client's choice — and the rest on handover. A job
- *    cancelled midway keeps what was paid against the work already done.
+ *  - تركيب، خدمات القاعات، تأجير شاليه بلا حجز: each receipt as it is taken —
+ *    the client's choice — and the rest on handover or the booking's day. A
+ *    contract cancelled midway keeps what was paid.
  *  - صيانة شهرية: each receipt is that month's fee, so it credits revenue
  *    as it is taken — ContractReceipts does that, not this class.
- *  - خدمات القاعات: delivered the day its booking runs.
  */
 class ContractAccounting
 {
@@ -206,8 +205,9 @@ class ContractAccounting
      * what the client owes instead. A pool is often finished off six months
      * later, and every month in between still reads the client as owing it.
      *
-     * Anything else stays a deposit: a services list earns on its booking's
-     * day, and a contract whose quotation was invoiced earns on the invoice.
+     * A services list and a chalet let without a booking earn the same way.
+     * Only a contract whose quotation was invoiced keeps its receipts as
+     * deposits: it earns on the invoice.
      */
     public function takeReceipt(Voucher $voucher, ?int $userId = null): ?JournalEntry
     {
@@ -254,7 +254,7 @@ class ContractAccounting
         $this->reverseEach($this->settlements($contract), $reason, $userId);
         $reversal = $this->ledger->reverse($entry, $reason, $userId);
 
-        if ($contract->isInstallationForm() && $this->invoiceFor($contract) === null) {
+        if ($this->earnsOnReceipt($contract)) {
             $this->earnHeldReceipts($contract, $userId);
         }
 
@@ -299,10 +299,19 @@ class ContractAccounting
             ->value('earned'), 2);
     }
 
-    /** Is this a contract whose receipts are revenue the day they are taken? */
-    private function earnsOnReceipt(Contract $contract): bool
+    /**
+     * Is this a contract whose receipts are revenue the day they are taken?
+     *
+     * Every contract that keeps its own receipts: a pool installation, a hall's
+     * services list, a chalet let without a booking — the client's rule for
+     * the pools and the venues alike. Monthly maintenance credits revenue on
+     * the receipt itself, and an invoiced quotation earns on its invoice.
+     */
+    public function earnsOnReceipt(Contract $contract): bool
     {
-        return $contract->isInstallationForm() && $this->invoiceFor($contract) === null;
+        return $contract->takesReceipts()
+            && ! $contract->isMaintenanceForm()
+            && $this->invoiceFor($contract) === null;
     }
 
     private function earn(Contract $contract, Voucher $voucher, float $amount, ?int $userId): ?JournalEntry

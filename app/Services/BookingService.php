@@ -91,18 +91,17 @@ class BookingService
             ]);
 
             $booking->recalculatePaidAmount();
+
+            // Earned on its date, or paying what is owed after the day served —
+            // the accounting decides which as it posts.
             $this->accounting->recordPayment($payment, $userId);
 
-            // Money taken on a booking already recognized settles its
-            // receivable rather than sitting in unearned revenue it no
-            // longer has. Taken after the event, it is recognized at once —
-            // the nightly sweep would otherwise leave it a day out.
+            // Taken on a booking served but not yet recognized, the rest of it
+            // is due now — the nightly sweep would leave it a day out.
             $fresh = $booking->fresh();
 
-            if (! $payment->isSecurity()) {
-                $this->accounting->recognizedEntry($fresh)
-                    ? $this->accounting->reviseRevenue($fresh, $userId)
-                    : $this->recognizeIfDelivered($fresh, $userId);
+            if (! $payment->isSecurity() && ! $this->accounting->recognizedEntry($fresh)) {
+                $this->recognizeIfDelivered($fresh, $userId);
             }
 
             $this->closeIfCovered($booking->fresh());
@@ -117,8 +116,8 @@ class BookingService
      * A status, nothing more. It used to be the moment revenue was posted,
      * which made a wedding that was held but not fully paid earn nothing at
      * all: the cash sat in unearned revenue for good, and the hall read a
-     * loss for a month it had worked. Payment says who owes what; delivery
-     * says what was earned, and only delivery posts.
+     * loss for a month it had worked. Each payment earns as it is taken, and
+     * the day served earns the rest; this status posts nothing.
      */
     private function closeIfCovered(Booking $booking): void
     {
@@ -136,11 +135,11 @@ class BookingService
     }
 
     /**
-     * Recognize a booking that has been served, and nothing before it.
+     * Recognize what a served booking's payments have not earned, and nothing
+     * before its date.
      *
-     * A deposit taken before the date is a liability, not income — the service
-     * is not given yet. Once the date passes it is earned, and whatever is
-     * still owed becomes a receivable.
+     * The payments earned as they were taken. Once the date passes the rest of
+     * the price is earned too, and whatever is still owed becomes a receivable.
      */
     public function recognizeIfDelivered(Booking $booking, ?int $userId = null): ?JournalEntry
     {
@@ -155,16 +154,30 @@ class BookingService
         return $this->accounting->recognizeRevenue($booking, $userId);
     }
 
+    /**
+     * After the price or the date changed: the standing revenue entry follows
+     * it, or — with none yet — the payments earn up to the new price and the
+     * rest is recognized if the booking has been served.
+     */
+    private function reviseOrRecognize(Booking $booking, ?int $userId = null): void
+    {
+        if ($this->accounting->recognizedEntry($booking)) {
+            $this->accounting->reviseRevenue($booking, $userId);
+
+            return;
+        }
+
+        $this->accounting->syncEarned($booking, $userId);
+        $this->recognizeIfDelivered($booking, $userId);
+    }
+
     /** Close a booking as fully paid, and recognize it if it has been served. */
     public function settleInFull(Booking $booking, ?int $userId = null): Booking
     {
         return DB::transaction(function () use ($booking, $userId) {
             $booking->update(['status' => 'paid_in_full']);
 
-            $fresh = $booking->fresh();
-            $this->accounting->recognizedEntry($fresh)
-                ? $this->accounting->reviseRevenue($fresh, $userId)
-                : $this->recognizeIfDelivered($fresh, $userId);
+            $this->reviseOrRecognize($booking->fresh(), $userId);
 
             return $booking->fresh();
         });
@@ -182,8 +195,8 @@ class BookingService
                 'cancellation_reason' => $reason,
             ]);
 
-            // A postponed booking is rebooked on its new date, so its revenue
-            // belongs there, not here.
+            // A postponed booking is rebooked on its new date, so the balance
+            // still to be paid belongs there, not here. What was paid is kept.
             $this->accounting->reverseRevenue($booking, "تأجيل الحجز {$booking->reference}");
 
             return $booking->fresh();
@@ -395,9 +408,7 @@ class BookingService
             // total, at its own date. Repriced on a booking already served but
             // never posted, its revenue is due now. Moved to a later date, its
             // revenue waits for that date again.
-            $this->accounting->recognizedEntry($fresh)
-                ? $this->accounting->reviseRevenue($fresh)
-                : $this->recognizeIfDelivered($fresh);
+            $this->reviseOrRecognize($fresh);
 
             $this->closeIfCovered($booking->fresh());
 
@@ -418,7 +429,8 @@ class BookingService
                 'cancellation_reason' => $reason,
             ]);
 
-            // An event that was never held earns nothing: reverse its entry.
+            // What the client still owed is dropped; what they paid stays
+            // revenue until a refund is recorded on the booking.
             $this->accounting->reverseRevenue($booking, "إلغاء الحجز {$booking->reference}");
 
             return $booking;

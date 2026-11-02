@@ -124,8 +124,10 @@ class AuditBooks extends Command
         // A deleted booking is out of every screen but not out of the books.
         // Whatever it still holds is owed to someone and seen by no one.
         if ($booking->trashed()) {
-            if (abs($held) > 0.005) {
-                $this->flagError($doc, 'deleted with money held', "deleted on {$booking->deleted_at?->toDateString()} still holding {$this->n($held)} — restore it from الأرشيف, then refund or settle it");
+            $carried = abs($held) > 0.005 ? $held : $paid;
+
+            if (abs($carried) > 0.005) {
+                $this->flagError($doc, 'deleted with money held', "deleted on {$booking->deleted_at?->toDateString()} still carrying {$this->n($carried)} paid — restore it from الأرشيف and refund it, or run accounting:void-mistaken-payments {$booking->reference} if it was never received");
             }
 
             return;
@@ -134,19 +136,32 @@ class AuditBooks extends Command
         $blocking = in_array($booking->status, Booking::BLOCKING_STATUSES, true);
         $delivered = $accounting->isDelivered($booking);
 
-        $expected = $standing ? round(max(0, $paid - $total), 2) : $paid;
+        // Every payment earns as it is taken, so nothing waits in deposits but
+        // money paid beyond a live booking's price — owed back to the client.
+        // A cancelled booking keeps all it was paid until a refund is recorded.
+        $expected = $blocking ? round(max(0, $paid - $total), 2) : 0.0;
 
         if (abs($held - $expected) > 0.005) {
             $this->flagError($doc, 'deposit held', "ledger holds {$this->n($held)}, should hold {$this->n($expected)}");
         }
 
+        $earned = $accounting->earnedOnPayments($booking) + ($standing
+            ? $standing->lines->filter(fn ($l) => $l->account?->type === 'revenue')->sum(fn ($l) => (float) $l->credit - (float) $l->debit)
+            : 0);
+        $earned = round($earned, 2);
+        $owed = match (true) {
+            ! $blocking => round(max(0, $paid), 2),
+            $delivered => $total,
+            default => round(max(0, min($paid, $total)), 2),
+        };
+        // Served and never recognized is its own error below.
+        $pending = $blocking && $delivered && ! $standing && $accounting->leftToEarn($booking) > 0.005;
+
+        if (! $pending && ($standing === null || $delivered) && abs($earned - $owed) > 0.005) {
+            $this->flagError($doc, 'revenue amount', "booking earns {$this->n($earned)}, should earn {$this->n($owed)}");
+        }
+
         if ($standing) {
-            $credited = round($standing->lines->filter(fn ($l) => $l->account?->type === 'revenue')->sum(fn ($l) => (float) $l->credit - (float) $l->debit), 2);
-
-            if (abs($credited - $total) > 0.005) {
-                $this->flagError($doc, 'revenue amount', "booking is {$this->n($total)}, entry {$standing->number} earns {$this->n($credited)}");
-            }
-
             if (! $delivered) {
                 $this->flagError($doc, 'earned too early', "entry {$standing->number} earns it before its date ({$accounting->deliveryDate($booking)})");
             }
@@ -154,12 +169,8 @@ class AuditBooks extends Command
             if (! $blocking) {
                 $this->flagError($doc, 'earned while '.$booking->status, "entry {$standing->number} still stands");
             }
-        } elseif ($blocking && $delivered && $total > 0) {
+        } elseif ($pending) {
             $this->flagError($doc, 'not earned', "served on {$accounting->deliveryDate($booking)} and never recognized — run accounting:recognize-delivered");
-        }
-
-        if (! $blocking && $held > 0.005) {
-            $this->flagWarning($doc, 'money held on '.$booking->status, "{$this->n($held)} is still owed back to the client — record its refund if it was paid back, or run accounting:void-mistaken-payments {$booking->reference} if it was never received");
         }
 
         if ($booking->scope === 'sections' && $booking->sections->isNotEmpty() && $booking->unit) {
@@ -270,10 +281,10 @@ class AuditBooks extends Command
         $recognized = $accounting->recognizedEntry($contract) !== null;
         $invoiced = $accounting->invoiceFor($contract) !== null;
 
-        // An installation earns each receipt as it is taken, and keeps it if
-        // the job is cancelled midway — nothing of it should wait in deposits.
-        if ($contract->isInstallationForm() && ! $invoiced && ! $recognized && $held > 0.005) {
-            $this->flagError($doc, 'receipts not earned', "{$this->n($held)} sits in deposits instead of pools revenue");
+        // Its receipts earn as they are taken, and are kept if the contract is
+        // cancelled midway — nothing of them should wait in deposits.
+        if ($accounting->earnsOnReceipt($contract) && ! $recognized && $held > 0.005) {
+            $this->flagError($doc, 'receipts not earned', "{$this->n($held)} sits in deposits instead of revenue");
 
             return;
         }

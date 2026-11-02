@@ -85,11 +85,18 @@ class RecognizeDeliveredRevenue extends Command
                         continue;
                     }
 
+                    // Paid in full before its day: the payments earned it all.
+                    $left = $accounting->leftToEarn($booking);
+
+                    if ($left <= 0) {
+                        continue;
+                    }
+
                     $centre = $booking->unit ? CostCenter::forUnit($booking->unit)->name : 'no cost centre';
 
                     $this->take(
                         $centre,
-                        (float) $booking->total_amount,
+                        $left,
                         "booking {$booking->reference} — {$accounting->deliveryDate($booking)}",
                         fn () => $bookings->recognizeIfDelivered($booking),
                         "booking {$booking->reference}",
