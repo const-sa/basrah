@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Models\Voucher;
 use App\Services\Accounting\ContractAccounting;
 use App\Services\Accounting\Ledger;
+use App\Services\Accounting\VoucherService;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
 use Database\Seeders\AccountsSeeder;
@@ -85,6 +86,43 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(8000.0, $this->balanceOf(Ledger::RECEIVABLES));
+    }
+
+    /**
+     * «لو عملت تم التنفيذ ولسه باقي دفعة عند التسليم اسجلها عادي؟» — yes:
+     * the payment settles the receivable, and never lands back in deposits.
+     */
+    public function test_the_payment_taken_after_handover_settles_what_the_client_owes(): void
+    {
+        $contract = $this->installation(12000, 4000);
+
+        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/complete");
+
+        $this->actingAs($this->owner)
+            ->post("/admin/contracts/{$contract->id}/receipt", [
+                'amount' => 8000,
+                'payment_method_id' => $this->paymentMethodId(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE), 'earned once, not twice');
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE), 'nothing back in deposits');
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'the client owes nothing');
+
+        // A receipt cancelled after handover puts the debt back.
+        $voucher = Voucher::where('contract_id', $contract->id)->where('amount', 8000)->firstOrFail();
+        app(VoucherService::class)->cancel($voucher, 'خطأ في الإدخال');
+
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(8000.0, $this->balanceOf(Ledger::RECEIVABLES));
+
+        // Undoing the handover returns everything collected to deposits.
+        $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
+
+        $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
     }
 
     public function test_the_revenue_lands_on_the_pools_cost_centre(): void

@@ -7,6 +7,7 @@ use App\Models\CostCenter;
 use App\Models\Department;
 use App\Models\JournalEntry;
 use App\Models\Sale;
+use App\Models\Voucher;
 use App\Support\ActivitySegment;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -183,6 +184,30 @@ class ContractAccounting
         );
     }
 
+    /**
+     * Rewrite the standing revenue entry after the money on the contract moved.
+     *
+     * The entry clears what was collected by handover and leaves the rest as a
+     * receivable. A payment taken at handover, or after it, credits unearned
+     * revenue like every receipt on a contract — so without this it sat in
+     * «عرابين مقدمًا» for a job already delivered, while the receivable it
+     * paid stayed open for ever. Reversed and posted again on its own date, so
+     * the revenue stays in the month the job was handed over.
+     */
+    public function reviseRevenue(Contract $contract, ?int $userId = null): ?JournalEntry
+    {
+        $entry = $this->standingEntry($contract);
+
+        if (! $entry) {
+            return null;
+        }
+
+        $date = $entry->entry_date->toDateString();
+        $this->ledger->reverse($entry, "تحديث تحصيل العقد {$contract->number}", $userId);
+
+        return $this->post($contract, $date, $userId);
+    }
+
     /** Undo a contract's revenue with a counter-entry, not by deleting it. */
     public function reverseRevenue(Contract $contract, string $reason, ?int $userId = null): ?JournalEntry
     {
@@ -212,7 +237,7 @@ class ContractAccounting
     private function post(Contract $contract, string $date, ?int $userId): JournalEntry
     {
         $total = round((float) $contract->totalAmount(), 2);
-        $collected = round(min($contract->paidAmount(), $total), 2);
+        $collected = round(min($this->heldInDeposits($contract), $total), 2);
         $outstanding = round($total - $collected, 2);
         $centre = $this->costCenterFor($contract);
 
@@ -228,6 +253,25 @@ class ContractAccounting
             $contract,
             $userId,
         );
+    }
+
+    /**
+     * What the contract's posted receipts put in unearned revenue — what the
+     * revenue entry has to clear.
+     *
+     * Read from the receipts rather than the paid amount: a receipt written in
+     * the vouchers screen may credit another account, and clearing money that
+     * was never put there would drive the deposits below zero.
+     */
+    private function heldInDeposits(Contract $contract): float
+    {
+        $unearned = $this->ledger->accountId(Ledger::UNEARNED_REVENUE);
+
+        return round((float) Voucher::where('contract_id', $contract->id)
+            ->where('status', 'posted')
+            ->where('account_id', $unearned)
+            ->selectRaw("COALESCE(SUM(CASE WHEN type = 'receipt' THEN amount ELSE -amount END), 0) AS held")
+            ->value('held'), 2);
     }
 
     private function entries(Contract $contract): Builder
