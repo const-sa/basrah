@@ -296,7 +296,7 @@ const submitHandover = () => {
 };
 
 const undoCompleted = (c: Contract) => {
-    if (confirm(`التراجع عن تنفيذ العقد ${c.number}؟ سيُعكس قيد إيراده.`)) {
+    if (confirm(`التراجع عن تنفيذ العقد ${c.number}؟`)) {
         router.delete(`/admin/contracts/${c.id}/complete`, { preserveScroll: true });
     }
 };
@@ -465,7 +465,7 @@ const statusClass = (s: string) =>
                                             v-if="may.edit && c.awaits_handover"
                                             variant="success"
                                             :icon="PackageCheck"
-                                            title="تم التنفيذ — إثبات إيراد العقد"
+                                            title="تم التنفيذ — تسجيل تاريخ التسليم"
                                             @click="markCompleted(c)"
                                         />
                                         <TableActionButton
@@ -560,7 +560,7 @@ const statusClass = (s: string) =>
                         class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
                     />
                     <p v-if="handoverForm.errors.completed_at" class="text-xs font-bold text-red-600">{{ handoverForm.errors.completed_at }}</p>
-                    <p class="text-xs text-slate-500">يُثبت إيراد العقد في الدفاتر بهذا التاريخ، فاختر اليوم الذي سُلِّم فيه المسبح فعلًا.</p>
+                    <p class="text-xs text-slate-500">علامة تسليم فقط، لا تغيّر الحسابات: إيراد العقد هو ما قُبض من دفعات، كل دفعة بتاريخها.</p>
                     <div class="flex justify-end gap-2 pt-2">
                         <button type="button" @click="handover = null" class="rounded-xl px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">إلغاء</button>
                         <button

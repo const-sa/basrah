@@ -1146,19 +1146,18 @@ class ContractsController extends Controller
     }
 
     /**
-     * «تم التنفيذ» — the handover that earns an installation contract.
+     * «تم التنفيذ» — the day the job was handed over.
      *
-     * Signing is not delivery: the terms are half at signing and half when
-     * the equipment is ordered, so the pool is still to be dug. Revenue waits
-     * for this, and the money collected meanwhile sits as a liability.
+     * For a pools installation it is a mark on the contract only: its revenue
+     * is what the client paid, earned with each receipt. Other contracts that
+     * keep receipts still earn on the date given here.
      */
     public function complete(Request $request, Contract $contract): RedirectResponse
     {
         $this->authorizeContract($request, $contract, 'edit');
 
-        // A job finished last month is often marked done this month: the
-        // revenue belongs to the day it was handed over, not the day the
-        // button was pressed.
+        // A job finished last month is often marked done this month, so the
+        // day it was handed over is asked for, not taken from the clock.
         $data = $request->validate([
             'completed_at' => ['nullable', 'date', 'before_or_equal:today'],
         ], [
@@ -1168,6 +1167,10 @@ class ContractsController extends Controller
         $accounting = app(ContractAccounting::class);
 
         $contract->update(['completed_at' => $contract->completed_at ?? ($data['completed_at'] ?? null) ?? now()]);
+
+        if ($contract->isInstallationForm()) {
+            return back()->with('success', "تم تسجيل تنفيذ العقد {$contract->number}");
+        }
 
         if ($reason = $accounting->refusal($contract->fresh())) {
             return back()->with('warning', $reason);

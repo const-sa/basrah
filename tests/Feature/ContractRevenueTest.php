@@ -79,10 +79,14 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'nothing is owed before handover');
-        $this->assertSame('لم يُسجَّل تنفيذ العقد بعد.', app(ContractAccounting::class)->refusal($contract));
+        $this->assertNotNull(app(ContractAccounting::class)->refusal($contract), 'handover never books an installation');
     }
 
-    public function test_handing_over_an_installation_earns_what_the_receipts_did_not(): void
+    /**
+     * «خلي تنفيذ العقد ميأثرش ع الحسابات»: an installation's revenue is what
+     * was collected, so handover books neither the unpaid balance nor a debt.
+     */
+    public function test_handing_over_an_installation_leaves_the_books_alone(): void
     {
         $contract = $this->installation(12000, 4000);
 
@@ -90,10 +94,11 @@ class ContractRevenueTest extends TestCase
             ->post("/admin/contracts/{$contract->id}/complete")
             ->assertSessionHas('success');
 
-        // 4,000 earned at signing and 8,000 at handover — owed by the client.
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertNotNull($contract->fresh()->completed_at);
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
-        $this->assertSame(8000.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertNull(app(ContractAccounting::class)->standingEntry($contract));
     }
 
     /** Paid in full before handover: everything is already earned, and handover adds nothing. */
@@ -103,7 +108,7 @@ class ContractRevenueTest extends TestCase
 
         $this->actingAs($this->owner)
             ->post("/admin/contracts/{$contract->id}/complete")
-            ->assertSessionHas('warning');
+            ->assertSessionHas('success');
 
         $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
@@ -160,7 +165,7 @@ class ContractRevenueTest extends TestCase
      * «لو عملت تم التنفيذ ولسه باقي دفعة عند التسليم اسجلها عادي؟» — yes:
      * the payment settles the receivable, and never lands back in deposits.
      */
-    public function test_the_payment_taken_after_handover_settles_what_the_client_owes(): void
+    public function test_the_payment_taken_after_handover_is_revenue_on_its_own_date(): void
     {
         // Half at signing, handed over, and the rest paid six months on.
         $contract = $this->installation(12000, 6000);
@@ -177,39 +182,46 @@ class ContractRevenueTest extends TestCase
             ])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE), 'earned once, not twice');
-        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE), 'nothing back in deposits');
-        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES), 'the client owes nothing');
-
-        // Every month in between still reads the client as owing the rest,
-        // and the revenue stays in the month of handover.
-        $between = now()->subMonths(3)->toDateString();
-        $this->assertSame(6000.0, Account::where('code', Ledger::RECEIVABLES)->first()->balance($between));
-        $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance($between));
-        $this->assertSame(12000.0, Account::where('code', Ledger::POOL_CONTRACTS_REVENUE)->first()->balance($handover));
-
-        $this->artisan('accounting:audit --errors')->assertSuccessful();
-
-        // A receipt cancelled after handover puts the debt back.
-        $voucher = Voucher::where('contract_id', $contract->id)->latest('id')->firstOrFail();
-        app(VoucherService::class)->cancel($voucher, 'خطأ في الإدخال');
-
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
-        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
-        $this->assertSame(6000.0, $this->balanceOf(Ledger::RECEIVABLES));
-
-        // Taken again, then the handover undone: what was paid stays earned,
-        // and nothing is owed on a job not yet delivered.
-        $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/receipt", [
-            'amount' => 6000,
-            'payment_method_id' => $this->paymentMethodId(),
-        ]);
-        $this->actingAs($this->owner)->delete("/admin/contracts/{$contract->id}/complete");
-
+        // Each half is revenue on the day it was paid, and nothing is owed.
         $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertSame(6000.0, Account::where('code', Ledger::POOL_CONTRACTS_REVENUE)->first()->balance($handover));
         $this->artisan('accounting:audit --errors')->assertSuccessful();
+
+        // A receipt cancelled takes its revenue back with it.
+        $voucher = Voucher::where('contract_id', $contract->id)->latest('id')->firstOrFail();
+        app(VoucherService::class)->cancel($voucher, 'خطأ في الإدخال');
+
+        $this->assertSame(6000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+    }
+
+    /**
+     * A handover booked before the change is undone: the books hold what was
+     * collected, each payment on its date, and no debt for the unpaid rest.
+     */
+    public function test_a_handover_booked_before_the_change_is_undone(): void
+    {
+        $contract = $this->installation(12000, 4000);
+        $contract->update(['completed_at' => now()]);
+        $centre = app(ContractAccounting::class)->costCenterFor($contract);
+
+        // The handover entry as it used to be written: the unpaid 8,000 as revenue and debt.
+        app(Ledger::class)->post(now()->toDateString(), "إثبات إيراد العقد {$contract->number}", [
+            ['account' => Ledger::RECEIVABLES, 'debit' => 8000, 'cost_center_id' => $centre],
+            ['account' => Ledger::POOL_CONTRACTS_REVENUE, 'credit' => 8000, 'cost_center_id' => $centre],
+        ], 'contract', $contract);
+        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+
+        $migration = require database_path('migrations/2026_11_02_100006_stop_a_pools_installation_handover_from_booking_revenue.php');
+        $migration->up();
+        $migration->up();
+
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
+        $this->assertNotNull($contract->fresh()->completed_at, 'the handover date stays');
     }
 
     public function test_the_revenue_lands_on_the_pools_cost_centre(): void
@@ -224,17 +236,17 @@ class ContractRevenueTest extends TestCase
         $this->assertTrue($entry->lines->every(fn ($line) => (int) $line->cost_center_id === $pools));
     }
 
-    public function test_handing_over_twice_recognizes_once(): void
+    public function test_handing_over_twice_books_nothing(): void
     {
         $contract = $this->installation(12000, 4000);
 
         $this->actingAs($this->owner)->post("/admin/contracts/{$contract->id}/complete");
         $this->actingAs($this->owner)
             ->post("/admin/contracts/{$contract->id}/complete")
-            ->assertSessionHas('warning');
+            ->assertSessionHas('success');
 
-        $this->assertSame(1, JournalEntry::where('source', 'contract')->where('reference_type', Contract::class)->count());
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(0, JournalEntry::where('source', 'contract')->where('reference_type', Contract::class)->count());
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
     }
 
     public function test_undoing_a_handover_reverses_what_it_earned_and_keeps_the_receipts(): void
@@ -249,7 +261,7 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
     }
 
-    public function test_a_contract_with_no_written_value_is_refused(): void
+    public function test_a_contract_with_no_written_value_books_nothing_on_handover(): void
     {
         $this->actingAs($this->owner)->post('/admin/contracts/direct', [
             'client_id' => $this->client->id,
@@ -260,7 +272,7 @@ class ContractRevenueTest extends TestCase
 
         $this->actingAs($this->owner)
             ->post("/admin/contracts/{$contract->id}/complete")
-            ->assertSessionHas('warning');
+            ->assertSessionHas('success');
 
         $this->assertSame(0, JournalEntry::where('source', 'contract')->count());
     }
@@ -459,8 +471,8 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(0.0, $this->balanceOf(Ledger::SALES_REVENUE));
     }
 
-    /** A job finished last month, marked done today, earns in last month. */
-    public function test_a_handover_earns_on_the_day_chosen_for_it(): void
+    /** A job finished last month and marked done today keeps last month's date. */
+    public function test_a_handover_keeps_the_day_chosen_for_it(): void
     {
         $contract = $this->installation(12000, 4000);
         $finished = now()->subMonth()->toDateString();
@@ -470,8 +482,7 @@ class ContractRevenueTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertSame($finished, $contract->fresh()->completed_at->toDateString());
-        $this->assertSame($finished, app(ContractAccounting::class)->standingEntry($contract)->entry_date->toDateString());
-        $this->assertSame(12000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
+        $this->assertSame(4000.0, $this->balanceOf(Ledger::POOL_CONTRACTS_REVENUE));
     }
 
     public function test_a_handover_cannot_be_dated_in_the_future(): void

@@ -129,6 +129,10 @@ class ContractAccounting
         return match (true) {
             ! $contract->takesReceipts() => 'العقد لا يحمل سجل سندات، وإيراده يُثبت على حجزه.',
             $contract->isMaintenanceForm() => 'عقد الصيانة الشهرية يُثبت إيراده مع كل سند قبض.',
+            // The client's rule: an installation's revenue is what was actually
+            // collected, each payment on its own date. Handover only marks the
+            // job delivered — it books neither the unpaid balance nor a debt.
+            $contract->isInstallationForm() => 'عقد التركيب يُثبت إيراده مع كل سند قبض، وتسجيل تنفيذه لا يغيّر الحسابات.',
             $contract->status === 'cancelled' => 'العقد ملغي، فلا إيراد له.',
             $contract->totalAmount() === null => 'العقد بلا قيمة مكتوبة، فلا إيراد يُحتسب له.',
             $this->recognizedEntry($contract) !== null => 'أُثبت إيراد هذا العقد من قبل.',
