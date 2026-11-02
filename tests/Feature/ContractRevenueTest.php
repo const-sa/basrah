@@ -189,6 +189,31 @@ class ContractRevenueTest extends TestCase
         $this->assertSame($revenue, $voucher->fresh()->account_id);
     }
 
+    /** A contract written by mistake and cancelled, whose deposit never came in, leaves the books clean. */
+    public function test_a_cancelled_contracts_mistaken_receipts_are_voided(): void
+    {
+        $contract = $this->installation(12000, 500);
+        $this->assertSame(500.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+
+        // Still open: refused, untouched.
+        $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number]])->assertFailed();
+        $this->assertSame(500.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+
+        $contract->update(['status' => 'cancelled']);
+
+        $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number], '--pretend' => true])
+            ->expectsOutputToContain('Total: 500.00')
+            ->assertSuccessful();
+        $this->assertSame(500.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+
+        $this->artisan('accounting:void-mistaken-payments', ['references' => [$contract->number]])->assertSuccessful();
+
+        $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
+        $this->assertSame(0.0, $contract->fresh()->paidAmount());
+        $this->assertSame(0, Voucher::where('contract_id', $contract->id)->where('status', 'posted')->count());
+        $this->assertSame(1, Voucher::where('contract_id', $contract->id)->where('status', 'cancelled')->count());
+    }
+
     public function test_a_maintenance_sheet_is_never_recognized_on_handover(): void
     {
         $contract = $this->maintenance(800, 800);

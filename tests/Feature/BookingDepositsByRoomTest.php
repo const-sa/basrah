@@ -245,19 +245,31 @@ class BookingDepositsByRoomTest extends TestCase
         $this->pay($booking, 2000, 'refund');
         $booking->delete();
 
-        $this->artisan('accounting:void-deleted-booking-payments', ['references' => [$booking->reference]])
+        // A cancelled one, entered by mistake the same way.
+        $cancelled = $this->bookSides([$men->id]);
+        $this->pay($cancelled, 2000);
+        app(BookingService::class)->cancel($cancelled->fresh(), 'أُدخل خطأً');
+
+        // Pretend first: it lists, and changes nothing.
+        $this->artisan('accounting:void-mistaken-payments', ['references' => [$booking->reference, $cancelled->reference], '--pretend' => true])
+            ->expectsOutputToContain('Total: 3,000.00')
+            ->assertSuccessful();
+        $this->assertSame(3000.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
+
+        $this->artisan('accounting:void-mistaken-payments', ['references' => [$booking->reference, $cancelled->reference]])
             ->assertSuccessful();
 
         $this->assertSame(0.0, Account::where('code', Ledger::CASH)->first()->balance());
         $this->assertSame(0.0, Account::where('code', Ledger::UNEARNED_REVENUE)->first()->balance());
         $this->assertSame(0, $booking->payments()->count());
-        $this->artisan('accounting:audit --errors')->assertSuccessful();
+        $this->assertSame(0.0, (float) $cancelled->fresh()->paid_amount);
+        $this->artisan('accounting:audit')->assertSuccessful()->doesntExpectOutputToContain('money held');
 
         // A live booking is corrected on the booking, never from here.
         $live = $this->bookSides([$men->id]);
         $this->pay($live, 500);
 
-        $this->artisan('accounting:void-deleted-booking-payments', ['references' => [$live->reference]])
+        $this->artisan('accounting:void-mistaken-payments', ['references' => [$live->reference]])
             ->assertFailed();
         $this->assertSame(1, $live->payments()->count());
     }

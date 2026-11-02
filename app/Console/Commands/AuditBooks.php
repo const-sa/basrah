@@ -159,7 +159,7 @@ class AuditBooks extends Command
         }
 
         if (! $blocking && $held > 0.005) {
-            $this->flagWarning($doc, 'money held on '.$booking->status, "{$this->n($held)} is still owed back to the client — record its refund on the booking if it was paid back");
+            $this->flagWarning($doc, 'money held on '.$booking->status, "{$this->n($held)} is still owed back to the client — record its refund if it was paid back, or run accounting:void-mistaken-payments {$booking->reference} if it was never received");
         }
 
         if ($booking->scope === 'sections' && $booking->sections->isNotEmpty() && $booking->unit) {
@@ -267,7 +267,7 @@ class AuditBooks extends Command
 
         if ($contract->status === 'cancelled') {
             if ($held > 0.005) {
-                $this->flagWarning($doc, 'money held on cancelled', "{$this->n($held)} is still owed back to the client");
+                $this->flagWarning($doc, 'money held on cancelled', "{$this->n($held)} is still owed back to the client — or run accounting:void-mistaken-payments {$contract->number} if it was never received");
             }
 
             return;
