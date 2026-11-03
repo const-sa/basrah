@@ -52,6 +52,37 @@ class ReceivablesTest extends TestCase
             );
     }
 
+    /** «كل العملاء داخلين ف بعض»: each activity's clients can be read on their own. */
+    public function test_index_filters_by_activity(): void
+    {
+        Client::create(['name' => 'عميل قاعة', 'type' => 'hall']);
+        Client::create(['name' => 'عميل شاليه', 'type' => 'chalet']);
+        Client::create(['name' => 'عميل مسبح', 'type' => 'pool']);
+
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/receivables?type=hall')
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.type', 'hall')
+                ->has('clients.data', 1)
+                ->where('clients.data.0.name', 'عميل قاعة'),
+            );
+
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/receivables?type=pool')
+            ->assertInertia(fn ($page) => $page
+                ->has('clients.data', 1)
+                ->where('clients.data.0.name', 'عميل مسبح'),
+            );
+
+        // An unknown activity shows everyone rather than no one.
+        $this->actingAs($this->owner)
+            ->get('/admin/accounting/receivables?type=nonsense')
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.type', null)
+                ->has('clients.data', 3),
+            );
+    }
+
     public function test_show_renders_the_client_statement(): void
     {
         $client = Client::create(['name' => 'عميل الكشف']);

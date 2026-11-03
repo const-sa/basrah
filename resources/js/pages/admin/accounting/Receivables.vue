@@ -16,7 +16,8 @@ interface ClientRow {
 
 const props = defineProps<{
     clients: { data: ClientRow[]; links: { url: string | null; label: string; active: boolean }[] };
-    filters: { search: string | null };
+    filters: { search: string | null; type: string | null };
+    types: { key: string; label: string }[];
     totalOutstanding: number;
 }>();
 
@@ -28,7 +29,15 @@ const breadcrumbs: BreadcrumbItem[] = [
 const money = (n: number) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n ?? 0);
 
 const search = ref(props.filters.search ?? '');
-const apply = () => router.get('/admin/accounting/receivables', { search: search.value || null }, { preserveState: true, replace: true });
+const type = ref<string | null>(props.filters.type ?? null);
+const apply = () =>
+    router.get('/admin/accounting/receivables', { search: search.value || null, type: type.value || null }, { preserveState: true, replace: true });
+
+// One activity at a time — halls, chalets and pools each have their own clients.
+const pick = (key: string | null) => {
+    type.value = key;
+    apply();
+};
 </script>
 
 <template>
@@ -45,7 +54,7 @@ const apply = () => router.get('/admin/accounting/receivables', { search: search
                 <StatPill label="إجمالي مديونية هذه الصفحة" :value="money(totalOutstanding)" variant="danger" />
             </div>
 
-            <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <input
                     v-model="search"
                     @keyup.enter="apply"
@@ -54,6 +63,19 @@ const apply = () => router.get('/admin/accounting/receivables', { search: search
                     placeholder="ابحث بالاسم أو الجوال…"
                     class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm sm:w-80"
                 />
+
+                <div class="flex flex-wrap gap-1">
+                    <button
+                        v-for="t in [{ key: null, label: 'الكل' }, ...types]"
+                        :key="t.key ?? 'all'"
+                        type="button"
+                        @click="pick(t.key)"
+                        class="rounded-xl px-4 py-2 text-xs font-bold transition"
+                        :class="type === t.key ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'"
+                    >
+                        {{ t.label }}
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

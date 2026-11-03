@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Services\Accounting\ClientStatementService;
+use App\Support\ClientType;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,8 +22,17 @@ class ReceivablesController extends Controller
     {
         $search = $request->string('search')->toString();
 
+        // One activity at a time: halls, chalets and pools each keep their
+        // own clients, and read together the debts of one hide another's.
+        $type = in_array($request->string('type')->toString(), ClientType::keys(), true)
+            ? $request->string('type')->toString()
+            : null;
+
         $clients = Client::query()
             ->where('is_walk_in', false)
+            // An unmarked client is the pools', as everywhere else.
+            ->when($type, fn ($q) => $q->where(fn ($sub) => $sub->where('type', $type)
+                ->when($type === ClientType::DEFAULT, fn ($d) => $d->orWhereNull('type'))))
             ->when($search !== '', fn ($q) => $q->where(
                 fn ($sub) => $sub->where('name', 'like', "%{$search}%")
                     ->orWhere('mobile', 'like', "%{$search}%"),
@@ -40,7 +50,8 @@ class ReceivablesController extends Controller
 
         return Inertia::render('admin/accounting/Receivables', [
             'clients' => $clients,
-            'filters' => ['search' => $search ?: null],
+            'filters' => ['search' => $search ?: null, 'type' => $type],
+            'types' => ClientType::forFrontend(),
             'totalOutstanding' => round(collect($clients->items())->sum('outstanding'), 2),
         ]);
     }
