@@ -14,13 +14,13 @@ use App\Models\JournalLine;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Role;
+use App\Models\Sale;
 use App\Models\User;
 use App\Models\Voucher;
-use App\Models\Sale;
 use App\Services\Accounting\AccountingSettingsRemap;
 use App\Services\Accounting\ContractAccounting;
-use App\Services\Accounting\RevenueAccounts;
 use App\Services\Accounting\Ledger;
+use App\Services\Accounting\RevenueAccounts;
 use App\Services\Accounting\VoucherService;
 use App\Support\PoolInstallationContractTemplate;
 use App\Support\PoolMaintenanceContractTemplate;
@@ -99,6 +99,9 @@ class ContractRevenueTest extends TestCase
         $this->assertSame(0.0, $this->balanceOf(Ledger::UNEARNED_REVENUE));
         $this->assertSame(0.0, $this->balanceOf(Ledger::RECEIVABLES));
         $this->assertNull(app(ContractAccounting::class)->standingEntry($contract));
+
+        // Delivered with 8,000 unpaid is the rule now, not a gap in the books.
+        $this->artisan('accounting:audit --errors')->assertSuccessful();
     }
 
     /** Paid in full before handover: everything is already earned, and handover adds nothing. */

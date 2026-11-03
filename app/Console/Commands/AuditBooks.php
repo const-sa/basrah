@@ -278,12 +278,11 @@ class AuditBooks extends Command
             return;
         }
 
-        $recognized = $accounting->recognizedEntry($contract) !== null;
-        $invoiced = $accounting->invoiceFor($contract) !== null;
-
         // Its receipts earn as they are taken, and are kept if the contract is
-        // cancelled midway — nothing of them should wait in deposits.
-        if ($accounting->earnsOnReceipt($contract) && ! $recognized && $held > 0.005) {
+        // cancelled midway — nothing of them should wait in deposits. A
+        // handover entry still standing clears them instead; a reversed one
+        // does not, so only the standing entry excuses them.
+        if ($accounting->earnsOnReceipt($contract) && ! $accounting->standingEntry($contract) && $held > 0.005) {
             $this->flagError($doc, 'receipts not earned', "{$this->n($held)} sits in deposits instead of revenue");
 
             return;
@@ -297,9 +296,11 @@ class AuditBooks extends Command
             return;
         }
 
-        $earnedInFull = $accounting->earnedOnReceipt($contract) >= (float) $contract->totalAmount() - 0.005;
-
-        if ($accounting->isDelivered($contract) && ! $recognized && ! $invoiced && ! $earnedInFull && $contract->totalAmount() !== null) {
+        // Delivered, and nothing keeps it from being recognized — the same
+        // reasons the handover button gives. An installation is never in this
+        // state: its handover posts nothing, and the unpaid rest is only the
+        // contract's remaining amount.
+        if ($accounting->isDelivered($contract) && $accounting->refusal($contract) === null) {
             $this->flagError($doc, 'not earned', "delivered on {$accounting->deliveryDate($contract)} and never recognized");
         }
     }
