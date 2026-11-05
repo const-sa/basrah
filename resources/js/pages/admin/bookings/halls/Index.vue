@@ -155,7 +155,7 @@ const props = defineProps<{
     };
     stats: { total: number; deposit_paid: number; paid_in_full: number; unpaid: number };
     methods: MethodColumn[];
-    totals: { page: LedgerTotals; all: LedgerTotals };
+    totals: { page: LedgerTotals; all: LedgerTotals } | null;
 }>();
 
 const { can, canAny, canActivity } = usePermissions();
@@ -870,7 +870,7 @@ const colorClass = statusChipClass;
                         </tbody>
 
                         <!-- مجاميع الصفحة المعروضة — تُقرأ تحت أعمدتها مباشرة -->
-                        <tfoot v-if="bookings.data.length" class="border-t-2 border-slate-300 bg-slate-100">
+                        <tfoot v-if="totals && bookings.data.length" class="border-t-2 border-slate-300 bg-slate-100">
                             <tr>
                                 <td
                                     :colspan="identityColSpan"
@@ -939,7 +939,7 @@ const colorClass = statusChipClass;
 
             <!-- إجمالي كل الصفحات المفلترة: الصفحة وحدها لا تكفي المراجعة،
                  والمشغّل يريد حصيلة الفلتر كاملًا لا حصيلة عشرين صفًّا. -->
-            <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div v-if="totals" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                     <h2 class="text-sm font-extrabold text-slate-900">
                         إجمالي كل الصفحات المفلترة

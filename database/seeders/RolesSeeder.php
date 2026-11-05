@@ -37,7 +37,7 @@ class RolesSeeder extends Seeder
                     SystemRegistry::systemPermissionKeys('hr'),
                     [
                         'dashboard.view', 'notifications.view', 'reports.view', 'reports.export',
-                        'hall_bookings.view', 'chalet_bookings.view',
+                        'hall_bookings.view', 'hall_bookings.totals', 'chalet_bookings.view',
                         'hall_calendar.view', 'chalet_calendar.view',
                         'halls.view', 'chalets.view',
                         'contracts.view', 'contracts.export',
@@ -58,7 +58,7 @@ class RolesSeeder extends Seeder
                     'dashboard.view', 'notifications.view',
                     'halls.view', 'chalets.view',
                     'hall_calendar.view', 'chalet_calendar.view',
-                    'hall_bookings.view', 'hall_bookings.create', 'hall_bookings.edit',
+                    'hall_bookings.view', 'hall_bookings.create', 'hall_bookings.edit', 'hall_bookings.totals',
                     'chalet_bookings.view', 'chalet_bookings.create', 'chalet_bookings.edit',
                     'packages.view', 'packages.create', 'packages.edit',
                     'event_types.view', 'event_types.create', 'event_types.edit',

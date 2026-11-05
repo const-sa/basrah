@@ -115,10 +115,12 @@ class HallBookingsController extends BaseBookingsController
             'methods' => collect($this->methodColumns())
                 ->map(fn (array $m) => ['key' => $m['id'], 'label' => $m['label']])
                 ->values(),
-            'totals' => [
+            // The footer sums are the hall's takings at a glance; an employee
+            // who only records bookings can be kept from them by role.
+            'totals' => $user->hasPermission('hall_bookings.totals') ? [
                 'page' => $this->ledgerTotals($bookings->getCollection()),
                 'all' => $this->allTotals($query),
-            ],
+            ] : null,
         ]);
     }
 

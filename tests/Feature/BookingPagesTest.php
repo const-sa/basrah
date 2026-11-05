@@ -85,6 +85,45 @@ class BookingPagesTest extends TestCase
         $this->actingAs($this->owner)->get('/admin/units/villas')->assertStatus(405);
     }
 
+    /**
+     * «مش عاوز المبالغ والمتبقي تظهر في يوزر اللي بيسجل الحجوزات»: the list's
+     * totals follow their own key, so a role can record bookings without them.
+     */
+    public function test_hall_booking_totals_are_shown_only_to_a_role_that_holds_their_key(): void
+    {
+        $registrar = fn (array $permissions) => User::factory()->create([
+            'role_id' => Role::create([
+                'name' => 'مسجّل حجوزات '.count($permissions),
+                'slug' => 'registrar-'.count($permissions),
+                'permissions' => $permissions,
+            ])->id,
+            'is_active' => true,
+            'has_all_units' => true,
+        ]);
+
+        $this->actingAs($registrar(['hall_bookings.view', 'hall_bookings.create']))
+            ->get('/admin/bookings/halls')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('totals', null));
+
+        $this->actingAs($registrar(['hall_bookings.view', 'hall_bookings.create', 'hall_bookings.totals']))
+            ->get('/admin/bookings/halls')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('totals.page')->has('totals.all'));
+    }
+
+    /** Roles that saw the totals before the key existed keep seeing them. */
+    public function test_roles_that_see_hall_bookings_are_granted_the_totals(): void
+    {
+        $viewer = Role::create(['name' => 'قديم', 'slug' => 'old-viewer', 'permissions' => ['hall_bookings.view']]);
+        $other = Role::create(['name' => 'آخر', 'slug' => 'other', 'permissions' => ['sales.view']]);
+
+        (require database_path('migrations/2026_11_05_100000_let_a_role_be_kept_from_the_hall_booking_totals.php'))->up();
+
+        $this->assertContains('hall_bookings.totals', $viewer->fresh()->permissions);
+        $this->assertNotContains('hall_bookings.totals', $other->fresh()->permissions);
+    }
+
     public function test_hall_bookings_page_renders_with_units_addons_and_meta(): void
     {
         $halls = Unit::where('type', 'hall')->count();

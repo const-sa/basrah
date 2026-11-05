@@ -34,6 +34,7 @@ class SystemRegistry
         'send' => 'إرسال',
         'export' => 'تصدير',
         'restore' => 'استرجاع',
+        'totals' => 'عرض الإجماليات',
     ];
 
     /**
@@ -47,7 +48,7 @@ class SystemRegistry
             'icon' => 'Building2',
             'description' => 'حجوزات القاعات وتقويمها والباقات وأنواع المناسبات وقالب العقد',
             'modules' => [
-                'hall_bookings' => ['label' => 'حجوزات القاعات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve']],
+                'hall_bookings' => ['label' => 'حجوزات القاعات', 'actions' => ['view', 'create', 'edit', 'delete', 'approve', 'totals']],
                 'hall_calendar' => ['label' => 'تقويم القاعات', 'actions' => ['view']],
                 'halls' => ['label' => 'القاعات ومساحات عملها', 'actions' => ['view', 'create', 'edit', 'delete']],
                 'packages' => ['label' => 'باقات القاعات', 'actions' => ['view', 'create', 'edit', 'delete']],
